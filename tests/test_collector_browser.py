@@ -449,6 +449,36 @@ def test_main_columns_follow_the_dominant_grid(tmp_path: Path) -> None:
     assert [layout.main_columns for layout in layouts] == [1, 2, 3]
 
 
+TAP_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  body { margin: 0; font: 16px/1.5 sans-serif; }
+  .cta { display: inline-block; width: 160px; height: 44px; }
+  .tiny { display: inline-block; width: 60px; height: 12px; font-size: 10px; }
+  .scaled { transform: scale(0.5); transform-origin: top left; }
+  .scaled button { width: 120px; height: 30px; }
+  .ghost { pointer-events: none; }
+</style></head><body><main>
+  <a class="cta" href="/start">Start now</a>
+  <div aria-hidden="true"><button class="tiny">Inbox</button></div>
+  <div inert><button class="tiny">Inert</button></div>
+  <div role="img" aria-label="Product"><a class="tiny" href="/a">Favorites</a></div>
+  <div role="presentation"><button class="tiny">Workspace</button></div>
+  <button class="tiny ghost">Ghost</button>
+  <div class="scaled"><button>Scaled</button></div>
+</main></body></html>"""
+
+
+def test_tap_targets_ignore_illustrated_controls() -> None:
+    async def run() -> LayoutSnapshot:
+        async with browser.open_context(QUICK) as context:
+            page = await context.new_page()
+            await page.set_content(TAP_PAGE)
+            return await viewports.measure_layout(page, viewport_width=1440)
+
+    layout = asyncio.run(run())
+    assert layout.min_tap_target_px == 44
+
+
 def test_slow_page_times_out(site_url: str, tmp_path: Path) -> None:
     options = QUICK.model_copy(update={"timeout_s": 1.0})
     with pytest.raises(PageTimeoutError) as caught:

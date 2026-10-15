@@ -257,6 +257,28 @@
   if (docEl.scrollWidth > docEl.clientWidth + 4) scrollers += 1;
 
   // ── Smallest tap target in the first three screens ──
+  // Controls drawn inside illustrations do not count: aria-hidden/inert or role=img/presentation
+  // subtrees, pointer-events:none, and content scaled down by an ancestor transform (product
+  // mock-ups shrink with the page while real touch controls keep their size).
+  const scaleCache = new Map();
+  const scaledDown = (el) => {
+    if (!el || el.nodeType !== 1 || el === body || el === docEl) return false;
+    if (scaleCache.has(el)) return scaleCache.get(el);
+    let result = false;
+    const transform = getComputedStyle(el).transform;
+    if (transform && transform !== "none") {
+      try {
+        const matrix = new DOMMatrixReadOnly(transform);
+        result = Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)) < 0.99;
+      } catch (error) {
+        result = false;
+      }
+    }
+    result = result || scaledDown(el.parentElement);
+    scaleCache.set(el, result);
+    return result;
+  };
+  const NOT_A_CONTROL = '[aria-hidden="true"], [inert], [role="img"], [role="presentation"]';
   let minTap = null;
   const INTERACTIVE =
     'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
@@ -264,6 +286,8 @@
     const rect = el.getBoundingClientRect();
     if (rect.top + scrollY >= vh * 3 || rect.width <= 1 || rect.height <= 1) continue;
     if (!visible(el)) continue;
+    if (el.closest(NOT_A_CONTROL) || getComputedStyle(el).pointerEvents === "none") continue;
+    if (scaledDown(el)) continue;
     const size = Math.min(rect.width, rect.height);
     if (minTap === null || size < minTap) minTap = size;
   }
