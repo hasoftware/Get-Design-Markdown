@@ -1,5 +1,4 @@
-"""Typography: font roles, semantic type levels, scale ratio
-(stream: analyzer-foundations, phase GĐ4).
+"""Typography: font roles, semantic type levels, scale ratio.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_typography(pages, stylesheets) -> Typography

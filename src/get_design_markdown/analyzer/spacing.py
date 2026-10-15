@@ -1,5 +1,4 @@
-"""Spacing: base unit (4 or 8px), spacing scale, container width, section rhythm
-(stream: analyzer-foundations, phase GĐ4).
+"""Spacing: base unit (4 or 8px), spacing scale, container width, section rhythm.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_spacing(pages) -> SpacingSystem

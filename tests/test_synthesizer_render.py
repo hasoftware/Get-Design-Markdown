@@ -116,7 +116,7 @@ def test_front_matter_matches_body_components() -> None:
         assert f"`{name}`" in body
 
 
-# ─── Honesty rules (lessons from DESIGN-1win.md) ─────────────────────────────
+# ─── Honesty rules ───────────────────────────────────────────────────────────
 
 
 def test_failing_pairs_become_donts_with_measured_ratios() -> None:

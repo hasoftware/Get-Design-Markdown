@@ -1,6 +1,4 @@
-"""Hover states of prominent buttons and links
-(stream: collector — internal module).
-"""
+"""Hover states of prominent buttons and links."""
 
 from __future__ import annotations
 

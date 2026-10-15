@@ -1,4 +1,4 @@
-# Bộ câu mẫu tiếng Việt cho synthesizer/narrative.py (stream: synthesizer, giai đoạn 6).
+# Bộ câu mẫu tiếng Việt cho synthesizer/narrative.py.
 # Giá trị là mẫu str.format; phải có đúng các khóa và placeholder như en.yaml.
 # Tên section (##), tên token, CSS và số liệu giữ nguyên tiếng Anh.
 # Không bao giờ mô tả cặp màu dưới 4.5:1 là "dễ đọc".

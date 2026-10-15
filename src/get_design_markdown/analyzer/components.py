@@ -1,5 +1,5 @@
 """Components by heuristics: buttons, links, inputs, cards, navigation, badges, footer,
-their variants, hover states and token references (stream: analyzer-components, phase GĐ5).
+their variants, hover states and token references.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_components(pages, palette=..., typography=..., spacing=..., radii=..., shadows=...)

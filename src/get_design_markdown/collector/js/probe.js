@@ -1,4 +1,4 @@
-// Page probe for blocker detection (stream: collector).
+// Page probe for blocker detection.
 // page.evaluate(script, {markers}) -> {title, text, markers, password_inputs, text_elements}
 // Used by collector/browser.py:probe_page() right after navigation.
 (args) => {

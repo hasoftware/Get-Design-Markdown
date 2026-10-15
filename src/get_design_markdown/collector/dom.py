@@ -1,6 +1,4 @@
-"""Run js/extract.js in the page: meta, CSS variables, computed styles of visible elements
-(stream: collector — internal module).
-"""
+"""Run js/extract.js in the page: meta, CSS variables, computed styles of visible elements."""
 
 from __future__ import annotations
 

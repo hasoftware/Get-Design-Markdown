@@ -1,5 +1,5 @@
 """Offline font knowledge base: Google Fonts membership, category, free substitutes
-(stream: analyzer-foundations, phase GĐ4; used by typography.py).
+(used by typography.py).
 
 lookup_font() normalizes the family names found in computed styles before looking them up:
 case, accents, quotes, spaces, hyphens and underscores are ignored; "variable"/"var"/"vf"/

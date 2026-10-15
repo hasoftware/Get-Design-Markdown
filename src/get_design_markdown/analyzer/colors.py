@@ -1,5 +1,5 @@
 """Colors: normalization, CIEDE2000 clustering per usage channel, roles, semantic tokens,
-WCAG contrast pairs (stream: analyzer-colors, phase GĐ3).
+WCAG contrast pairs.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_colors(pages, stylesheets, threshold=...) -> ColorPalette

@@ -1,4 +1,4 @@
-"""Rule-based prose for each DESIGN.md section (stream: synthesizer, phase GĐ6).
+"""Rule-based prose for each DESIGN.md section.
 
 Every sentence comes from synthesizer/phrases/<lang>.yaml through catalog.Phrases; every number,
 hex value and token comes from the DesignAnalysis (through facts.DesignFacts). A section whose

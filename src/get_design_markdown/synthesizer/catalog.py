@@ -1,5 +1,4 @@
-"""Phrase catalogs (synthesizer/phrases/en.yaml, vi.yaml) used by the narrative rules
-(stream: synthesizer, phase GĐ6).
+"""Phrase catalogs (synthesizer/phrases/en.yaml, vi.yaml) used by the narrative rules.
 
 A catalog is a nested YAML mapping whose leaves are str.format templates. Nested keys are
 flattened into dotted keys: ``overview: {canvas: {near_black: ...}}`` becomes

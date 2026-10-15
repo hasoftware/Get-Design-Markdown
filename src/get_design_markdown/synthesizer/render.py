@@ -1,4 +1,4 @@
-"""Assemble the full DESIGN.md text (stream: synthesizer, phase GĐ6).
+"""Assemble the full DESIGN.md text.
 
 PUBLIC ENTRY POINT (frozen signature, called by synthesizer/synthesize.py):
     render_design_md(analysis, lang=..., examples=...) -> str

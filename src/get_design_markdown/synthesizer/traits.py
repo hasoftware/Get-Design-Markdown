@@ -1,6 +1,6 @@
 """Rule-based style traits shared by the front-matter description and the Overview section.
 
-Thresholds (CLAUDE.md, "Synthesizer — dựng bằng luật"):
+Thresholds of the rule-based synthesizer:
 - the canvas is described with the same color name the Colors section gives its token
   (colornames.color_name: "near-black", "off-white", "cool light gray"…), so the Overview and
   the palette never disagree; a pure white canvas (the "white" neutral) reads "bright white";

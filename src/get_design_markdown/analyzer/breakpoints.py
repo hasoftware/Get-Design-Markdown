@@ -1,4 +1,4 @@
-"""Breakpoints measured from @media queries (stream: analyzer-foundations, phase GĐ4).
+"""Breakpoints measured from @media queries.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_breakpoints(stylesheets) -> list[Breakpoint]

@@ -1,5 +1,5 @@
 """--prompt-only: prompt.md + resized desktop/mobile screenshots for manual use in Claude Code /
-claude.ai (no API call) (stream: synthesizer, phase GĐ6).
+claude.ai (no API call).
 
 PUBLIC ENTRY POINTS (frozen signatures, called by synthesizer/synthesize.py):
     prepare_prompt_images(folder, screenshots, max_side=...) -> list[str]

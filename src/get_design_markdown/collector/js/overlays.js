@@ -1,4 +1,4 @@
-// Overlay detection (stream: collector).
+// Overlay detection.
 // page.evaluate(script, {mode: "detect"}) marks cookie/consent banners, modals and their
 // backdrops with data-gdm-overlay="<n>" and returns [{kind, selector, text}].
 // page.evaluate(script, {mode: "hide"}) hides every marked overlay (visibility:hidden,

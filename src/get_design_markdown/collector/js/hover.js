@@ -1,4 +1,4 @@
-// Hover targeting (stream: collector).
+// Hover targeting.
 // page.evaluate(script, {index}) scrolls [data-gdm-index=index] to the middle of the viewport
 // and returns {found, ok, x, y}: a viewport point where a real pointer would hit the element
 // (or one of its descendants), so that page.mouse.move(x, y) triggers its :hover state.

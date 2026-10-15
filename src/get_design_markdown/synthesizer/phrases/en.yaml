@@ -1,4 +1,4 @@
-# English phrase catalog for synthesizer/narrative.py (stream: synthesizer, phase GĐ6).
+# English phrase catalog for synthesizer/narrative.py.
 # Values are str.format templates. vi.yaml must define exactly the same keys and placeholders.
 # Never describe a pair below 4.5:1 as legible or readable.
 

@@ -1,4 +1,4 @@
-// In-page extraction script (stream: collector).
+// In-page extraction script.
 //
 // page.evaluate(script, {mode: "extract", maxElements})
 //   -> {title, meta_description, lang, document_height, root_font_size_px, css_variables,

@@ -1,6 +1,4 @@
-"""Find important sub-pages from the navigation of a captured page (--pages N)
-(stream: collector).
-"""
+"""Find important sub-pages from the navigation of a captured page (--pages N)."""
 
 from __future__ import annotations
 

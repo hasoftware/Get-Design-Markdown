@@ -1,4 +1,4 @@
-"""Rich terminal summary of an analysis (stream: analyzer-components, phase GĐ5).
+"""Rich terminal summary of an analysis.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     build_report(analysis) -> RenderableType

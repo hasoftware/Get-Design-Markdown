@@ -1,4 +1,4 @@
-"""Stage 1 orchestration: capture a site into a RawCapture (stream: collector).
+"""Stage 1 orchestration: capture a site into a RawCapture.
 
 PUBLIC ENTRY POINT (frozen signature, called by pipeline.run_collect):
     collect_site(url, out_dir=..., options=..., progress=...) -> RawCapture

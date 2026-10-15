@@ -1,6 +1,4 @@
-"""Screenshots and layout snapshots at 1440 / 768 / 390
-(stream: collector — internal module).
-"""
+"""Screenshots and layout snapshots at 1440 / 768 / 390."""
 
 from __future__ import annotations
 

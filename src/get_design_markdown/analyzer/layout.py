@@ -1,5 +1,4 @@
-"""Layout shell, container and responsive changes from the 1440/768/390 LayoutSnapshots
-(stream: analyzer-foundations, phase GĐ4).
+"""Layout shell, container and responsive changes from the 1440/768/390 LayoutSnapshots.
 
 PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
     analyze_layout(pages, breakpoints) -> LayoutInfo

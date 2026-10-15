@@ -1,4 +1,4 @@
-"""tokens.json in the W3C Design Tokens Community Group format (stream: exporters, phase GĐ8).
+"""tokens.json in the W3C Design Tokens Community Group format.
 
 PUBLIC ENTRY POINT (frozen signature, called by exporters/export.py):
     build_tokens(analysis) -> dict[str, Any]

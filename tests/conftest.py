@@ -140,7 +140,7 @@ def site_url() -> Iterator[str]:
         server.server_close()
 
 
-# ─── Small hand-made models (GĐ0 tests) ──────────────────────────────────────
+# ─── Small hand-made models ──────────────────────────────────────────────────
 
 
 @pytest.fixture

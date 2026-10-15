@@ -460,8 +460,8 @@ Chạy trọn pipeline trên trang fixture và kiểm tra kết quả giống jo
 uv run python scripts/run_e2e.py --out e2e-output
 ```
 
-Lệnh thất bại nếu thiếu trang fixture hoặc có tầng chưa được xây dựng (kể cả tầng mà `gdm get`
-chỉ bỏ qua kèm cảnh báo). Khi đang dựng lại một tầng trên máy cá nhân, thêm `--allow-partial` để
+Lệnh thất bại nếu thiếu trang fixture hoặc có tầng lỗi hay chưa được xây dựng (`gdm` dừng ngay
+ở tầng đó, không bỏ qua kèm cảnh báo). Khi đang dựng lại một tầng trên máy cá nhân, thêm `--allow-partial` để
 chỉ ghi chú các tầng đó và kiểm phần đã có ở chế độ `--partial`; CI không bao giờ dùng cờ này.
 
 ### Kiến trúc mã nguồn

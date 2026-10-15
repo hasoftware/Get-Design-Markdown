@@ -1,9 +1,9 @@
 """Illustrative "ex-*" surfaces for --examples (off by default).
 
-Lesson from DESIGN-1win.md: example surfaces there referenced tokens that did not exist and
-paired white text with a near-white background (1.12:1). Here every example is assembled only
-from tokens defined in the front matter, and any example whose text/background contrast is
-below WCAG AA (4.5:1) is dropped.
+Hand-written DESIGN.md samples often show example surfaces that reference tokens which do not
+exist, or pair text and background below WCAG AA (white text on a near-white fill reads
+1.12:1). Here every example is assembled only from tokens defined in the front matter, and any
+example whose text/background contrast is below WCAG AA (4.5:1) is dropped.
 """
 
 from __future__ import annotations

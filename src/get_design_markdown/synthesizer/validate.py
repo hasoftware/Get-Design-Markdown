@@ -1,4 +1,4 @@
-"""Self-check of a DESIGN.md text before it is written (stream: synthesizer, phase GĐ6).
+"""Self-check of a DESIGN.md text before it is written.
 
 PUBLIC ENTRY POINT (frozen signature, called by synthesizer/synthesize.py):
     validate_design_md(text) -> list[ValidationIssue]

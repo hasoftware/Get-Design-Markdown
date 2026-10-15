@@ -1,5 +1,4 @@
-"""YAML front matter of DESIGN.md per the Google Labs DESIGN.md spec (version: alpha)
-(stream: synthesizer, phase GĐ6).
+"""YAML front matter of DESIGN.md per the Google Labs DESIGN.md spec (version: alpha).
 
 Groups (each omitted when empty): colors {token: "#hex"} (alpha kept as #rrggbbaa),
 typography {level: {fontFamily, fontSize, fontWeight, lineHeight (unitless), letterSpacing

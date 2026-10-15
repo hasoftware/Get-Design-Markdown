@@ -1,5 +1,4 @@
-"""preview.html: static page showing swatches, type specimens and rebuilt components
-(stream: exporters, phase GĐ8).
+"""preview.html: static page showing swatches, type specimens and rebuilt components.
 
 PUBLIC ENTRY POINT (frozen signature, called by exporters/export.py):
     render_preview(analysis) -> str

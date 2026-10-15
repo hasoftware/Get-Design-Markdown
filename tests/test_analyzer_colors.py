@@ -1,4 +1,4 @@
-"""Color analyzer (GĐ3): clusters per channel, semantic tokens, WCAG contrast pairs."""
+"""Color analyzer: clusters per channel, semantic tokens, WCAG contrast pairs."""
 
 from __future__ import annotations
 

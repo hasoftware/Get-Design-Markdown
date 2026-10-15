@@ -1,5 +1,4 @@
-"""Playwright session, navigation, lazy-load scrolling and blocker detection
-(stream: collector — internal module).
+"""Playwright session, navigation, lazy-load scrolling and blocker detection.
 
 The collector only *detects* bot challenges and sign-in walls and reports them; it never
 tries to solve captchas or evade challenges.

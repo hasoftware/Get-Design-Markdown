@@ -1,5 +1,4 @@
-"""Capture CSS responses and parse them with tinycss2
-(stream: collector — internal module).
+"""Capture CSS responses and parse them with tinycss2.
 
 Stylesheets are read from the network (page.on("response")) because the cssRules of
 cross-origin stylesheets are unreadable from JavaScript. Inline <style> blocks (and

@@ -1,5 +1,4 @@
-"""Border-radius scale and shadow (elevation) levels
-(stream: analyzer-foundations, phase GĐ4).
+"""Border-radius scale and shadow (elevation) levels.
 
 PUBLIC ENTRY POINTS (frozen signatures, called by analyzer/analyze.py):
     analyze_radii(pages) -> list[ScaleStep]

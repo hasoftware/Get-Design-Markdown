@@ -1,4 +1,4 @@
-// Layout snapshot (stream: collector).
+// Layout snapshot.
 // page.evaluate(script) at scroll position 0 -> fields of models.raw.LayoutSnapshot
 // (viewport_width is filled in by Python). Elements hidden by display/visibility, opacity
 // (own or inherited) or ancestor overflow clipping do not count. Measure the widest viewport
