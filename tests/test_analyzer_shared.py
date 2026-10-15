@@ -16,7 +16,9 @@ from get_design_markdown.analyzer.common import (
     is_rendered,
     iter_elements,
     meaningful_classes,
+    page_size,
     page_weight,
+    page_weights,
     short_selector,
     top_class_hints,
     visible_area,
@@ -61,6 +63,34 @@ def _element(index: int, **kwargs: object) -> ElementSample:
 def test_page_weight() -> None:
     assert page_weight(0) == 1.0
     assert page_weight(3) == 0.5
+
+
+def _sized_page(name: str, size: int) -> PageCapture:
+    hidden = _element(size, styles=ComputedStyle(display="none"))
+    overlay = _element(size + 1, in_overlay=True)
+    elements = [_element(index) for index in range(size)] + [hidden, overlay]
+    return PageCapture(
+        url=f"https://x.test/{name}",
+        final_url=f"https://x.test/{name}",
+        name=name,
+        elements=elements,
+    )
+
+
+def test_page_weights_keep_sub_pages_below_the_main_page() -> None:
+    main = _sized_page("home", 100)
+    assert page_size(main) == 100  # hidden and overlay elements are not evidence
+    assert page_weights([]) == []
+    assert page_weights([main]) == [1.0]
+    # A small sub-page keeps the nominal 0.5; a large one is scaled to half the main page.
+    assert page_weights([main, _sized_page("about", 40)]) == [1.0, 0.5]
+    assert page_weights([main, _sized_page("pricing", 400)]) == [1.0, 0.125]
+    # Two sub-pages share the budget: 25 elements' worth each.
+    assert page_weights([main, _sized_page("a", 100), _sized_page("b", 20)]) == [1.0, 0.25, 0.5]
+    # The weights reach the element iterator.
+    big = _sized_page("pricing", 400)
+    weights = {ref.page.name: ref.weight for ref in iter_elements([main, big])}
+    assert weights == {"home": 1.0, "pricing": 0.125}
 
 
 def test_iter_elements_skips_overlays_and_invisible() -> None:

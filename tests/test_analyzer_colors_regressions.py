@@ -296,3 +296,24 @@ def test_token_variable_must_hold_the_token_value() -> None:
     palette = analyze_colors([_hairline_page([translucent, exact])])
     border = next(cluster for cluster in palette.clusters if cluster.hex == "#ffffff14")
     assert border.css_variables[0] == "--header-border"
+
+
+# ─── Main page first ─────────────────────────────────────────────────────────
+
+
+def test_a_large_sub_page_does_not_choose_the_primary() -> None:
+    # stripe.com: the pricing page (2 657 elements, 27 pill CTAs in #635bff) outweighed the
+    # home page (1 624 elements, 8 CTAs in #533afd) at a flat sub-page weight of 0.5.
+    home = _marketing_page()
+    rows = [
+        _text(100 + n, "#111827", text="Feature row", y=900 + n * 30, parent=1) for n in range(200)
+    ]
+    ctas = [
+        _button(400 + n, "#0ea5e9", y=900 + n * 60, box=(600, 900 + n * 60, 160, 44))
+        for n in range(8)
+    ]
+    pricing = _page([*rows, *ctas], name="pricing", height=8000)
+    by_name = _by_name(analyze_colors([home, pricing]))
+    assert by_name["primary"].value == "#4f46e5"
+    # The sub-page CTA color may still be documented, but only as a further action color.
+    assert all(token.value != "#0ea5e9" for token in by_name.values() if token.name != "secondary")

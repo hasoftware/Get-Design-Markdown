@@ -36,7 +36,7 @@ from get_design_markdown.analyzer.common import (
     is_interactive,
     iter_elements,
     own_background,
-    page_weight,
+    page_weights,
 )
 from get_design_markdown.analyzer.css_values import (
     RGBA,
@@ -508,6 +508,7 @@ def collect_samples(pages: Sequence[PageCapture], *, canvas_guess: RGBA = WHITE)
     refs_by_page: dict[int, list[ElementRef]] = {}
     for ref in iter_elements(pages):
         refs_by_page.setdefault(ref.page_index, []).append(ref)
+    weights = page_weights(pages)
     for page_index, page in enumerate(pages):
         refs = refs_by_page.get(page_index, [])
         context = _PageContext(page, {ref.element.index for ref in refs})
@@ -515,7 +516,7 @@ def collect_samples(pages: Sequence[PageCapture], *, canvas_guess: RGBA = WHITE)
         painted, largest_cover, synthetic_area = _painted_areas(context)
         media = _media_rects(context)
         layered = layered_text_elements([ref.element for ref in refs], context.index)
-        weight_of_page = page_weight(page_index)
+        weight_of_page = weights[page_index]
         result.page_areas.append(context.document.area)
         if not context.has_root:
             result.rootless_pages += 1

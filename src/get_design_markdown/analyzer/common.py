@@ -1,7 +1,9 @@
 """Helpers shared by every analyzer module: element iteration, weights, backgrounds, selectors.
 
 Conventions (all analyzers follow them so results stay consistent):
-- pages[0] is the main page (weight 1.0); discovered sub-pages weigh 0.5 each.
+- pages[0] is the main page (weight 1.0). Discovered sub-pages weigh at most 0.5 each and
+  together at most half of the main page (page_weights()), so the requested page defines the
+  core tokens and sub-pages mostly add variants.
 - Elements inside overlays (cookie banners, modals) are skipped unless asked for.
 - Areas are clipped to the 1440px capture viewport horizontally.
 - iter_design_elements() also skips decorative subtrees (DOM-built mockups and graphics) and
@@ -26,7 +28,10 @@ from get_design_markdown.analyzer.css_values import (
 from get_design_markdown.models.raw import ElementSample, PageCapture
 
 PAGE_WEIGHT_MAIN = 1.0
+#: Highest weight of one sub-page (reached when it is no larger than its share of the budget).
 PAGE_WEIGHT_SUB = 0.5
+#: All sub-pages together weigh at most this fraction of the main page's size.
+SUB_PAGE_BUDGET = 0.5
 CAPTURE_VIEWPORT_WIDTH = 1440.0
 
 HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
@@ -38,7 +43,34 @@ FORM_FIELD_TAGS = frozenset({"input", "select", "textarea"})
 
 
 def page_weight(page_index: int) -> float:
+    """Nominal weight of a page position (the upper bound; analyzers use page_weights())."""
     return PAGE_WEIGHT_MAIN if page_index == 0 else PAGE_WEIGHT_SUB
+
+
+def page_size(page: PageCapture) -> int:
+    """Rendered elements outside overlays: the amount of evidence a page brings."""
+    return sum(1 for element in page.elements if not element.in_overlay and is_rendered(element))
+
+
+def page_weights(pages: Sequence[PageCapture]) -> list[float]:
+    """Weight of every page: 1.0 for the main page (pages[0]); the sub-pages share a budget of
+    SUB_PAGE_BUDGET x the main page's size, split evenly, each at most PAGE_WEIGHT_SUB.
+
+    A sub-page larger than its share is scaled down, so a long pricing table (stripe.com: 2 657
+    elements against 1 624 on the home page) cannot outweigh the page the user asked for.
+    """
+    if not pages:
+        return []
+    weights = [PAGE_WEIGHT_MAIN]
+    main = page_size(pages[0])
+    share = SUB_PAGE_BUDGET * main / max(len(pages) - 1, 1)
+    for page in pages[1:]:
+        size = page_size(page)
+        if main <= 0 or size <= 0:
+            weights.append(PAGE_WEIGHT_SUB)
+        else:
+            weights.append(min(PAGE_WEIGHT_SUB, share / size))
+    return weights
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +78,7 @@ class ElementRef:
     page_index: int
     page: PageCapture
     element: ElementSample
-    #: Page weight (1.0 main page, 0.5 sub-pages).
+    #: Page weight (1.0 main page, at most 0.5 for a sub-page; see page_weights()).
     weight: float
 
 
@@ -63,8 +95,9 @@ def iter_elements(
     pages: Sequence[PageCapture], *, include_overlays: bool = False
 ) -> Iterator[ElementRef]:
     """Rendered elements of every page in document order, with their page weight."""
+    weights = page_weights(pages)
     for page_index, page in enumerate(pages):
-        weight = page_weight(page_index)
+        weight = weights[page_index]
         for element in page.elements:
             if element.in_overlay and not include_overlays:
                 continue

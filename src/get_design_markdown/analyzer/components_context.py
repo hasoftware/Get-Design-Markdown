@@ -14,7 +14,7 @@ from get_design_markdown.analyzer.common import (
     effective_background,
     element_index,
     own_background,
-    page_weight,
+    page_weights,
     visible_area,
 )
 from get_design_markdown.analyzer.css_values import (
@@ -92,6 +92,7 @@ class PageContext:
 
 def build_contexts(pages: Sequence[PageCapture]) -> list[PageContext]:
     contexts: list[PageContext] = []
+    weights = page_weights(pages)
     for page_index, page in enumerate(pages):
         children: dict[int, list[ElementSample]] = {}
         for element in page.elements:
@@ -104,7 +105,7 @@ def build_contexts(pages: Sequence[PageCapture]) -> list[PageContext]:
             PageContext(
                 page_index=page_index,
                 page=page,
-                weight=page_weight(page_index),
+                weight=weights[page_index],
                 index=element_index(page),
                 children=children,
                 hovers=hovers,

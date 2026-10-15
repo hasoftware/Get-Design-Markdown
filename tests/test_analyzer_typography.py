@@ -528,3 +528,18 @@ def test_fit_scale_ratio_needs_three_sizes() -> None:
     assert fit_scale_ratio([20, 25], 16) is None
     assert fit_scale_ratio([12, 14], 16) is None
     assert fit_scale_ratio([20, 25, 31.25], 0) is None
+
+
+def test_a_large_sub_page_does_not_choose_the_body_size() -> None:
+    # stripe.com: 648 15px cells of the pricing comparison table outweighed the home page's
+    # 16px running text at a flat sub-page weight of 0.5.
+    home = _page(
+        [
+            _el(0, "h1", "Financial infrastructure", font_size="48px"),
+            *_texts(10, 40, "p", "16px", "Running text of the home page " * 2),
+        ]
+    )
+    pricing = _page(_texts(0, 400, "td", "15px", "Included in the plan"), "pricing")
+    levels = analyze_typography([home, pricing]).levels
+    body = next(level for level in levels if level.name == "body")
+    assert body.size_px == 16.0
