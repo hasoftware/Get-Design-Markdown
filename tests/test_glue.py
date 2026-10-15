@@ -372,6 +372,8 @@ def test_cli_analyze_synthesize_export(
     assert result.exit_code == 0, result.output
     assert load_model(SynthesisResult, tmp_path / SYNTHESIS_FILE).lang == "vi"
 
+    monkeypatch.setattr(tokens, "build_tokens", _not_implemented)
+    monkeypatch.setattr(preview, "render_preview", _not_implemented)
     result = runner.invoke(cli.app, ["export", str(tmp_path)])
     assert result.exit_code == 1
     assert "giai đoạn 8" in " ".join(result.output.split())
