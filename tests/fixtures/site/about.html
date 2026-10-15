@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About — Acme Cloud</title>
+    <meta name="description" content="The team behind Acme Cloud." />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // theme.css is loaded from the *other* host name of the fixture server so that it is
+      // a cross-origin stylesheet (cssRules unreadable from scripts).
+      (function () {
+        var host = location.hostname === "localhost" ? "127.0.0.1" : "localhost";
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = location.protocol + "//" + host + ":" + location.port + "/theme.css";
+        document.head.appendChild(link);
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container nav-inner">
+        <a class="logo" href="/">Acme</a>
+        <nav class="main-nav" aria-label="Main">
+          <a class="nav-link" href="/#features">Product</a>
+          <a class="nav-link" href="/pricing.html">Pricing</a>
+          <a class="nav-link" href="/docs.html">Docs</a>
+          <a class="nav-link" href="/about.html">Company</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="nav-link" href="/login.html">Sign in</a>
+          <a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>
+          <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container">
+          <h1 class="hero-title">About Acme Cloud</h1>
+          <p class="lead">We build the boring infrastructure so you can ship the exciting parts.</p>
+        </div>
+      </section>
+      <section class="features" id="contact">
+        <div class="container prose">
+          <h2 class="section-title">Our story</h2>
+          <p>Acme started as a weekend project to deploy side projects without a pager.</p>
+          <p>Today thousands of teams ship to production with Acme every day.</p>
+          <a class="text-link" href="/docs.html">Read the docs →</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a class="footer-link" href="/#features">Features</a>
+          <a class="footer-link" href="/pricing.html">Pricing</a>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <a class="footer-link" href="/about.html">About</a>
+          <a class="footer-link" href="/about.html#blog">Blog</a>
+          <a class="footer-link" href="/careers.html">Careers</a>
+        </div>
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <a class="footer-link" href="/docs.html">Docs</a>
+          <a class="footer-link" href="https://status.acme.example/">Status</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a class="footer-link" href="/legal/privacy.html">Privacy</a>
+          <a class="footer-link" href="/legal/terms.html">Terms</a>
+        </div>
+      </div>
+      <div class="container">
+        <div class="footer-bottom">
+          <p class="copyright">© 2026 Acme Cloud, Inc.</p>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

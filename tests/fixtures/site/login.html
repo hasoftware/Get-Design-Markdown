@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in — Acme Cloud</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .auth {
+        max-width: 400px;
+        margin: 96px auto;
+        padding: 32px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+      }
+      .auth label {
+        display: block;
+        margin-top: 16px;
+        font-size: 14px;
+      }
+      .auth .input {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+      }
+      .auth .btn {
+        width: 100%;
+        margin-top: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="auth">
+      <a class="logo" href="/">Acme</a>
+      <h1 class="section-title" style="text-align: left; margin-top: 24px">Sign in</h1>
+      <form action="#" onsubmit="return false">
+        <label>Email <input class="input" type="email" name="email" /></label>
+        <label>Password <input class="input" type="password" name="password" /></label>
+        <button class="btn btn-primary" type="submit">Sign in</button>
+      </form>
+      <p class="trusted"><a href="/login.html#reset">Forgot your password?</a></p>
+    </main>
+  </body>
+</html>

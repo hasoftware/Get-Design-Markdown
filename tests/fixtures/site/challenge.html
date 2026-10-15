@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Just a moment...</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 15vh auto;
+        max-width: 600px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="challenge-running">
+      <h1>Checking your browser before accessing acme.example</h1>
+      <p>This process is automatic. Your browser will redirect to your requested content shortly.</p>
+    </div>
+    <script>
+      // Imitates the markers of a Cloudflare managed challenge; nothing is solved here.
+      window._cf_chl_opt = { cvId: "3", cType: "managed" };
+    </script>
+  </body>
+</html>

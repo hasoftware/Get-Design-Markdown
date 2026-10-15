@@ -1,0 +1,72 @@
+/* Acme Cloud theme layer. Loaded cross-origin (http://localhost:<port>/theme.css) so that its
+   cssRules are unreadable from page scripts: the collector must capture it from the network. */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #818cf8;
+    --color-primary-hover: #a5b4fc;
+    --color-primary-soft: rgb(129 140 248 / 0.15);
+    --color-on-primary: #0b1020;
+    --color-canvas: #0b1020;
+    --color-surface: #111827;
+    --color-inverse: #05070f;
+    --color-ink: #f8fafc;
+    --color-muted: #94a3b8;
+    --color-faint: #64748b;
+    --color-copyright: #64748b;
+    --color-border: #1e293b;
+    --color-border-strong: #334155;
+    --color-secondary: #f8fafc;
+    --color-secondary-hover: #e2e8f0;
+    --color-on-secondary: #0b1020;
+    --color-success: #4ade80;
+    --nav-bg: rgb(11 16 32 / 0.8);
+    --code-bg: #020617;
+    --code-text: #e2e8f0;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-card: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 2px 6px 0 rgb(0 0 0 / 0.3);
+  }
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  @media (min-width: 768px) {
+    .site-header {
+      backdrop-filter: blur(12px);
+    }
+  }
+}
+
+@layer components {
+  @media (min-width: 768px) {
+    .card h3 {
+      font-size: 24px;
+    }
+  }
+}
+
+@media (min-width: 768px) {
+  .hero {
+    padding: 96px 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .features {
+    padding: 96px 0;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .hero-actions .btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .signup {
+    flex-direction: row;
+  }
+}
+
+/* A truncated selector left by a broken build step: one parse error for the collector. */
+.unfinished-rule-without-block
