@@ -69,9 +69,9 @@ from get_design_markdown.models.analysis import (
 )
 from get_design_markdown.models.raw import ElementSample, join_sides, split_sides
 
-#: Roles preferred when a background/border color is ambiguous between tokens.
+#: Roles preferred when a background color is ambiguous between tokens.
 SURFACE_ROLES = frozenset(
-    {ColorRole.BACKGROUND, ColorRole.SURFACE, ColorRole.BRAND, ColorRole.ACCENT, ColorRole.BORDER}
+    {ColorRole.BACKGROUND, ColorRole.SURFACE, ColorRole.BRAND, ColorRole.ACCENT}
 )
 #: Roles preferred for text-like colors.
 TEXT_ROLES = frozenset({ColorRole.TEXT, ColorRole.TEXT_MUTED, ColorRole.BRAND, ColorRole.ACCENT})
@@ -83,6 +83,10 @@ _ROLES_BY_KEY: dict[str, frozenset[ColorRole]] = {
     "textColor": TEXT_ROLES,
     "placeholderColor": TEXT_ROLES,
 }
+#: Fills and text never reference a border token (a translucent hover fill that happens to
+#: equal the hairline is still a fill), and translucent colors only match the same alpha.
+_FILL_KEYS = frozenset({"backgroundColor", "textColor", "placeholderColor"})
+_REF_MAX_ALPHA_DIFF = 0.01
 
 #: Canonical order of ComponentSpec.properties keys.
 PROPERTY_ORDER = (
@@ -346,7 +350,17 @@ def color_ref(value: str, tokens: TokenContext, *, key: str) -> str | None:
     """{colors.<token>} of the closest palette token; near-ties go to the roles of `key`."""
     if value == "transparent":
         return None
-    token = match_color_token(value, tokens.palette.tokens, prefer_roles=_ROLES_BY_KEY[key])
+    candidates = [
+        token
+        for token in tokens.palette.tokens
+        if key not in _FILL_KEYS or token.role != ColorRole.BORDER
+    ]
+    token = match_color_token(
+        value,
+        candidates,
+        prefer_roles=_ROLES_BY_KEY[key],
+        max_alpha_diff=_REF_MAX_ALPHA_DIFF,
+    )
     return None if token is None else token_ref(COLORS, token.name)
 
 

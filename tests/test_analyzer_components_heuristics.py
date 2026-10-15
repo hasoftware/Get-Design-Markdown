@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from get_design_markdown.analyzer.components_context import build_contexts
 from get_design_markdown.analyzer.components_detect import decorative_elements, is_icon_only
 from get_design_markdown.models.analysis import ColorPalette, ColorRole, ColorToken
@@ -359,3 +361,20 @@ def test_border_colors_prefer_border_tokens_of_the_same_value() -> None:
     assert components["button-outline"].token_refs["borderColor"] == "{colors.hairline}"
     filled = components["button-primary"].token_refs["backgroundColor"]
     assert filled == "{colors.surface-raised}"
+
+
+@pytest.mark.parametrize("alpha", ["0.05", "0.08"])
+def test_fills_never_reference_border_tokens_or_another_alpha(alpha: str) -> None:
+    # linear.app: #ffffff0d pills and #ffffff14 hover fills vs the #ffffff14 hairline.
+    b = PageBuilder(body_background="rgb(8, 9, 10)")
+    fill = f"rgba(255, 255, 255, {alpha})"
+    b.add("a", b.main, (100, 300, 150, 44), "Contact", **button_styles(fill))
+    b.add("a", b.main, (300, 300, 150, 44), "Sales", **button_styles(fill))
+    palette = ColorPalette(
+        tokens=[ColorToken(name="hairline", value="#ffffff14", role=ColorRole.BORDER)]
+    )
+    components = analyze([b.page()], palette=palette)
+    fills = [spec for spec in components.values() if "backgroundColor" in spec.properties]
+    assert fills
+    for spec in fills:
+        assert "backgroundColor" not in spec.token_refs, spec
