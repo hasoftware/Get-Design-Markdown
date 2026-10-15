@@ -1,0 +1,65 @@
+[project]
+name = "get-design-markdown"
+version = "0.1.0"
+description = "Trích xuất ngôn ngữ thiết kế của một trang web thành DESIGN.md cho AI coding agent."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "coloraide>=4.0",
+    "httpx>=0.27",
+    "jinja2>=3.1",
+    "pillow>=10.4",
+    "playwright>=1.48",
+    "pydantic>=2.8",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+    "tinycss2>=1.3",
+    "typer>=0.12",
+]
+
+[project.scripts]
+get-design-markdown = "get_design_markdown.cli:main"
+gdm = "get_design_markdown.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "ruff>=0.6",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/get_design_markdown"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not network'"
+markers = [
+    "browser: cần Chromium của Playwright, chạy trên trang fixture cục bộ",
+    "network: cần Internet, không chạy mặc định",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # cho phép ký tự tiếng Việt trong chuỗi/chú thích
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["tinycss2.*"]
+ignore_missing_imports = true
