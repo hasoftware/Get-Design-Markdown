@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-site="acme-example">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="get-design-markdown 0.1.0">
+<meta name="robots" content="noindex">
+<title>Acme Cloud — Design Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@700&amp;family=JetBrains+Mono:wght@400&amp;display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root,.pv-capture{--pv-bg:var(--color-canvas,var(--pv-fallback-bg));--pv-ink:var(--color-ink,var(--pv-fallback-ink));--pv-muted:var(--color-muted,color-mix(in srgb,var(--pv-ink) 64%,var(--pv-bg)));--pv-line:var(--color-hairline,color-mix(in srgb,var(--pv-ink) 14%,var(--pv-bg)));--pv-surface:var(--color-surface,color-mix(in srgb,var(--pv-ink) 4%,var(--pv-bg)));--pv-accent:var(--color-primary,var(--pv-ink));--pv-panel:color-mix(in srgb,var(--pv-ink) 3%,var(--pv-bg));--pv-good:color-mix(in srgb,#16a34a 72%,var(--pv-ink));--pv-bad:color-mix(in srgb,#dc2626 78%,var(--pv-ink))}
+html{background:var(--pv-bg);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--pv-bg);color:var(--pv-ink);font-family:var(--pv-font);font-size:15px;line-height:1.55;overflow-wrap:break-word}
+a{color:inherit}
+code,.pv-mono{font-family:var(--pv-mono);font-size:.86em}
+h1,h2,h3{font-family:var(--pv-heading-font);line-height:1.15;margin:0}
+.pv-wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.pv-header{padding:56px 0 36px;border-bottom:1px solid var(--pv-line)}
+.pv-eyebrow{font-family:var(--pv-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--pv-muted);margin:0 0 12px}
+.pv-header h1{font-size:clamp(32px,5vw,52px);letter-spacing:-.02em}
+.pv-title{margin:10px 0 0;color:var(--pv-muted);font-size:17px;max-width:70ch}
+.pv-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:20px 0 0;padding:0;list-style:none;font-size:13px;color:var(--pv-muted)}
+.pv-meta strong{color:var(--pv-ink);font-weight:600}
+.pv-disclaimer{margin:20px 0 0;padding:12px 16px;border:1px solid var(--pv-line);border-left:3px solid var(--pv-accent);border-radius:8px;background:var(--pv-panel);font-size:13px;max-width:780px}
+.pv-disclaimer p{margin:0}
+.pv-disclaimer p+p{color:var(--pv-muted);margin-top:2px}
+.pv-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:24px}
+.pv-toggle{font:inherit;font-size:13px;font-weight:600;color:var(--pv-ink);background:var(--pv-panel);border:1px solid var(--pv-line);border-radius:999px;padding:8px 16px;cursor:pointer}
+.pv-toggle:hover{border-color:var(--pv-muted)}
+.pv-toggle:focus-visible,.pv-toc a:focus-visible{outline:2px solid var(--pv-accent);outline-offset:2px}
+.pv-toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--pv-bg) 92%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--pv-line)}
+.pv-toc ul{display:flex;gap:4px;margin:0 auto;padding:8px 24px;list-style:none;overflow-x:auto;max-width:1200px;scrollbar-width:none}
+.pv-toc a{display:block;padding:6px 10px;border-radius:6px;font-size:13px;color:var(--pv-muted);text-decoration:none;white-space:nowrap}
+.pv-toc a:hover{color:var(--pv-ink);background:var(--pv-panel)}
+.pv-section{padding:56px 0;border-bottom:1px solid var(--pv-line);scroll-margin-top:48px}
+.pv-section>h2{font-size:28px;letter-spacing:-.01em}
+.pv-lede{margin:8px 0 28px;color:var(--pv-muted);max-width:72ch}
+.pv-sub{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--pv-muted);margin:36px 0 14px;font-family:var(--pv-font)}
+.pv-facts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px;padding:0;list-style:none}
+.pv-facts li{border:1px solid var(--pv-line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--pv-muted)}
+.pv-facts strong{color:var(--pv-ink);font-weight:600}
+.pv-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.pv-swatch{margin:0;border:1px solid var(--pv-line);border-radius:12px;overflow:hidden;background:var(--pv-bg)}
+.pv-chip{height:92px;background-color:#ffffff;background-image:linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;border-bottom:1px solid var(--pv-line)}
+.pv-chip>span{display:block;height:100%}
+.pv-swatch figcaption{padding:12px 14px 14px;font-size:13px}
+.pv-swatch-name{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.pv-swatch-name code{font-size:13px;font-weight:600;color:var(--pv-ink)}
+.pv-role{font-size:12px;color:var(--pv-muted)}
+.pv-hex{font-family:var(--pv-mono);font-size:13px;margin:4px 0 6px}
+.pv-evidence{margin:6px 0 0;color:var(--pv-muted);font-size:12px;line-height:1.45}
+.pv-evidence code{white-space:nowrap}
+.pv-contrast{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--pv-muted)}
+.pv-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.02em;padding:1px 6px;border-radius:999px;border:1px solid currentColor;margin-left:3px}
+.is-ok{color:var(--pv-good)}
+.is-bad{color:var(--pv-bad)}
+.pv-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none}
+.pv-chips li{display:flex;align-items:center;gap:8px;font-size:12px;border:1px solid var(--pv-line);border-radius:999px;padding:4px 10px 4px 4px}
+.pv-dot{width:22px;height:22px;border-radius:999px;border:1px solid var(--pv-line);flex:none}
+.pv-chips code{font-size:12px}
+.pv-chips small{color:var(--pv-muted)}
+details.pv-details{margin-top:28px;border:1px solid var(--pv-line);border-radius:10px;padding:12px 16px}
+details.pv-details summary{cursor:pointer;font-weight:600;font-size:14px}
+.pv-channel{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--pv-muted)}
+.pv-table-wrap{overflow-x:auto;border:1px solid var(--pv-line);border-radius:10px}
+table.pv-table{width:100%;border-collapse:collapse;font-size:13px}
+.pv-table th,.pv-table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--pv-line);vertical-align:middle;white-space:nowrap}
+.pv-table th{font-weight:600;color:var(--pv-muted);background:var(--pv-panel)}
+.pv-table tr:last-child td{border-bottom:0}
+.pv-table td.pv-wrap-cell{white-space:normal;min-width:160px}
+.pv-sample{display:inline-block;padding:4px 10px;border-radius:6px;font-weight:600;border:1px solid var(--pv-line)}
+.pv-family{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.pv-card-plain{border:1px solid var(--pv-line);border-radius:12px;padding:18px;background:var(--pv-bg)}
+.pv-family-specimen{font-size:40px;line-height:1.1;margin:6px 0 10px;overflow-wrap:anywhere}
+.pv-kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px}
+.pv-kv dt{color:var(--pv-muted)}
+.pv-kv dd{margin:0;overflow-wrap:anywhere}
+.pv-levels{display:grid;gap:0;border:1px solid var(--pv-line);border-radius:12px;overflow:hidden}
+.pv-level{display:grid;grid-template-columns:220px 1fr;gap:24px;padding:22px 20px;border-bottom:1px solid var(--pv-line)}
+.pv-level:last-child{border-bottom:0}
+.pv-level-meta{font-size:12.5px;color:var(--pv-muted)}
+.pv-level-meta code{display:inline-block;font-size:13px;font-weight:600;color:var(--pv-ink);margin-bottom:4px}
+.pv-level-specimen{margin:0;overflow-wrap:anywhere;min-width:0}
+.pv-scale{display:grid;gap:10px}
+.pv-scale-row{display:grid;grid-template-columns:72px 72px 1fr;gap:12px;align-items:center;font-size:13px}
+.pv-bar{height:14px;border-radius:3px;background:var(--pv-accent);min-width:2px}
+.pv-scale-row small{grid-column:3;color:var(--pv-muted);margin-top:-6px}
+.pv-radius{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+.pv-radius-box{height:96px;border:2px solid var(--pv-accent);background:color-mix(in srgb,var(--pv-accent) 10%,var(--pv-bg))}
+.pv-shadows{display:grid;gap:28px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));padding:12px 4px}
+.pv-shadow-card{background:var(--pv-bg);border-radius:12px;padding:22px;min-height:120px;font-size:13px}
+.pv-shadow-card code{display:block;margin-top:8px;color:var(--pv-muted);font-size:11.5px;overflow-wrap:anywhere}
+.pv-label{font-size:12px;color:var(--pv-muted)}
+.pv-components{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+.pv-component{border:1px solid var(--pv-line);border-radius:14px;overflow:hidden;background:var(--pv-bg);min-width:0}
+.pv-component.is-wide{grid-column:1/-1}
+.pv-component>header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;padding:14px 18px;border-bottom:1px solid var(--pv-line);background:var(--pv-panel)}
+.pv-component>header h3{font-size:15px;font-family:var(--pv-mono);font-weight:600}
+.pv-component>header span{font-size:12px;color:var(--pv-muted)}
+.pv-stage{display:flex;flex-wrap:wrap;align-items:center;gap:18px 24px;padding:28px 22px;background:var(--pv-bg);min-width:0}
+.pv-twin{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;max-width:100%}
+.is-wide .pv-twin{flex:1 1 100%;align-items:stretch}
+.pv-capture{color:var(--pv-ink)}
+.pv-gutter{padding-inline:var(--pv-gutter)}
+.pv-spec{padding:14px 18px 18px;border-top:1px solid var(--pv-line)}
+.pv-spec .pv-kv{grid-template-columns:minmax(110px,auto) 1fr}
+.pv-ref{color:var(--pv-muted);font-family:var(--pv-mono);font-size:11.5px;margin-left:6px}
+.pv-state{margin:12px 0 4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--pv-muted)}
+.pv-hints{margin:10px 0 0;font-size:12px;color:var(--pv-muted)}
+.cmp{box-sizing:border-box;margin:0;font:inherit;color:inherit;background:none;border:0 solid transparent;text-decoration:none;max-width:100%;transition:background-color .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,text-decoration-color .15s ease}
+.ck-button,.ck-badge{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis}
+.ck-badge{cursor:default}
+.ck-link{display:inline-flex;align-items:center;cursor:pointer}
+.ck-input{display:block;width:min(100%,340px)}
+.ck-input:focus-visible{outline:2px solid var(--pv-accent);outline-offset:2px}
+.ck-card{display:block;width:100%;max-width:380px}
+.ck-card .pv-card-title{margin:0 0 8px;color:var(--pv-ink)}
+.ck-card .pv-card-body{margin:0;color:var(--pv-muted)}
+.ck-box{display:block;width:100%;min-height:48px}
+.pv-navstage{width:100%;padding:24px 0;border-radius:10px;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--pv-accent) 22%,transparent) 0 14px,transparent 14px 28px),var(--pv-surface);overflow:hidden}
+.ck-nav{display:flex;align-items:center;gap:20px;width:100%}
+.ck-nav .pv-nav-logo{font-weight:700;font-family:var(--pv-heading-font);margin-right:auto;white-space:nowrap}
+.ck-nav .pv-nav-links{display:flex;gap:4px;flex-wrap:wrap}
+.ck-footer{display:block;width:100%}
+.pv-footer-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.ck-footer h4{margin:0 0 8px;font-size:inherit;font-weight:600;opacity:.95}
+.ck-footer ul{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.pv-ruler{position:relative;height:56px;margin:8px 0 28px;border-bottom:2px solid var(--pv-line)}
+.pv-mark{position:absolute;bottom:-2px;width:2px;height:40px;background:var(--pv-accent)}
+.pv-mark span{position:absolute;bottom:42px;left:4px;font-size:11.5px;white-space:nowrap;color:var(--pv-muted);font-family:var(--pv-mono)}
+.pv-mark.is-end span{left:auto;right:4px}
+.pv-ruler-end{position:absolute;right:0;bottom:-24px;font-size:11px;color:var(--pv-muted)}
+.pv-changes{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.pv-changes li{border:1px solid var(--pv-line);border-radius:10px;padding:12px 16px}
+.pv-changes strong{display:block}
+.pv-changes .pv-label{display:block;margin-top:2px}
+.pv-footer{padding:36px 0 56px;color:var(--pv-muted);font-size:13px}
+.pv-footer ul{margin:8px 0 0;padding-left:18px}
+.pv-empty{color:var(--pv-muted);font-style:italic}
+:root:not([data-theme="dark"]) .t-dark,:root[data-theme="dark"] .t-light{display:none !important}
+@media (max-width:720px){
+.pv-wrap{padding:0 16px}
+.pv-toc ul{padding:8px 16px}
+.pv-header{padding:36px 0 28px}
+.pv-section{padding:40px 0}
+.pv-level{grid-template-columns:1fr;gap:10px}
+.pv-components{grid-template-columns:1fr}
+.pv-scale-row{grid-template-columns:56px 56px 1fr}
+.pv-footer-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pv-mark span{display:none}
+.ck-nav{flex-wrap:wrap;gap:12px}
+}
+@media (prefers-reduced-motion:reduce){.cmp{transition:none}}
+:root{--font-primary:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;--font-heading:"Space Grotesk", "Inter", system-ui, sans-serif;--font-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;--space-xxs:4px;--space-xs:8px;--space-sm:12px;--space-md:16px;--space-lg:20px;--space-xl:24px;--space-xxl:32px;--space-xxxl:48px;--space-4xl:64px;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-full:9999px;--shadow-sm:0px 1px 2px 0px rgba(15, 23, 42, 0.06);--shadow-md:0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06);--pv-font:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);--pv-heading-font:var(--font-heading, "Space Grotesk", "Inter", system-ui, sans-serif);--pv-mono:var(--font-mono, "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace);--pv-gutter:24px}
+:root[data-theme="light"]{color-scheme:light;--pv-fallback-bg:#ffffff;--pv-fallback-ink:#0f172a;--color-primary:#4f46e5;--color-on-primary:#ffffff;--color-canvas:#ffffff;--color-surface:#f8fafc;--color-surface-inverse:#0b1020;--color-hairline:#e2e8f0;--color-ink:#0f172a;--color-muted:#475569;--color-faint:#94a3b8;--color-success:#16a34a}
+:root[data-theme="dark"]{color-scheme:dark;--pv-fallback-bg:#0b1020;--pv-fallback-ink:#f8fafc;--color-primary:#818cf8;--color-on-primary:#0b1020;--color-canvas:#0b1020;--color-surface:#111827;--color-surface-inverse:#05070f;--color-hairline:#1e293b;--color-ink:#f8fafc;--color-muted:#94a3b8;--color-faint:#64748b;--color-success:#4ade80}
+.pv-capture{color-scheme:light;--pv-fallback-bg:#ffffff;--pv-fallback-ink:#0f172a;--color-primary:#4f46e5;--color-on-primary:#ffffff;--color-canvas:#ffffff;--color-surface:#f8fafc;--color-surface-inverse:#0b1020;--color-hairline:#e2e8f0;--color-ink:#0f172a;--color-muted:#475569;--color-faint:#94a3b8;--color-success:#16a34a}
+.sw-0{background-color:var(--color-primary)}
+.sw-1{background-color:var(--color-on-primary)}
+.sw-2{background-color:var(--color-canvas)}
+.sw-3{background-color:var(--color-surface)}
+.sw-4{background-color:var(--color-surface-inverse)}
+.sw-5{background-color:var(--color-hairline)}
+.sw-6{background-color:var(--color-ink)}
+.sw-7{background-color:var(--color-muted)}
+.sw-8{background-color:var(--color-faint)}
+.sw-9{background-color:var(--color-success)}
+.dc-light-18{background-color:#6366f12e}
+.dc-light-19{background-color:#ec48991f}
+.cl-light-0{background-color:#ffffff}
+.cl-light-1{background-color:#f8fafc}
+.cl-light-2{background-color:#0b1020}
+.cl-light-3{background-color:#ffffffcc}
+.cl-light-4{background-color:#0f172a}
+.cl-light-5{background-color:#4f46e5}
+.cl-light-6{background-color:#eef2ff}
+.cl-light-7{background-color:#0f172a}
+.cl-light-8{background-color:#475569}
+.cl-light-9{background-color:#ffffff}
+.cl-light-10{background-color:#94a3b8}
+.cl-light-11{background-color:#4f46e5}
+.cl-light-12{background-color:#e2e8f0}
+.cl-light-13{background-color:#64748b}
+.cl-light-14{background-color:#16a34a}
+.cl-light-15{background-color:#e2e8f0}
+.cl-light-16{background-color:#1e293b}
+.cl-light-17{background-color:#cbd5e1}
+.cl-light-18{background-color:#6366f12e}
+.cl-light-19{background-color:#ec48991f}
+.cp-light-0{color:#475569;background-color:#ffffff}
+.cp-light-1{color:#0f172a;background-color:#ffffff}
+.cp-light-2{color:#94a3b8;background-color:#0b1020}
+.cp-light-3{color:#ffffff;background-color:#0b1020}
+.cp-light-4{color:#4f46e5;background-color:#ffffff}
+.cp-light-5{color:#ffffff;background-color:#4f46e5}
+.cp-light-6{color:#0f172a;background-color:#f8fafc}
+.cp-light-7{color:#16a34a;background-color:#ffffff}
+.cp-light-8{color:#475569;background-color:#f8fafc}
+.cp-light-9{color:#4f46e5;background-color:#eef2ff}
+.cp-light-10{color:#64748b;background-color:#0b1020}
+.cp-light-11{color:#94a3b8;background-color:#ffffff}
+.cp-light-12{color:#e2e8f0;background-color:#0f172a}
+.cp-light-13{color:#ffffff;background-color:#0f172a}
+.dc-dark-18{background-color:#6366f12e}
+.dc-dark-19{background-color:#ec48991f}
+.cl-dark-0{background-color:#0b1020}
+.cl-dark-1{background-color:#111827}
+.cl-dark-2{background-color:#05070f}
+.cl-dark-3{background-color:#0b1020cc}
+.cl-dark-4{background-color:#020617}
+.cl-dark-5{background-color:#818cf8}
+.cl-dark-6{background-color:#818cf826}
+.cl-dark-7{background-color:#f8fafc}
+.cl-dark-8{background-color:#f8fafc}
+.cl-dark-9{background-color:#94a3b8}
+.cl-dark-10{background-color:#ffffff}
+.cl-dark-11{background-color:#0b1020}
+.cl-dark-12{background-color:#818cf8}
+.cl-dark-13{background-color:#e2e8f0}
+.cl-dark-14{background-color:#64748b}
+.cl-dark-15{background-color:#4ade80}
+.cl-dark-16{background-color:#1e293b}
+.cl-dark-17{background-color:#334155}
+.cl-dark-18{background-color:#6366f12e}
+.cl-dark-19{background-color:#ec48991f}
+.cp-dark-0{color:#94a3b8;background-color:#0b1020}
+.cp-dark-1{color:#f8fafc;background-color:#0b1020}
+.cp-dark-2{color:#94a3b8;background-color:#05070f}
+.cp-dark-3{color:#ffffff;background-color:#05070f}
+.cp-dark-4{color:#0b1020;background-color:#818cf8}
+.cp-dark-5{color:#818cf8;background-color:#0b1020}
+.cp-dark-6{color:#0b1020;background-color:#f8fafc}
+.cp-dark-7{color:#4ade80;background-color:#0b1020}
+.cp-dark-8{color:#64748b;background-color:#05070f}
+.cp-dark-9{color:#64748b;background-color:#0b1020}
+.cp-dark-10{color:#818cf8;background-color:#1d2340}
+.cp-dark-11{color:#94a3b8;background-color:#111827}
+.cp-dark-12{color:#e2e8f0;background-color:#020617}
+.cp-dark-13{color:#f8fafc;background-color:#111827}
+.ff-0{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif)}
+.ff-1{font-family:var(--font-heading, "Space Grotesk", "Inter", system-ui, sans-serif)}
+.ff-2{font-family:var(--font-mono, "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace)}
+.tl-0{font-family:var(--font-heading, "Space Grotesk", "Inter", system-ui, sans-serif);font-size:64px;font-weight:700;line-height:1.05;letter-spacing:-1.5px}
+.tl-1{font-family:var(--font-heading, "Space Grotesk", "Inter", system-ui, sans-serif);font-size:40px;font-weight:700;line-height:1.15;letter-spacing:-0.8px}
+.tl-2{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:24px;font-weight:600;line-height:1.33;letter-spacing:0px}
+.tl-3{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:20px;font-weight:400;line-height:1.6;letter-spacing:0px}
+.tl-4{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:16px;font-weight:400;line-height:1.6;letter-spacing:0px}
+.tl-5{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:1.33;letter-spacing:0px}
+.tl-6{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:14px;font-weight:400;line-height:1.43;letter-spacing:0px}
+.tl-7{font-family:var(--font-mono, "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace);font-size:14px;font-weight:400;line-height:1.6;letter-spacing:0px}
+.tl-8{font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:13px;font-weight:400;line-height:1.5;letter-spacing:0px}
+.sp-0{width:min(4px, 100%)}
+.sp-1{width:min(8px, 100%)}
+.sp-2{width:min(12px, 100%)}
+.sp-3{width:min(16px, 100%)}
+.sp-4{width:min(20px, 100%)}
+.sp-5{width:min(24px, 100%)}
+.sp-6{width:min(32px, 100%)}
+.sp-7{width:min(48px, 100%)}
+.sp-8{width:min(64px, 100%)}
+.rd-0{border-radius:var(--radius-sm)}
+.rd-1{border-radius:var(--radius-md)}
+.rd-2{border-radius:var(--radius-lg)}
+.rd-3{border-radius:var(--radius-xl)}
+.rd-4{border-radius:var(--radius-full)}
+.sh-0{box-shadow:var(--shadow-sm, 0px 1px 2px 0px rgba(15, 23, 42, 0.06))}
+.sh-1{box-shadow:var(--shadow-md, 0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06))}
+.cx-0{background-color:var(--color-primary, #4f46e5);color:var(--color-on-primary, #ffffff);border-radius:var(--radius-md, 8px);padding:12px 20px;min-height:44px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:20px;box-shadow:var(--shadow-sm, 0px 1px 2px 0px rgba(15, 23, 42, 0.06))}
+.cx-0:hover, .cx-0.is-hover{background-color:#4338ca}
+.cx-1{background-color:var(--color-ink, #0f172a);color:var(--color-on-primary, #ffffff);border-radius:var(--radius-md, 8px);padding:12px 20px;min-height:44px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:20px}
+.cx-1:hover, .cx-1.is-hover{background-color:#1e293b}
+.cx-2{background-color:#00000000;color:var(--color-ink, #0f172a);border-style:solid;border-width:1px;border-color:var(--color-hairline, #e2e8f0);border-radius:var(--radius-md, 8px);padding:11px 19px;min-height:44px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:20px}
+.cx-2:hover, .cx-2.is-hover{background-color:var(--color-surface, #f8fafc);border-style:solid;border-color:#cbd5e1}
+.cx-3{background-color:#00000000;color:var(--color-primary, #4f46e5);border-radius:var(--radius-md, 8px);padding:8px 12px;min-height:36px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:20px}
+.cx-3:hover, .cx-3.is-hover{background-color:#eef2ff}
+.cx-4{color:var(--color-primary, #4f46e5);font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:16px;font-weight:500;line-height:25.6px;text-decoration-line:none}
+.cx-4:hover, .cx-4.is-hover{color:#4338ca;text-decoration-line:underline}
+.cx-5{color:var(--color-muted, #475569);border-radius:var(--radius-sm, 6px);padding:8px 12px;min-height:36px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:500;line-height:20px;text-decoration-line:none}
+.cx-5:hover, .cx-5.is-hover{color:var(--color-ink, #0f172a)}
+.cx-6{background-color:var(--color-canvas, #ffffff);color:var(--color-ink, #0f172a);border-style:solid;border-width:1px;border-color:#cbd5e1;border-radius:var(--radius-sm, 6px);padding:10px 14px;min-height:44px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:15px;font-weight:400;line-height:22px;box-shadow:var(--shadow-sm, 0px 1px 2px 0px rgba(15, 23, 42, 0.06))}
+.cx-6::placeholder{color:var(--color-faint, #94a3b8);opacity:1}
+.cx-7{background-color:var(--color-canvas, #ffffff);border-style:solid;border-width:1px;border-color:var(--color-hairline, #e2e8f0);border-radius:var(--radius-xl, 16px);padding:var(--space-xxl, 32px);box-shadow:var(--shadow-md, 0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06))}
+.cx-8{background-color:#eef2ff;color:var(--color-primary, #4f46e5);border-radius:var(--radius-full, 9999px);padding:4px 12px;min-height:28px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:13px;font-weight:600;line-height:20px}
+.cx-9{background-color:#ffffffcc;border-style:solid;border-width:0px 0px 1px;border-color:var(--color-hairline, #e2e8f0);padding:0px 24px;min-height:64px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.cx-10{background-color:var(--color-surface-inverse, #0b1020);color:var(--color-faint, #94a3b8);padding:64px 0px 48px;font-family:var(--font-primary, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);font-size:14px;font-weight:400;line-height:1.43}
+.bp-0{left:44.44%}
+.bp-1{left:53.33%}
+.bp-2{left:71.11%}
+.bp-3{left:88.89%}
+</style>
+<script>
+(function () {
+  var root = document.documentElement;
+  var key = "gdm-preview-theme:" + (root.getAttribute("data-site") || "");
+  function apply(theme) {
+    if (theme !== "light" && theme !== "dark") return;
+    root.setAttribute("data-theme", theme);
+    var button = document.getElementById("theme-toggle");
+    if (button) button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+  }
+  try { apply(window.localStorage.getItem(key)); } catch (error) {}
+  document.addEventListener("DOMContentLoaded", function () {
+    var button = document.getElementById("theme-toggle");
+    if (!button) return;
+    apply(root.getAttribute("data-theme"));
+    button.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      apply(next);
+      try { window.localStorage.setItem(key, next); } catch (error) {}
+    });
+  });
+})();
+</script>
+</head>
+<body>
+<header class="pv-header">
+<div class="pv-wrap">
+<p class="pv-eyebrow">Design reference preview</p>
+<h1>Acme Cloud</h1>
+<p class="pv-title">Acme Cloud — Ship cloud apps without the ops</p>
+<ul class="pv-meta">
+<li>Source: <strong><a href="https://acme.example/" rel="noopener noreferrer">https://acme.example/</a></strong></li>
+<li>Extracted: <strong><time datetime="2026-10-15">2026-10-15</time></strong></li>
+<li>Pages analyzed: <strong>home</strong></li>
+</ul>
+<div class="pv-disclaimer" role="note">
+<p><strong>Reference only — not the official design system of this site.</strong> Values were measured from the live page by get-design-markdown; logos, images and font files are not included.</p>
+<p lang="vi">Tài liệu tham khảo — không phải design system chính thức của trang.</p>
+</div>
+<div class="pv-toolbar">
+<button type="button" class="pv-toggle" id="theme-toggle" aria-pressed="false"><span class="t-light">Show dark-mode capture</span><span class="t-dark">Show default capture</span></button>
+<span class="pv-label"><span class="t-light">Showing the default capture · light palette</span><span class="t-dark">Showing the prefers-color-scheme: dark capture · dark palette</span></span>
+</div>
+</div>
+</header>
+<nav class="pv-toc" aria-label="Sections">
+<ul>
+<li><a href="#colors">Colors</a></li>
+<li><a href="#contrast">Contrast</a></li>
+<li><a href="#typography">Typography</a></li>
+<li><a href="#spacing">Spacing</a></li>
+<li><a href="#radius">Radius</a></li>
+<li><a href="#shadows">Shadows</a></li>
+<li><a href="#components">Components</a></li>
+<li><a href="#layout">Layout</a></li>
+</ul>
+</nav>
+<main class="pv-wrap">
+<section class="pv-section" id="colors">
+<h2>Colors</h2>
+<p class="pv-lede">Semantic palette with each token's role. Text tokens are checked on <code>canvas</code> (<code>on-*</code> tokens on their partner), surfaces and action colors with the most legible text token on them — WCAG 2.x, AA = 4.5:1.</p>
+<div class="pv-grid">
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-0"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>primary</code><span class="pv-role">brand</span></div>
+<div class="t-light">
+<div class="pv-hex">#4f46e5</div>
+<div class="pv-contrast">
+<span>on canvas 6.29:1<span class="pv-badge is-ok">AA</span></span>
+<span>on-primary on it 6.29:1<span class="pv-badge is-ok">AA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#818cf8</div>
+<div class="pv-contrast">
+<span>on canvas 6.35:1<span class="pv-badge is-ok">AA</span></span>
+<span>on-primary on it 6.35:1<span class="pv-badge is-ok">AA</span></span>
+</div>
+</div>
+<p class="pv-evidence">background of button-primary; text of links · <code>--color-primary</code></p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-1"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>on-primary</code><span class="pv-role">text</span></div>
+<div class="t-light">
+<div class="pv-hex">#ffffff</div>
+<div class="pv-contrast">
+<span>on primary 6.29:1<span class="pv-badge is-ok">AA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#0b1020</div>
+<div class="pv-contrast">
+<span>on primary 6.35:1<span class="pv-badge is-ok">AA</span></span>
+</div>
+</div>
+<p class="pv-evidence">text on button-primary</p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-2"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>canvas</code><span class="pv-role">background</span></div>
+<div class="t-light">
+<div class="pv-hex">#ffffff</div>
+<div class="pv-contrast">
+<span>ink on it 17.85:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#0b1020</div>
+<div class="pv-contrast">
+<span>ink on it 18.10:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">body background, largest area</p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-3"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>surface</code><span class="pv-role">surface</span></div>
+<div class="t-light">
+<div class="pv-hex">#f8fafc</div>
+<div class="pv-contrast">
+<span>ink on it 17.06:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#111827</div>
+<div class="pv-contrast">
+<span>ink on it 16.96:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">alternate section background · <code>--color-surface</code></p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-4"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>surface-inverse</code><span class="pv-role">surface</span></div>
+<div class="t-light">
+<div class="pv-hex">#0b1020</div>
+<div class="pv-contrast">
+<span>on-primary on it 18.93:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#05070f</div>
+<div class="pv-contrast">
+<span>ink on it 19.23:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">footer background</p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-5"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>hairline</code><span class="pv-role">border</span></div>
+<div class="t-light">
+<div class="pv-hex">#e2e8f0</div>
+<div class="pv-contrast">
+<span>vs canvas 1.23:1 <span class="pv-label">(non-text)</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#1e293b</div>
+<div class="pv-contrast">
+<span>vs canvas 1.29:1 <span class="pv-label">(non-text)</span></span>
+</div>
+</div>
+<p class="pv-evidence">1px borders of cards, header, outline button · <code>--color-border</code></p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-6"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>ink</code><span class="pv-role">text</span></div>
+<div class="t-light">
+<div class="pv-hex">#0f172a</div>
+<div class="pv-contrast">
+<span>on canvas 17.85:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#f8fafc</div>
+<div class="pv-contrast">
+<span>on canvas 18.10:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">headings and body text · <code>--color-ink</code></p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-7"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>muted</code><span class="pv-role">text muted</span></div>
+<div class="t-light">
+<div class="pv-hex">#475569</div>
+<div class="pv-contrast">
+<span>on canvas 7.58:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#94a3b8</div>
+<div class="pv-contrast">
+<span>on canvas 7.38:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">secondary paragraphs and nav links · <code>--color-muted</code></p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-8"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>faint</code><span class="pv-role">text muted</span></div>
+<div class="t-light">
+<div class="pv-hex">#94a3b8</div>
+<div class="pv-contrast">
+<span>on canvas 2.56:1<span class="pv-badge is-bad">Fail</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#64748b</div>
+<div class="pv-contrast">
+<span>on canvas 3.98:1<span class="pv-badge is-bad">AA large</span></span>
+</div>
+</div>
+<p class="pv-evidence">captions and footer links</p></figcaption>
+</figure>
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="sw-9"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>success</code><span class="pv-role">success</span></div>
+<div class="t-light">
+<div class="pv-hex">#16a34a</div>
+<div class="pv-contrast">
+<span>on canvas 3.30:1<span class="pv-badge is-bad">AA large</span></span>
+<span>ink on it 5.42:1<span class="pv-badge is-ok">AA</span></span>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-hex">#4ade80</div>
+<div class="pv-contrast">
+<span>on canvas 10.86:1<span class="pv-badge is-ok">AAA</span></span>
+<span>on-primary on it 10.86:1<span class="pv-badge is-ok">AAA</span></span>
+</div>
+</div>
+<p class="pv-evidence">positive inline note · <code>--color-success</code></p></figcaption>
+</figure>
+</div>
+<div class="t-light">
+<h3 class="pv-sub">Decorative accents · default capture</h3>
+<p class="pv-lede">Colors seen only in gradients or decoration — kept out of the structural palette.</p>
+<ul class="pv-chips">
+<li><span class="pv-dot dc-light-18"></span><code>#6366f12e</code><small>gradient</small></li>
+<li><span class="pv-dot dc-light-19"></span><code>#ec48991f</code><small>gradient</small></li>
+</ul>
+<details class="pv-details">
+<summary>All measured color clusters · default capture</summary>
+<p class="pv-channel">background</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-light-0"></span><code>#ffffff</code><small>71.9%</small></li>
+<li><span class="pv-dot cl-light-1"></span><code>#f8fafc</code><small>17.4%</small></li>
+<li><span class="pv-dot cl-light-2"></span><code>#0b1020</code><small>8.3%</small></li>
+<li><span class="pv-dot cl-light-3"></span><code>#ffffffcc</code><small>1.4%</small></li>
+<li><span class="pv-dot cl-light-4"></span><code>#0f172a</code><small>0.6%</small></li>
+<li><span class="pv-dot cl-light-5"></span><code>#4f46e5</code><small>0.2%</small></li>
+<li><span class="pv-dot cl-light-6"></span><code>#eef2ff</code><small>0.2%</small></li>
+</ul>
+<p class="pv-channel">text</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-light-7"></span><code>#0f172a</code><small>50.3%</small></li>
+<li><span class="pv-dot cl-light-8"></span><code>#475569</code><small>34.5%</small></li>
+<li><span class="pv-dot cl-light-9"></span><code>#ffffff</code><small>6.5%</small></li>
+<li><span class="pv-dot cl-light-10"></span><code>#94a3b8</code><small>2.8%</small></li>
+<li><span class="pv-dot cl-light-11"></span><code>#4f46e5</code><small>2.3%</small></li>
+<li><span class="pv-dot cl-light-12"></span><code>#e2e8f0</code><small>2.1%</small></li>
+<li><span class="pv-dot cl-light-13"></span><code>#64748b</code><small>0.9%</small></li>
+<li><span class="pv-dot cl-light-14"></span><code>#16a34a</code><small>0.6%</small></li>
+</ul>
+<p class="pv-channel">border</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-light-15"></span><code>#e2e8f0</code><small>75.3%</small></li>
+<li><span class="pv-dot cl-light-16"></span><code>#1e293b</code><small>14.8%</small></li>
+<li><span class="pv-dot cl-light-17"></span><code>#cbd5e1</code><small>9.9%</small></li>
+</ul>
+<p class="pv-channel">gradient</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-light-18"></span><code>#6366f12e</code><small>50.0% · decorative</small></li>
+<li><span class="pv-dot cl-light-19"></span><code>#ec48991f</code><small>50.0% · decorative</small></li>
+</ul>
+</details>
+</div>
+<div class="t-dark">
+<h3 class="pv-sub">Decorative accents · dark-mode capture</h3>
+<p class="pv-lede">Colors seen only in gradients or decoration — kept out of the structural palette.</p>
+<ul class="pv-chips">
+<li><span class="pv-dot dc-dark-18"></span><code>#6366f12e</code><small>gradient</small></li>
+<li><span class="pv-dot dc-dark-19"></span><code>#ec48991f</code><small>gradient</small></li>
+</ul>
+<details class="pv-details">
+<summary>All measured color clusters · dark-mode capture</summary>
+<p class="pv-channel">background</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-dark-0"></span><code>#0b1020</code><small>71.9%</small></li>
+<li><span class="pv-dot cl-dark-1"></span><code>#111827</code><small>17.4%</small></li>
+<li><span class="pv-dot cl-dark-2"></span><code>#05070f</code><small>8.3%</small></li>
+<li><span class="pv-dot cl-dark-3"></span><code>#0b1020cc</code><small>1.4%</small></li>
+<li><span class="pv-dot cl-dark-4"></span><code>#020617</code><small>0.5%</small></li>
+<li><span class="pv-dot cl-dark-5"></span><code>#818cf8</code><small>0.2%</small></li>
+<li><span class="pv-dot cl-dark-6"></span><code>#818cf826</code><small>0.2%</small></li>
+<li><span class="pv-dot cl-dark-7"></span><code>#f8fafc</code><small>0.1%</small></li>
+</ul>
+<p class="pv-channel">text</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-dark-8"></span><code>#f8fafc</code><small>50.3%</small></li>
+<li><span class="pv-dot cl-dark-9"></span><code>#94a3b8</code><small>36.7%</small></li>
+<li><span class="pv-dot cl-dark-10"></span><code>#ffffff</code><small>3.3%</small></li>
+<li><span class="pv-dot cl-dark-11"></span><code>#0b1020</code><small>3.2%</small></li>
+<li><span class="pv-dot cl-dark-12"></span><code>#818cf8</code><small>2.3%</small></li>
+<li><span class="pv-dot cl-dark-13"></span><code>#e2e8f0</code><small>2.1%</small></li>
+<li><span class="pv-dot cl-dark-14"></span><code>#64748b</code><small>1.5%</small></li>
+<li><span class="pv-dot cl-dark-15"></span><code>#4ade80</code><small>0.6%</small></li>
+</ul>
+<p class="pv-channel">border</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-dark-16"></span><code>#1e293b</code><small>90.1%</small></li>
+<li><span class="pv-dot cl-dark-17"></span><code>#334155</code><small>9.9%</small></li>
+</ul>
+<p class="pv-channel">gradient</p>
+<ul class="pv-chips">
+<li><span class="pv-dot cl-dark-18"></span><code>#6366f12e</code><small>50.0% · decorative</small></li>
+<li><span class="pv-dot cl-dark-19"></span><code>#ec48991f</code><small>50.0% · decorative</small></li>
+</ul>
+</details>
+</div>
+</section>
+<section class="pv-section" id="contrast">
+<h2>Contrast pairs</h2>
+<p class="pv-lede">Text/background pairs measured on the page, most frequent first. Pairs below 4.5:1 fail WCAG AA for body text.</p>
+<div class="t-light">
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Sample</th><th scope="col">Foreground</th><th scope="col">Background</th><th scope="col">Ratio</th><th scope="col">AA</th><th scope="col">AA large</th><th scope="col">AAA</th><th scope="col">Where</th></tr></thead>
+<tbody>
+<tr>
+<td><span class="pv-sample cp-light-0">Aa</span></td>
+<td><code>#475569</code><span class="pv-ref">muted</span></td>
+<td><code>#ffffff</code><span class="pv-ref">canvas</span></td>
+<td><strong>7.58:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">secondary text <span class="pv-label">×13</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-1">Aa</span></td>
+<td><code>#0f172a</code><span class="pv-ref">ink</span></td>
+<td><code>#ffffff</code><span class="pv-ref">canvas</span></td>
+<td><strong>17.85:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">body text <span class="pv-label">×10</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-2">Aa</span></td>
+<td><code>#94a3b8</code><span class="pv-ref">faint</span></td>
+<td><code>#0b1020</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>7.38:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">footer links <span class="pv-label">×9</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-3">Aa</span></td>
+<td><code>#ffffff</code><span class="pv-ref">on-primary</span></td>
+<td><code>#0b1020</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>18.93:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">footer headings <span class="pv-label">×4</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-4">Aa</span></td>
+<td><code>#4f46e5</code><span class="pv-ref">primary</span></td>
+<td><code>#ffffff</code><span class="pv-ref">canvas</span></td>
+<td><strong>6.29:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">links <span class="pv-label">×2</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-5">Aa</span></td>
+<td><code>#ffffff</code><span class="pv-ref">on-primary</span></td>
+<td><code>#4f46e5</code><span class="pv-ref">primary</span></td>
+<td><strong>6.29:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">button-primary <span class="pv-label">×2</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-6">Aa</span></td>
+<td><code>#0f172a</code><span class="pv-ref">ink</span></td>
+<td><code>#f8fafc</code><span class="pv-ref">surface</span></td>
+<td><strong>17.06:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">headings on surface <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-7">Aa</span></td>
+<td><code>#16a34a</code><span class="pv-ref">success</span></td>
+<td><code>#ffffff</code><span class="pv-ref">canvas</span></td>
+<td><strong>3.30:1</strong></td>
+<td class="is-bad">✗</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">inline success note <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-8">Aa</span></td>
+<td><code>#475569</code><span class="pv-ref">muted</span></td>
+<td><code>#f8fafc</code><span class="pv-ref">surface</span></td>
+<td><strong>7.24:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">secondary text on surface <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-9">Aa</span></td>
+<td><code>#4f46e5</code><span class="pv-ref">primary</span></td>
+<td><code>#eef2ff</code></td>
+<td><strong>5.62:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">badge <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-10">Aa</span></td>
+<td><code>#64748b</code></td>
+<td><code>#0b1020</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>3.98:1</strong></td>
+<td class="is-bad">✗</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">footer copyright <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-11">Aa</span></td>
+<td><code>#94a3b8</code><span class="pv-ref">faint</span></td>
+<td><code>#ffffff</code><span class="pv-ref">canvas</span></td>
+<td><strong>2.56:1</strong></td>
+<td class="is-bad">✗</td>
+<td class="is-bad">✗</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">caption <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-12">Aa</span></td>
+<td><code>#e2e8f0</code></td>
+<td><code>#0f172a</code><span class="pv-ref">ink</span></td>
+<td><strong>14.48:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">code sample <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-light-13">Aa</span></td>
+<td><code>#ffffff</code><span class="pv-ref">on-primary</span></td>
+<td><code>#0f172a</code><span class="pv-ref">ink</span></td>
+<td><strong>17.85:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">button-secondary <span class="pv-label">×1</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="t-dark">
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Sample</th><th scope="col">Foreground</th><th scope="col">Background</th><th scope="col">Ratio</th><th scope="col">AA</th><th scope="col">AA large</th><th scope="col">AAA</th><th scope="col">Where</th></tr></thead>
+<tbody>
+<tr>
+<td><span class="pv-sample cp-dark-0">Aa</span></td>
+<td><code>#94a3b8</code><span class="pv-ref">muted</span></td>
+<td><code>#0b1020</code><span class="pv-ref">canvas</span></td>
+<td><strong>7.38:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">secondary text <span class="pv-label">×13</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-1">Aa</span></td>
+<td><code>#f8fafc</code><span class="pv-ref">ink</span></td>
+<td><code>#0b1020</code><span class="pv-ref">canvas</span></td>
+<td><strong>18.10:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">body text <span class="pv-label">×10</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-2">Aa</span></td>
+<td><code>#94a3b8</code><span class="pv-ref">muted</span></td>
+<td><code>#05070f</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>7.85:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">footer links <span class="pv-label">×9</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-3">Aa</span></td>
+<td><code>#ffffff</code></td>
+<td><code>#05070f</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>20.12:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">footer headings <span class="pv-label">×4</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-4">Aa</span></td>
+<td><code>#0b1020</code><span class="pv-ref">on-primary</span></td>
+<td><code>#818cf8</code><span class="pv-ref">primary</span></td>
+<td><strong>6.35:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">button-primary <span class="pv-label">×2</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-5">Aa</span></td>
+<td><code>#818cf8</code><span class="pv-ref">primary</span></td>
+<td><code>#0b1020</code><span class="pv-ref">canvas</span></td>
+<td><strong>6.35:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">links <span class="pv-label">×2</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-6">Aa</span></td>
+<td><code>#0b1020</code><span class="pv-ref">on-primary</span></td>
+<td><code>#f8fafc</code><span class="pv-ref">ink</span></td>
+<td><strong>18.10:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">button-secondary <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-7">Aa</span></td>
+<td><code>#4ade80</code><span class="pv-ref">success</span></td>
+<td><code>#0b1020</code><span class="pv-ref">canvas</span></td>
+<td><strong>10.86:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">inline success note <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-8">Aa</span></td>
+<td><code>#64748b</code><span class="pv-ref">faint</span></td>
+<td><code>#05070f</code><span class="pv-ref">surface-inverse</span></td>
+<td><strong>4.23:1</strong></td>
+<td class="is-bad">✗</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">footer copyright <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-9">Aa</span></td>
+<td><code>#64748b</code><span class="pv-ref">faint</span></td>
+<td><code>#0b1020</code><span class="pv-ref">canvas</span></td>
+<td><strong>3.98:1</strong></td>
+<td class="is-bad">✗</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">caption <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-10">Aa</span></td>
+<td><code>#818cf8</code><span class="pv-ref">primary</span></td>
+<td><code>#1d2340</code></td>
+<td><strong>5.15:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">text <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-11">Aa</span></td>
+<td><code>#94a3b8</code><span class="pv-ref">muted</span></td>
+<td><code>#111827</code><span class="pv-ref">surface</span></td>
+<td><strong>6.92:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-bad">✗</td>
+<td class="pv-wrap-cell">secondary text on surface <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-12">Aa</span></td>
+<td><code>#e2e8f0</code></td>
+<td><code>#020617</code></td>
+<td><strong>16.36:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">code sample <span class="pv-label">×1</span></td>
+</tr>
+<tr>
+<td><span class="pv-sample cp-dark-13">Aa</span></td>
+<td><code>#f8fafc</code><span class="pv-ref">ink</span></td>
+<td><code>#111827</code><span class="pv-ref">surface</span></td>
+<td><strong>16.96:1</strong></td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="is-ok">✓</td>
+<td class="pv-wrap-cell">headings on surface <span class="pv-label">×1</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section class="pv-section" id="typography">
+<h2>Typography</h2>
+<ul class="pv-facts">
+<li>Base size <strong>16.0px</strong></li><li>Scale ratio <strong>1.25 (major third)</strong></li><li>Weights <strong>400, 500, 600, 700</strong></li></ul>
+<h3 class="pv-sub">Families</h3>
+<div class="pv-family">
+<div class="pv-card-plain">
+<span class="pv-label">primary · sans-serif</span>
+<p class="pv-family-specimen ff-0">Aa Gg 012</p>
+<dl class="pv-kv">
+<dt>Family</dt><dd><strong>Inter</strong></dd>
+<dt>Weights</dt><dd>400, 500, 600</dd><dt>Google Font</dt><dd>yes — loaded from Google Fonts</dd>
+</dl>
+</div>
+<div class="pv-card-plain">
+<span class="pv-label">heading · sans-serif</span>
+<p class="pv-family-specimen ff-1">Aa Gg 012</p>
+<dl class="pv-kv">
+<dt>Family</dt><dd><strong>Space Grotesk</strong></dd>
+<dt>Weights</dt><dd>700</dd><dt>Google Font</dt><dd>yes — loaded from Google Fonts</dd>
+</dl>
+</div>
+<div class="pv-card-plain">
+<span class="pv-label">mono · monospace</span>
+<p class="pv-family-specimen ff-2">Aa Gg 012</p>
+<dl class="pv-kv">
+<dt>Family</dt><dd><strong>JetBrains Mono</strong></dd>
+<dt>Weights</dt><dd>400</dd><dt>Google Font</dt><dd>yes — loaded from Google Fonts</dd>
+</dl>
+</div>
+</div>
+<h3 class="pv-sub">Type scale</h3>
+<div class="pv-levels">
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>display</code><br>
+Space Grotesk<br>
+64px / 1.05 · 700 · -1.5px<br>
+<span>h1</span> <span>×1</span></div>
+<p class="pv-level-specimen tl-0">Ship cloud apps without the ops</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>heading</code><br>
+Space Grotesk<br>
+40px / 1.15 · 700 · -0.8px<br>
+<span>h2, p</span> <span>×5</span></div>
+<p class="pv-level-specimen tl-1">Everything you need to ship</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>title</code><br>
+Inter<br>
+24px / 1.33 · 600<br>
+<span>h3</span> <span>×3</span></div>
+<p class="pv-level-specimen tl-2">Deploy in seconds</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>body-lg</code><br>
+Inter<br>
+20px / 1.6 · 400<br>
+<span>p</span> <span>×2</span></div>
+<p class="pv-level-specimen tl-3">Start free. Pay only for what</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>body</code><br>
+Inter<br>
+16px / 1.6 · 400<br>
+<span>p, a</span> <span>×5</span></div>
+<p class="pv-level-specimen tl-4">From first commit to global</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>ui</code><br>
+Inter<br>
+15px / 1.33 · 500<br>
+<span>a, button</span> <span>×10</span></div>
+<p class="pv-level-specimen tl-5">Get started</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>body-sm</code><br>
+Inter<br>
+14px / 1.43 · 400<br>
+<span>a, h4</span> <span>×13</span></div>
+<p class="pv-level-specimen tl-6">Features</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>code</code><br>
+JetBrains Mono<br>
+14px / 1.6 · 400<br>
+<span>code</span> <span>×1</span></div>
+<p class="pv-level-specimen tl-7">npm i @acme/cli</p>
+</div>
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>caption</code><br>
+Inter<br>
+13px / 1.5 · 400<br>
+<span>p, span</span> <span>×7</span></div>
+<p class="pv-level-specimen tl-8">Uptime SLA</p>
+</div>
+</div>
+</section>
+<section class="pv-section" id="spacing">
+<h2>Spacing</h2>
+<ul class="pv-facts">
+<li>Base unit <strong>4px</strong></li><li>Container <strong>1200px</strong></li><li>Section gap <strong>96px</strong></li><li>Common paddings <strong>12px 20px, 32px, 8px 12px, 0px 24px</strong></li></ul>
+<div class="pv-scale">
+<div class="pv-scale-row"><code>xxs</code><span>4px</span><div class="pv-bar sp-0"></div><small>badge</small></div>
+<div class="pv-scale-row"><code>xs</code><span>8px</span><div class="pv-bar sp-1"></div><small>nav-link, button-ghost</small></div>
+<div class="pv-scale-row"><code>sm</code><span>12px</span><div class="pv-bar sp-2"></div><small>button-primary, gap</small></div>
+<div class="pv-scale-row"><code>md</code><span>16px</span><div class="pv-bar sp-3"></div><small>p, code-sample</small></div>
+<div class="pv-scale-row"><code>lg</code><span>20px</span><div class="pv-bar sp-4"></div><small>button-primary</small></div>
+<div class="pv-scale-row"><code>xl</code><span>24px</span><div class="pv-bar sp-5"></div><small>container, grid gap</small></div>
+<div class="pv-scale-row"><code>xxl</code><span>32px</span><div class="pv-bar sp-6"></div><small>card, section gap</small></div>
+<div class="pv-scale-row"><code>xxxl</code><span>48px</span><div class="pv-bar sp-7"></div><small>section content gap</small></div>
+<div class="pv-scale-row"><code>4xl</code><span>64px</span><div class="pv-bar sp-8"></div><small>footer</small></div>
+</div>
+</section>
+<section class="pv-section" id="radius">
+<h2>Radius</h2>
+<div class="pv-radius">
+<div><div class="pv-radius-box rd-0"></div><p><code>sm</code> <span class="pv-label">6px</span><br><span class="pv-label">nav-link, text-input</span></p></div>
+<div><div class="pv-radius-box rd-1"></div><p><code>md</code> <span class="pv-label">8px</span><br><span class="pv-label">button-primary, button-ghost</span></p></div>
+<div><div class="pv-radius-box rd-2"></div><p><code>lg</code> <span class="pv-label">12px</span><br><span class="pv-label">card-icon, code-sample</span></p></div>
+<div><div class="pv-radius-box rd-3"></div><p><code>xl</code> <span class="pv-label">16px</span><br><span class="pv-label">card</span></p></div>
+<div><div class="pv-radius-box rd-4"></div><p><code>full</code> <span class="pv-label">9999px (pill)</span><br><span class="pv-label">badge</span></p></div>
+</div>
+</section>
+<section class="pv-section" id="shadows">
+<h2>Shadows</h2>
+<div class="pv-shadows">
+<div class="pv-shadow-card sh-0"><strong>sm</strong> <span class="pv-label">1 layer · button-primary, input</span><code>0px 1px 2px 0px rgba(15, 23, 42, 0.06)</code></div>
+<div class="pv-shadow-card sh-1"><strong>md</strong> <span class="pv-label">2 layers · card</span><code>0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06)</code></div>
+</div>
+</section>
+<section class="pv-section" id="components">
+<h2>Components</h2>
+<p class="pv-lede">Rebuilt from the measured styles of the default capture. Hover any element to see its measured hover state (the right-hand twin shows it statically). Stages always use the default capture's colors because component styles and hover states were measured there only.</p>
+<div class="pv-components">
+<article class="pv-component" id="cmp-button-primary">
+<header><h3>button-primary</h3><span>button · primary · ×2 · contrast 6.29:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-0">Start building free</button>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-0 is-hover">Start building free</button>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#4f46e5</code><span class="pv-ref">{colors.primary}</span></dd>
+<dt>textColor</dt><dd><code>#ffffff</code><span class="pv-ref">{colors.on-primary}</span></dd>
+<dt>rounded</dt><dd><code>8px</code><span class="pv-ref">{rounded.md}</span></dd>
+<dt>padding</dt><dd><code>12px 20px</code></dd>
+<dt>height</dt><dd><code>44px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+<dt>shadow</dt><dd><code>0px 1px 2px 0px rgba(15, 23, 42, 0.06)</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.ui}</span></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#4338ca</code></dd>
+</dl>
+<p class="pv-hints">Class hints: btn, btn-primary, btn-sm</p></div>
+</article>
+<article class="pv-component" id="cmp-button-secondary">
+<header><h3>button-secondary</h3><span>button · secondary · ×1 · contrast 17.85:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-1">Get updates</button>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-1 is-hover">Get updates</button>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#0f172a</code><span class="pv-ref">{colors.ink}</span></dd>
+<dt>textColor</dt><dd><code>#ffffff</code><span class="pv-ref">{colors.on-primary}</span></dd>
+<dt>rounded</dt><dd><code>8px</code><span class="pv-ref">{rounded.md}</span></dd>
+<dt>padding</dt><dd><code>12px 20px</code></dd>
+<dt>height</dt><dd><code>44px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.ui}</span></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#1e293b</code></dd>
+</dl>
+<p class="pv-hints">Class hints: btn, btn-secondary</p></div>
+</article>
+<article class="pv-component" id="cmp-button-outline">
+<header><h3>button-outline</h3><span>button · outline · ×1 · contrast 17.85:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-2">Book a demo</button>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-2 is-hover">Book a demo</button>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>transparent</code></dd>
+<dt>textColor</dt><dd><code>#0f172a</code><span class="pv-ref">{colors.ink}</span></dd>
+<dt>borderColor</dt><dd><code>#e2e8f0</code><span class="pv-ref">{colors.hairline}</span></dd>
+<dt>borderWidth</dt><dd><code>1px</code></dd>
+<dt>rounded</dt><dd><code>8px</code><span class="pv-ref">{rounded.md}</span></dd>
+<dt>padding</dt><dd><code>11px 19px</code></dd>
+<dt>height</dt><dd><code>44px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.ui}</span></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#f8fafc</code><span class="pv-ref">{colors.surface}</span></dd>
+<dt>borderColor</dt><dd><code>#cbd5e1</code></dd>
+</dl>
+<p class="pv-hints">Class hints: btn, btn-outline</p></div>
+</article>
+<article class="pv-component" id="cmp-button-ghost">
+<header><h3>button-ghost</h3><span>button · ghost · ×1 · contrast 6.29:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-3">Watch video</button>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<button type="button" class="cmp ck-button cx-3 is-hover">Watch video</button>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>transparent</code></dd>
+<dt>textColor</dt><dd><code>#4f46e5</code><span class="pv-ref">{colors.primary}</span></dd>
+<dt>rounded</dt><dd><code>8px</code><span class="pv-ref">{rounded.md}</span></dd>
+<dt>padding</dt><dd><code>8px 12px</code></dd>
+<dt>height</dt><dd><code>36px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.ui}</span></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#eef2ff</code></dd>
+</dl>
+<p class="pv-hints">Class hints: btn, btn-ghost</p></div>
+</article>
+<article class="pv-component" id="cmp-text-link">
+<header><h3>text-link</h3><span>link · inline · ×1 · contrast 6.29:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<a href="#cmp-text-link" class="cmp ck-link cx-4">See full pricing →</a>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<a href="#cmp-text-link" class="cmp ck-link cx-4 is-hover">See full pricing →</a>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>textColor</dt><dd><code>#4f46e5</code><span class="pv-ref">{colors.primary}</span></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>16px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>25.6px</code></dd>
+<dt>textDecoration</dt><dd><code>none</code></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>textColor</dt><dd><code>#4338ca</code></dd>
+<dt>textDecoration</dt><dd><code>underline</code></dd>
+</dl>
+<p class="pv-hints">Class hints: text-link</p></div>
+</article>
+<article class="pv-component" id="cmp-nav-link">
+<header><h3>nav-link</h3><span>link · nav · ×5 · contrast 7.58:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<a href="#cmp-nav-link" class="cmp ck-link cx-5">Product</a>
+<span class="pv-label">default</span></div>
+<div class="pv-twin">
+<a href="#cmp-nav-link" class="cmp ck-link cx-5 is-hover">Product</a>
+<span class="pv-label">hover</span></div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>textColor</dt><dd><code>#475569</code><span class="pv-ref">{colors.muted}</span></dd>
+<dt>rounded</dt><dd><code>6px</code><span class="pv-ref">{rounded.sm}</span></dd>
+<dt>padding</dt><dd><code>8px 12px</code></dd>
+<dt>height</dt><dd><code>36px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>500</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+<dt>textDecoration</dt><dd><code>none</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.ui}</span></dd>
+</dl>
+<p class="pv-state">hover</p>
+<dl class="pv-kv">
+<dt>textColor</dt><dd><code>#0f172a</code><span class="pv-ref">{colors.ink}</span></dd>
+</dl>
+<p class="pv-hints">Class hints: nav-link</p></div>
+</article>
+<article class="pv-component" id="cmp-text-input">
+<header><h3>text-input</h3><span>input · ×1 · contrast 17.85:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<input class="cmp ck-input cx-6" type="email" placeholder="you@example.com" aria-label="text-input">
+</div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#ffffff</code><span class="pv-ref">{colors.canvas}</span></dd>
+<dt>textColor</dt><dd><code>#0f172a</code><span class="pv-ref">{colors.ink}</span></dd>
+<dt>borderColor</dt><dd><code>#cbd5e1</code></dd>
+<dt>borderWidth</dt><dd><code>1px</code></dd>
+<dt>rounded</dt><dd><code>6px</code><span class="pv-ref">{rounded.sm}</span></dd>
+<dt>padding</dt><dd><code>10px 14px</code></dd>
+<dt>height</dt><dd><code>44px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>15px</code></dd>
+<dt>fontWeight</dt><dd><code>400</code></dd>
+<dt>lineHeight</dt><dd><code>22px</code></dd>
+<dt>shadow</dt><dd><code>0px 1px 2px 0px rgba(15, 23, 42, 0.06)</code></dd>
+<dt>placeholderColor</dt><dd><code>#94a3b8</code><span class="pv-ref">{colors.faint}</span></dd>
+</dl>
+<p class="pv-hints">Class hints: input</p></div>
+</article>
+<article class="pv-component" id="cmp-card">
+<header><h3>card</h3><span>card · ×3</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<div class="cmp ck-card cx-7"><p class="pv-card-title tl-2">Deploy in seconds</p><p class="pv-card-body tl-4">Rebuilt from the measured surface, border, radius, padding and shadow of this card.</p></div>
+</div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#ffffff</code><span class="pv-ref">{colors.canvas}</span></dd>
+<dt>borderColor</dt><dd><code>#e2e8f0</code><span class="pv-ref">{colors.hairline}</span></dd>
+<dt>borderWidth</dt><dd><code>1px</code></dd>
+<dt>rounded</dt><dd><code>16px</code><span class="pv-ref">{rounded.xl}</span></dd>
+<dt>padding</dt><dd><code>32px</code><span class="pv-ref">{spacing.xxl}</span></dd>
+<dt>shadow</dt><dd><code>0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06)</code></dd>
+</dl>
+<p class="pv-hints">Class hints: card</p></div>
+</article>
+<article class="pv-component" id="cmp-badge">
+<header><h3>badge</h3><span>badge · pill · ×1 · contrast 5.62:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<span class="cmp ck-badge cx-8">New · Acme Workflows 2.0</span>
+</div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#eef2ff</code></dd>
+<dt>textColor</dt><dd><code>#4f46e5</code><span class="pv-ref">{colors.primary}</span></dd>
+<dt>rounded</dt><dd><code>9999px</code><span class="pv-ref">{rounded.full}</span></dd>
+<dt>padding</dt><dd><code>4px 12px</code></dd>
+<dt>height</dt><dd><code>28px</code></dd>
+<dt>fontFamily</dt><dd><code>Inter</code></dd>
+<dt>fontSize</dt><dd><code>13px</code></dd>
+<dt>fontWeight</dt><dd><code>600</code></dd>
+<dt>lineHeight</dt><dd><code>20px</code></dd>
+</dl>
+<p class="pv-hints">Class hints: badge, badge-pill</p></div>
+</article>
+<article class="pv-component is-wide" id="cmp-top-nav">
+<header><h3>top-nav</h3><span>navigation · ×1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<div class="pv-navstage"><div class="cmp ck-nav cx-9"><span class="pv-nav-logo">Acme Cloud</span><span class="pv-nav-links"><a href="#cmp-top-nav" class="cmp ck-link cx-5">Product</a><a href="#cmp-top-nav" class="cmp ck-link cx-5">Solutions</a><a href="#cmp-top-nav" class="cmp ck-link cx-5">Pricing</a></span><button type="button" class="cmp ck-button cx-0">Start building free</button></div></div>
+</div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#ffffffcc</code></dd>
+<dt>borderColor</dt><dd><code>#e2e8f0</code><span class="pv-ref">{colors.hairline}</span></dd>
+<dt>borderWidth</dt><dd><code>0px 0px 1px</code></dd>
+<dt>padding</dt><dd><code>0px 24px</code></dd>
+<dt>height</dt><dd><code>64px</code></dd>
+<dt>backdropFilter</dt><dd><code>blur(12px)</code></dd>
+<dt>position</dt><dd><code>sticky</code></dd>
+</dl>
+<p class="pv-hints">Class hints: site-header, nav-inner, main-nav</p></div>
+</article>
+<article class="pv-component is-wide" id="cmp-footer">
+<header><h3>footer</h3><span>footer · ×1 · contrast 7.38:1</span></header>
+<div class="pv-stage pv-capture">
+<div class="pv-twin">
+<div class="cmp ck-footer cx-10"><div class="pv-footer-cols pv-gutter"><div><h4>Product</h4><ul><li>Features</li><li>Pricing</li><li>Changelog</li></ul></div><div><h4>Company</h4><ul><li>About</li><li>Blog</li><li>Careers</li></ul></div><div><h4>Resources</h4><ul><li>Docs</li><li>Support</li><li>Status</li></ul></div></div></div>
+</div>
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+<dt>backgroundColor</dt><dd><code>#0b1020</code><span class="pv-ref">{colors.surface-inverse}</span></dd>
+<dt>textColor</dt><dd><code>#94a3b8</code><span class="pv-ref">{colors.faint}</span></dd>
+<dt>padding</dt><dd><code>64px 0px 48px</code></dd>
+<dt>typography</dt><dd><code>—</code><span class="pv-ref">{typography.body-sm}</span></dd>
+</dl>
+<p class="pv-hints">Class hints: site-footer, footer-link, footer-col</p></div>
+</article>
+</div>
+</section>
+<section class="pv-section" id="layout">
+<h2>Breakpoints &amp; layout</h2>
+<ul class="pv-facts">
+<li>Shell <strong>top-nav</strong></li>
+<li>Container <strong>1200px</strong></li><li>Gutter <strong>24px</strong></li></ul>
+<h3 class="pv-sub">Breakpoints from @media</h3>
+<div class="pv-ruler" aria-hidden="true">
+<div class="pv-mark bp-0"><span>sm 640px</span></div><div class="pv-mark bp-1"><span>md 768px</span></div><div class="pv-mark bp-2 is-end"><span>lg 1024px</span></div><div class="pv-mark bp-3 is-end"><span>xl 1280px</span></div><span class="pv-ruler-end">1440px</span>
+</div>
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Name</th><th scope="col">min-width</th><th scope="col">max-width</th><th scope="col">Rules</th></tr></thead>
+<tbody>
+<tr><td><code>sm</code></td><td>640px</td><td>—</td><td>14</td></tr>
+<tr><td><code>md</code></td><td>768px</td><td>—</td><td>40</td></tr>
+<tr><td><code>lg</code></td><td>1024px</td><td>—</td><td>44</td></tr>
+<tr><td><code>xl</code></td><td>1280px</td><td>—</td><td>9</td></tr>
+</tbody>
+</table>
+</div>
+<h3 class="pv-sub">Responsive changes</h3>
+<ul class="pv-changes">
+<li><strong>Navigation collapses to a hamburger</strong><span class="pv-label">1440 → 768px · below 1024px · links 5</span><span class="pv-label">5 visible nav links at 1440px, hamburger at 768px</span></li>
+<li><strong>Columns reduce</strong><span class="pv-label">1440 → 768px · 3 → 2</span><span class="pv-label">main grid 3 -&gt; 2 columns</span></li>
+<li><strong>Headings scale down</strong><span class="pv-label">1440 → 768px · 64px → 48px</span><span class="pv-label">largest heading 64px -&gt; 48px</span></li>
+<li><strong>Container becomes fluid</strong><span class="pv-label">1440 → 768px · max width 1200px</span><span class="pv-label">container 1200px -&gt; full width</span></li>
+<li><strong>Columns reduce</strong><span class="pv-label">768 → 390px · 2 → 1</span><span class="pv-label">grid 2 -&gt; 1 column</span></li>
+<li><strong>Headings scale down</strong><span class="pv-label">768 → 390px · 48px → 40px</span><span class="pv-label">largest heading 48px -&gt; 40px</span></li>
+<li><strong>Gutter shrinks</strong><span class="pv-label">768 → 390px · 24px → 20px</span><span class="pv-label">container padding 24px -&gt; 20px</span></li>
+</ul>
+<h3 class="pv-sub">Layout snapshots</h3>
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Viewport</th><th scope="col">Columns</th><th scope="col">Navigation</th><th scope="col">Container</th><th scope="col">Gutter</th><th scope="col">Largest heading</th><th scope="col">Smallest tap target</th></tr></thead>
+<tbody>
+<tr><td>1440px</td><td>3</td><td>5 links</td><td>1200px</td><td>24px</td><td>64px</td><td>36px</td></tr>
+<tr><td>768px</td><td>2</td><td>hidden + hamburger</td><td>768px</td><td>24px</td><td>48px</td><td>40px</td></tr>
+<tr><td>390px</td><td>1</td><td>hidden + hamburger</td><td>390px</td><td>20px</td><td>40px</td><td>40px</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<footer class="pv-footer">
+<div class="pv-wrap">
+<p>Generated by get-design-markdown 0.1.0 · 1 page, 86 elements, 3 stylesheets, 14 hover states. Screenshots: <a href="screenshots/home-1440.png">1440px</a>, <a href="screenshots/home-768.png">768px</a>, <a href="screenshots/home-390.png">390px</a>, <a href="screenshots/home-dark-1440.png">1440px dark</a>.</p>
+<details class="pv-details">
+<summary>Analysis warnings (1)</summary>
+<ul>
+<li>[home] Phát hiện banner cookie — các phần tử của nó được đánh dấu in_overlay.</li>
+</ul>
+</details>
+</div>
+</footer>
+</body>
+</html>

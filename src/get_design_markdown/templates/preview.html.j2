@@ -1,1 +1,507 @@
-{# preview.html (stream: exporters, phase GĐ8). Placeholder. #}
+{#- preview.html (stream: exporters, phase GĐ8). Rendered by exporters/preview.py.
+    Autoescaped; `css` is generated from sanitized values only (exporters/safe_css.py). -#}
+<!DOCTYPE html>
+<html lang="{{ lang }}" data-theme="light" data-site="{{ site_slug }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="get-design-markdown {{ tool_version }}">
+<meta name="robots" content="noindex">
+<title>{{ site_name }} — Design Preview</title>
+{% if google_fonts %}
+<link rel="stylesheet" href="{{ google_fonts }}">
+{% endif %}
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root,.pv-capture{--pv-bg:var(--color-canvas,var(--pv-fallback-bg));--pv-ink:var(--color-ink,var(--pv-fallback-ink));--pv-muted:var(--color-muted,color-mix(in srgb,var(--pv-ink) 64%,var(--pv-bg)));--pv-line:var(--color-hairline,color-mix(in srgb,var(--pv-ink) 14%,var(--pv-bg)));--pv-surface:var(--color-surface,color-mix(in srgb,var(--pv-ink) 4%,var(--pv-bg)));--pv-accent:var(--color-primary,var(--pv-ink));--pv-panel:color-mix(in srgb,var(--pv-ink) 3%,var(--pv-bg));--pv-good:color-mix(in srgb,#16a34a 72%,var(--pv-ink));--pv-bad:color-mix(in srgb,#dc2626 78%,var(--pv-ink))}
+html{background:var(--pv-bg);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--pv-bg);color:var(--pv-ink);font-family:var(--pv-font);font-size:15px;line-height:1.55;overflow-wrap:break-word}
+a{color:inherit}
+code,.pv-mono{font-family:var(--pv-mono);font-size:.86em}
+h1,h2,h3{font-family:var(--pv-heading-font);line-height:1.15;margin:0}
+.pv-wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.pv-header{padding:56px 0 36px;border-bottom:1px solid var(--pv-line)}
+.pv-eyebrow{font-family:var(--pv-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--pv-muted);margin:0 0 12px}
+.pv-header h1{font-size:clamp(32px,5vw,52px);letter-spacing:-.02em}
+.pv-title{margin:10px 0 0;color:var(--pv-muted);font-size:17px;max-width:70ch}
+.pv-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:20px 0 0;padding:0;list-style:none;font-size:13px;color:var(--pv-muted)}
+.pv-meta strong{color:var(--pv-ink);font-weight:600}
+.pv-disclaimer{margin:20px 0 0;padding:12px 16px;border:1px solid var(--pv-line);border-left:3px solid var(--pv-accent);border-radius:8px;background:var(--pv-panel);font-size:13px;max-width:780px}
+.pv-disclaimer p{margin:0}
+.pv-disclaimer p+p{color:var(--pv-muted);margin-top:2px}
+.pv-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:24px}
+.pv-toggle{font:inherit;font-size:13px;font-weight:600;color:var(--pv-ink);background:var(--pv-panel);border:1px solid var(--pv-line);border-radius:999px;padding:8px 16px;cursor:pointer}
+.pv-toggle:hover{border-color:var(--pv-muted)}
+.pv-toggle:focus-visible,.pv-toc a:focus-visible{outline:2px solid var(--pv-accent);outline-offset:2px}
+.pv-toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--pv-bg) 92%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--pv-line)}
+.pv-toc ul{display:flex;gap:4px;margin:0 auto;padding:8px 24px;list-style:none;overflow-x:auto;max-width:1200px;scrollbar-width:none}
+.pv-toc a{display:block;padding:6px 10px;border-radius:6px;font-size:13px;color:var(--pv-muted);text-decoration:none;white-space:nowrap}
+.pv-toc a:hover{color:var(--pv-ink);background:var(--pv-panel)}
+.pv-section{padding:56px 0;border-bottom:1px solid var(--pv-line);scroll-margin-top:48px}
+.pv-section>h2{font-size:28px;letter-spacing:-.01em}
+.pv-lede{margin:8px 0 28px;color:var(--pv-muted);max-width:72ch}
+.pv-sub{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--pv-muted);margin:36px 0 14px;font-family:var(--pv-font)}
+.pv-facts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px;padding:0;list-style:none}
+.pv-facts li{border:1px solid var(--pv-line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--pv-muted)}
+.pv-facts strong{color:var(--pv-ink);font-weight:600}
+.pv-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.pv-swatch{margin:0;border:1px solid var(--pv-line);border-radius:12px;overflow:hidden;background:var(--pv-bg)}
+.pv-chip{height:92px;background-color:#ffffff;background-image:linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;border-bottom:1px solid var(--pv-line)}
+.pv-chip>span{display:block;height:100%}
+.pv-swatch figcaption{padding:12px 14px 14px;font-size:13px}
+.pv-swatch-name{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.pv-swatch-name code{font-size:13px;font-weight:600;color:var(--pv-ink)}
+.pv-role{font-size:12px;color:var(--pv-muted)}
+.pv-hex{font-family:var(--pv-mono);font-size:13px;margin:4px 0 6px}
+.pv-evidence{margin:6px 0 0;color:var(--pv-muted);font-size:12px;line-height:1.45}
+.pv-evidence code{white-space:nowrap}
+.pv-contrast{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--pv-muted)}
+.pv-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.02em;padding:1px 6px;border-radius:999px;border:1px solid currentColor;margin-left:3px}
+.is-ok{color:var(--pv-good)}
+.is-bad{color:var(--pv-bad)}
+.pv-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none}
+.pv-chips li{display:flex;align-items:center;gap:8px;font-size:12px;border:1px solid var(--pv-line);border-radius:999px;padding:4px 10px 4px 4px}
+.pv-dot{width:22px;height:22px;border-radius:999px;border:1px solid var(--pv-line);flex:none}
+.pv-chips code{font-size:12px}
+.pv-chips small{color:var(--pv-muted)}
+details.pv-details{margin-top:28px;border:1px solid var(--pv-line);border-radius:10px;padding:12px 16px}
+details.pv-details summary{cursor:pointer;font-weight:600;font-size:14px}
+.pv-channel{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--pv-muted)}
+.pv-table-wrap{overflow-x:auto;border:1px solid var(--pv-line);border-radius:10px}
+table.pv-table{width:100%;border-collapse:collapse;font-size:13px}
+.pv-table th,.pv-table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--pv-line);vertical-align:middle;white-space:nowrap}
+.pv-table th{font-weight:600;color:var(--pv-muted);background:var(--pv-panel)}
+.pv-table tr:last-child td{border-bottom:0}
+.pv-table td.pv-wrap-cell{white-space:normal;min-width:160px}
+.pv-sample{display:inline-block;padding:4px 10px;border-radius:6px;font-weight:600;border:1px solid var(--pv-line)}
+.pv-family{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.pv-card-plain{border:1px solid var(--pv-line);border-radius:12px;padding:18px;background:var(--pv-bg)}
+.pv-family-specimen{font-size:40px;line-height:1.1;margin:6px 0 10px;overflow-wrap:anywhere}
+.pv-kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px}
+.pv-kv dt{color:var(--pv-muted)}
+.pv-kv dd{margin:0;overflow-wrap:anywhere}
+.pv-levels{display:grid;gap:0;border:1px solid var(--pv-line);border-radius:12px;overflow:hidden}
+.pv-level{display:grid;grid-template-columns:220px 1fr;gap:24px;padding:22px 20px;border-bottom:1px solid var(--pv-line)}
+.pv-level:last-child{border-bottom:0}
+.pv-level-meta{font-size:12.5px;color:var(--pv-muted)}
+.pv-level-meta code{display:inline-block;font-size:13px;font-weight:600;color:var(--pv-ink);margin-bottom:4px}
+.pv-level-specimen{margin:0;overflow-wrap:anywhere;min-width:0}
+.pv-scale{display:grid;gap:10px}
+.pv-scale-row{display:grid;grid-template-columns:72px 72px 1fr;gap:12px;align-items:center;font-size:13px}
+.pv-bar{height:14px;border-radius:3px;background:var(--pv-accent);min-width:2px}
+.pv-scale-row small{grid-column:3;color:var(--pv-muted);margin-top:-6px}
+.pv-radius{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+.pv-radius-box{height:96px;border:2px solid var(--pv-accent);background:color-mix(in srgb,var(--pv-accent) 10%,var(--pv-bg))}
+.pv-shadows{display:grid;gap:28px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));padding:12px 4px}
+.pv-shadow-card{background:var(--pv-bg);border-radius:12px;padding:22px;min-height:120px;font-size:13px}
+.pv-shadow-card code{display:block;margin-top:8px;color:var(--pv-muted);font-size:11.5px;overflow-wrap:anywhere}
+.pv-label{font-size:12px;color:var(--pv-muted)}
+.pv-components{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+.pv-component{border:1px solid var(--pv-line);border-radius:14px;overflow:hidden;background:var(--pv-bg);min-width:0}
+.pv-component.is-wide{grid-column:1/-1}
+.pv-component>header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;padding:14px 18px;border-bottom:1px solid var(--pv-line);background:var(--pv-panel)}
+.pv-component>header h3{font-size:15px;font-family:var(--pv-mono);font-weight:600}
+.pv-component>header span{font-size:12px;color:var(--pv-muted)}
+.pv-stage{display:flex;flex-wrap:wrap;align-items:center;gap:18px 24px;padding:28px 22px;background:var(--pv-bg);min-width:0}
+.pv-twin{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;max-width:100%}
+.is-wide .pv-twin{flex:1 1 100%;align-items:stretch}
+.pv-capture{color:var(--pv-ink)}
+.pv-gutter{padding-inline:var(--pv-gutter)}
+.pv-spec{padding:14px 18px 18px;border-top:1px solid var(--pv-line)}
+.pv-spec .pv-kv{grid-template-columns:minmax(110px,auto) 1fr}
+.pv-ref{color:var(--pv-muted);font-family:var(--pv-mono);font-size:11.5px;margin-left:6px}
+.pv-state{margin:12px 0 4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--pv-muted)}
+.pv-hints{margin:10px 0 0;font-size:12px;color:var(--pv-muted)}
+.cmp{box-sizing:border-box;margin:0;font:inherit;color:inherit;background:none;border:0 solid transparent;text-decoration:none;max-width:100%;transition:background-color .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,text-decoration-color .15s ease}
+.ck-button,.ck-badge{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis}
+.ck-badge{cursor:default}
+.ck-link{display:inline-flex;align-items:center;cursor:pointer}
+.ck-input{display:block;width:min(100%,340px)}
+.ck-input:focus-visible{outline:2px solid var(--pv-accent);outline-offset:2px}
+.ck-card{display:block;width:100%;max-width:380px}
+.ck-card .pv-card-title{margin:0 0 8px;color:var(--pv-ink)}
+.ck-card .pv-card-body{margin:0;color:var(--pv-muted)}
+.ck-box{display:block;width:100%;min-height:48px}
+.pv-navstage{width:100%;padding:24px 0;border-radius:10px;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--pv-accent) 22%,transparent) 0 14px,transparent 14px 28px),var(--pv-surface);overflow:hidden}
+.ck-nav{display:flex;align-items:center;gap:20px;width:100%}
+.ck-nav .pv-nav-logo{font-weight:700;font-family:var(--pv-heading-font);margin-right:auto;white-space:nowrap}
+.ck-nav .pv-nav-links{display:flex;gap:4px;flex-wrap:wrap}
+.ck-footer{display:block;width:100%}
+.pv-footer-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.ck-footer h4{margin:0 0 8px;font-size:inherit;font-weight:600;opacity:.95}
+.ck-footer ul{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.pv-ruler{position:relative;height:56px;margin:8px 0 28px;border-bottom:2px solid var(--pv-line)}
+.pv-mark{position:absolute;bottom:-2px;width:2px;height:40px;background:var(--pv-accent)}
+.pv-mark span{position:absolute;bottom:42px;left:4px;font-size:11.5px;white-space:nowrap;color:var(--pv-muted);font-family:var(--pv-mono)}
+.pv-mark.is-end span{left:auto;right:4px}
+.pv-ruler-end{position:absolute;right:0;bottom:-24px;font-size:11px;color:var(--pv-muted)}
+.pv-changes{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.pv-changes li{border:1px solid var(--pv-line);border-radius:10px;padding:12px 16px}
+.pv-changes strong{display:block}
+.pv-changes .pv-label{display:block;margin-top:2px}
+.pv-footer{padding:36px 0 56px;color:var(--pv-muted);font-size:13px}
+.pv-footer ul{margin:8px 0 0;padding-left:18px}
+.pv-empty{color:var(--pv-muted);font-style:italic}
+{% if has_dark %}
+:root:not([data-theme="dark"]) .t-dark,:root[data-theme="dark"] .t-light{display:none !important}
+{% endif %}
+@media (max-width:720px){
+.pv-wrap{padding:0 16px}
+.pv-toc ul{padding:8px 16px}
+.pv-header{padding:36px 0 28px}
+.pv-section{padding:40px 0}
+.pv-level{grid-template-columns:1fr;gap:10px}
+.pv-components{grid-template-columns:1fr}
+.pv-scale-row{grid-template-columns:56px 56px 1fr}
+.pv-footer-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pv-mark span{display:none}
+.ck-nav{flex-wrap:wrap;gap:12px}
+}
+@media (prefers-reduced-motion:reduce){.cmp{transition:none}}
+{{ css|safe }}
+</style>
+{% if has_dark %}
+<script>
+(function () {
+  var root = document.documentElement;
+  var key = "gdm-preview-theme:" + (root.getAttribute("data-site") || "");
+  function apply(theme) {
+    if (theme !== "light" && theme !== "dark") return;
+    root.setAttribute("data-theme", theme);
+    var button = document.getElementById("theme-toggle");
+    if (button) button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+  }
+  try { apply(window.localStorage.getItem(key)); } catch (error) {}
+  document.addEventListener("DOMContentLoaded", function () {
+    var button = document.getElementById("theme-toggle");
+    if (!button) return;
+    apply(root.getAttribute("data-theme"));
+    button.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      apply(next);
+      try { window.localStorage.setItem(key, next); } catch (error) {}
+    });
+  });
+})();
+</script>
+{% endif %}
+</head>
+<body>
+<header class="pv-header">
+<div class="pv-wrap">
+<p class="pv-eyebrow">Design reference preview</p>
+<h1>{{ site_name }}</h1>
+{% if title_text and title_text != site_name %}
+<p class="pv-title">{{ title_text }}</p>
+{% endif %}
+<ul class="pv-meta">
+<li>Source: <strong>{% if site_href %}<a href="{{ site_href }}" rel="noopener noreferrer">{{ site_url }}</a>{% else %}{{ site_url }}{% endif %}</strong></li>
+<li>Extracted: <strong><time datetime="{{ date }}">{{ date }}</time></strong></li>
+<li>Pages analyzed: <strong>{{ pages }}</strong></li>
+</ul>
+<div class="pv-disclaimer" role="note">
+<p><strong>{{ disclaimer_en }}</strong> Values were measured from the live page by get-design-markdown; logos, images and font files are not included.</p>
+<p lang="vi">{{ disclaimer_vi }}</p>
+</div>
+{% if has_dark %}
+<div class="pv-toolbar">
+<button type="button" class="pv-toggle" id="theme-toggle" aria-pressed="false"><span class="t-light">Show dark-mode capture</span><span class="t-dark">Show default capture</span></button>
+<span class="pv-label"><span class="t-light">Showing the default capture · {{ themes[0].scheme }} palette</span><span class="t-dark">Showing the prefers-color-scheme: dark capture · {{ themes[1].scheme }} palette{% if themes[1].scheme == themes[0].scheme %} (the site keeps a {{ themes[0].scheme }} palette in dark mode){% endif %}</span></span>
+</div>
+{% endif %}
+</div>
+</header>
+<nav class="pv-toc" aria-label="Sections">
+<ul>
+{% for anchor, title in sections %}
+<li><a href="#{{ anchor }}">{{ title }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+<main class="pv-wrap">
+{% if swatches %}
+<section class="pv-section" id="colors">
+<h2>Colors</h2>
+<p class="pv-lede">Semantic palette with each token's role. Text tokens are checked on <code>canvas</code> (<code>on-*</code> tokens on their partner), surfaces and action colors with the most legible text token on them — WCAG 2.x, AA = 4.5:1.</p>
+<div class="pv-grid">
+{% for swatch in swatches %}
+<figure class="pv-swatch">
+<div class="pv-chip"><span class="{{ swatch.css_class }}"></span></div>
+<figcaption>
+<div class="pv-swatch-name"><code>{{ swatch.name }}</code><span class="pv-role">{{ swatch.role }}</span></div>
+{% for value in swatch.values %}
+<div class="t-{{ value.theme }}">
+<div class="pv-hex">{{ value.hex or "— (not in this theme)" }}</div>
+<div class="pv-contrast">
+{% for check in value.checks %}
+<span>{{ check.label }} {{ check.ratio }}{% if check.graded %}<span class="pv-badge {{ 'is-ok' if check.ok else 'is-bad' }}">{{ check.level }}</span>{% else %} <span class="pv-label">(non-text)</span>{% endif %}</span>
+{% endfor %}
+</div>
+</div>
+{% endfor %}
+{% if swatch.evidence %}<p class="pv-evidence">{{ swatch.evidence }}{% if swatch.css_variable %} · <code>{{ swatch.css_variable }}</code>{% endif %}</p>{% endif %}
+</figcaption>
+</figure>
+{% endfor %}
+</div>
+{% for group in theme_colors %}
+<div class="t-{{ group.theme.id }}">
+{% if group.decorative %}
+<h3 class="pv-sub">Decorative accents{% if has_dark %} · {{ group.theme.label }}{% endif %}</h3>
+<p class="pv-lede">Colors seen only in gradients or decoration — kept out of the structural palette.</p>
+<ul class="pv-chips">
+{% for chip in group.decorative %}
+<li><span class="pv-dot {{ chip.css_class }}"></span><code>{{ chip.hex }}</code><small>{{ chip.note }}</small></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if group.clusters %}
+<details class="pv-details">
+<summary>All measured color clusters{% if has_dark %} · {{ group.theme.label }}{% endif %}</summary>
+{% for channel, chips in group.clusters %}
+<p class="pv-channel">{{ channel }}</p>
+<ul class="pv-chips">
+{% for chip in chips %}
+<li><span class="pv-dot {{ chip.css_class }}"></span><code>{{ chip.hex }}</code><small>{{ chip.note }}</small></li>
+{% endfor %}
+</ul>
+{% endfor %}
+</details>
+{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endif %}
+{% if theme_colors|selectattr("pairs")|list %}
+<section class="pv-section" id="contrast">
+<h2>Contrast pairs</h2>
+<p class="pv-lede">Text/background pairs measured on the page, most frequent first. Pairs below 4.5:1 fail WCAG AA for body text.</p>
+{% for group in theme_colors %}
+{% if group.pairs %}
+<div class="t-{{ group.theme.id }}">
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Sample</th><th scope="col">Foreground</th><th scope="col">Background</th><th scope="col">Ratio</th><th scope="col">AA</th><th scope="col">AA large</th><th scope="col">AAA</th><th scope="col">Where</th></tr></thead>
+<tbody>
+{% for pair in group.pairs %}
+<tr>
+<td><span class="pv-sample {{ pair.css_class }}">Aa</span></td>
+<td><code>{{ pair.foreground }}</code>{% if pair.foreground_token %}<span class="pv-ref">{{ pair.foreground_token }}</span>{% endif %}</td>
+<td><code>{{ pair.background }}</code>{% if pair.background_token %}<span class="pv-ref">{{ pair.background_token }}</span>{% endif %}</td>
+<td><strong>{{ pair.ratio }}</strong></td>
+<td class="{{ 'is-ok' if pair.aa else 'is-bad' }}">{{ "✓" if pair.aa else "✗" }}</td>
+<td class="{{ 'is-ok' if pair.aa_large else 'is-bad' }}">{{ "✓" if pair.aa_large else "✗" }}</td>
+<td class="{{ 'is-ok' if pair.aaa else 'is-bad' }}">{{ "✓" if pair.aaa else "✗" }}</td>
+<td class="pv-wrap-cell">{{ pair.context or "—" }}{% if pair.occurrences %} <span class="pv-label">×{{ pair.occurrences }}</span>{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+{% endif %}
+{% endfor %}
+</section>
+{% endif %}
+{% if families or levels %}
+<section class="pv-section" id="typography">
+<h2>Typography</h2>
+<ul class="pv-facts">
+{% if typography.base_size_px %}<li>Base size <strong>{{ typography.base_size_px|round(2) }}px</strong></li>{% endif %}
+{% if typography.scale_ratio %}<li>Scale ratio <strong>{{ typography.scale_ratio|round(3) }}{% if typography.scale_ratio_name %} ({{ typography.scale_ratio_name }}){% endif %}</strong></li>{% endif %}
+{% if typography.weights_used %}<li>Weights <strong>{{ typography.weights_used|join(", ") }}</strong></li>{% endif %}
+</ul>
+{% if families %}
+<h3 class="pv-sub">Families</h3>
+<div class="pv-family">
+{% for family in families %}
+<div class="pv-card-plain">
+<span class="pv-label">{{ family.role }} · {{ family.category }}</span>
+<p class="pv-family-specimen {{ family.css_class }}">Aa Gg 012</p>
+<dl class="pv-kv">
+<dt>Family</dt><dd><strong>{{ family.name }}</strong></dd>
+{% if family.weights %}<dt>Weights</dt><dd>{{ family.weights }}</dd>{% endif %}
+<dt>Google Font</dt><dd>{{ "yes — loaded from Google Fonts" if family.google else "no" }}</dd>
+{% if family.rendered_with %}<dt>Rendered with</dt><dd>{{ family.rendered_with }} (substitute)</dd>{% endif %}
+{% if family.substitutes %}<dt>Substitutes</dt><dd>{{ family.substitutes }}</dd>{% endif %}
+</dl>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% if levels %}
+<h3 class="pv-sub">Type scale</h3>
+<div class="pv-levels">
+{% for level in levels %}
+<div class="pv-level">
+<div class="pv-level-meta">
+<code>{{ level.name }}</code><br>
+{{ level.family }}<br>
+{{ level.size }} / {{ level.line_height }} · {{ level.weight }}{% if level.letter_spacing != "0px" %} · {{ level.letter_spacing }}{% endif %}{% if level.transform %} · {{ level.transform }}{% endif %}<br>
+{% if level.tags %}<span>{{ level.tags }}</span>{% endif %}{% if level.count %} <span>×{{ level.count }}</span>{% endif %}
+</div>
+<p class="pv-level-specimen {{ level.css_class }}">{{ level.sample }}</p>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+</section>
+{% endif %}
+{% if spacing %}
+<section class="pv-section" id="spacing">
+<h2>Spacing</h2>
+<ul class="pv-facts">
+{% if base_unit %}<li>Base unit <strong>{{ base_unit }}px</strong></li>{% endif %}
+{% if container %}<li>Container <strong>{{ container }}</strong></li>{% endif %}
+{% if section_gap %}<li>Section gap <strong>{{ section_gap }}</strong></li>{% endif %}
+{% if paddings %}<li>Common paddings <strong>{{ paddings }}</strong></li>{% endif %}
+</ul>
+<div class="pv-scale">
+{% for row in spacing %}
+<div class="pv-scale-row"><code>{{ row.name }}</code><span>{{ row.value }}</span><div class="pv-bar {{ row.css_class }}"></div>{% if row.used_on %}<small>{{ row.used_on }}</small>{% endif %}</div>
+{% endfor %}
+</div>
+</section>
+{% endif %}
+{% if radii %}
+<section class="pv-section" id="radius">
+<h2>Radius</h2>
+<div class="pv-radius">
+{% for row in radii %}
+<div><div class="pv-radius-box {{ row.css_class }}"></div><p><code>{{ row.name }}</code> <span class="pv-label">{{ row.value }}</span>{% if row.used_on %}<br><span class="pv-label">{{ row.used_on }}</span>{% endif %}</p></div>
+{% endfor %}
+</div>
+</section>
+{% endif %}
+{% if shadows %}
+<section class="pv-section" id="shadows">
+<h2>Shadows</h2>
+<div class="pv-shadows">
+{% for shadow in shadows %}
+<div class="pv-shadow-card {{ shadow.css_class }}"><strong>{{ shadow.name }}</strong> <span class="pv-label">{{ shadow.layers }} layer{{ "s" if shadow.layers != 1 else "" }}{% if shadow.used_on %} · {{ shadow.used_on }}{% endif %}</span><code>{{ shadow.css }}</code></div>
+{% endfor %}
+</div>
+</section>
+{% endif %}
+{% if components %}
+<section class="pv-section" id="components">
+<h2>Components</h2>
+<p class="pv-lede">Rebuilt from the measured styles of the default capture. Hover any element to see its measured hover state (the right-hand twin shows it statically).{% if has_dark %} Stages always use the default capture's colors because component styles and hover states were measured there only.{% endif %}</p>
+<div class="pv-components">
+{% for item in components %}
+<article class="pv-component{{ ' is-wide' if item.render in ('nav', 'footer') else '' }}" id="cmp-{{ item.name }}">
+<header><h3>{{ item.name }}</h3><span>{{ item.kind }}{% if item.variant %} · {{ item.variant }}{% endif %}{% if item.count %} · ×{{ item.count }}{% endif %}{% if item.contrast %} · contrast {{ item.contrast }}{% endif %}</span></header>
+<div class="pv-stage{{ ' pv-capture' if has_dark else '' }}">
+{% set twins = ["", " is-hover"] if item.hover else [""] %}
+{% for twin in twins %}
+<div class="pv-twin">
+{% if item.render == "button" %}
+<button type="button" class="cmp ck-button {{ item.css_class }}{{ twin }}">{{ item.label }}</button>
+{% elif item.render == "link" %}
+<a href="#cmp-{{ item.name }}" class="cmp ck-link {{ item.css_class }}{{ twin }}">{{ item.label }}</a>
+{% elif item.render == "badge" %}
+<span class="cmp ck-badge {{ item.css_class }}{{ twin }}">{{ item.label }}</span>
+{% elif item.render == "input" %}
+<input class="cmp ck-input {{ item.css_class }}{{ twin }}" type="email" placeholder="{{ item.label }}" aria-label="{{ item.name }}">
+{% elif item.render == "card" %}
+<div class="cmp ck-card {{ item.css_class }}{{ twin }}"><p class="pv-card-title {{ item.title_class }}">{{ item.label }}</p><p class="pv-card-body {{ item.body_class }}">Rebuilt from the measured surface, border, radius, padding and shadow of this card.</p></div>
+{% elif item.render == "nav" %}
+<div class="pv-navstage"><div class="cmp ck-nav {{ item.css_class }}{{ twin }}{{ ' pv-gutter' if item.gutter else '' }}"><span class="pv-nav-logo">{{ site_name }}</span><span class="pv-nav-links">{% for link in item.nav_links %}<a href="#cmp-{{ item.name }}" class="cmp ck-link {{ item.nav_link_class or '' }}">{{ link }}</a>{% endfor %}</span>{% if item.nav_button_class %}<button type="button" class="cmp ck-button {{ item.nav_button_class }}">{{ item.nav_button_label }}</button>{% endif %}</div></div>
+{% elif item.render == "footer" %}
+<div class="cmp ck-footer {{ item.css_class }}{{ twin }}"><div class="pv-footer-cols{{ ' pv-gutter' if item.gutter else '' }}"><div><h4>Product</h4><ul><li>Features</li><li>Pricing</li><li>Changelog</li></ul></div><div><h4>Company</h4><ul><li>About</li><li>Blog</li><li>Careers</li></ul></div><div><h4>Resources</h4><ul><li>Docs</li><li>Support</li><li>Status</li></ul></div></div></div>
+{% else %}
+<div class="cmp ck-box {{ item.css_class }}{{ twin }}">{{ item.label }}</div>
+{% endif %}
+{% if item.hover %}<span class="pv-label">{{ "hover" if twin else "default" }}</span>{% endif %}
+</div>
+{% endfor %}
+</div>
+<div class="pv-spec">
+<dl class="pv-kv">
+{% for row in item.specs %}
+<dt>{{ row.key }}</dt><dd><code>{{ row.value }}</code>{% if row.ref %}<span class="pv-ref">{{ row.ref }}</span>{% endif %}</dd>
+{% endfor %}
+</dl>
+{% for state, rows in item.states %}
+<p class="pv-state">{{ state }}</p>
+<dl class="pv-kv">
+{% for row in rows %}
+<dt>{{ row.key }}</dt><dd><code>{{ row.value }}</code>{% if row.ref %}<span class="pv-ref">{{ row.ref }}</span>{% endif %}</dd>
+{% endfor %}
+</dl>
+{% endfor %}
+{% if item.class_hints %}<p class="pv-hints">Class hints: {{ item.class_hints }}</p>{% endif %}
+</div>
+</article>
+{% endfor %}
+</div>
+</section>
+{% endif %}
+<section class="pv-section" id="layout">
+<h2>Breakpoints &amp; layout</h2>
+<ul class="pv-facts">
+<li>Shell <strong>{{ shell }}</strong></li>
+{% if container %}<li>Container <strong>{{ container }}</strong></li>{% endif %}
+{% if gutter %}<li>Gutter <strong>{{ gutter }}</strong></li>{% endif %}
+</ul>
+{% if breakpoints %}
+<h3 class="pv-sub">Breakpoints from @media</h3>
+<div class="pv-ruler" aria-hidden="true">
+{% for bp in breakpoints %}
+{% if bp.min_width or bp.max_width %}<div class="pv-mark {{ bp.css_class }}{{ ' is-end' if bp.end else '' }}"><span>{{ bp.name }} {{ bp.min_width or bp.max_width }}</span></div>{% endif %}
+{% endfor %}
+<span class="pv-ruler-end">{{ ruler_max }}</span>
+</div>
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Name</th><th scope="col">min-width</th><th scope="col">max-width</th><th scope="col">Rules</th></tr></thead>
+<tbody>
+{% for bp in breakpoints %}
+<tr><td><code>{{ bp.name }}</code></td><td>{{ bp.min_width or "—" }}</td><td>{{ bp.max_width or "—" }}</td><td>{{ bp.occurrences }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<p class="pv-empty">No width breakpoints were found in the stylesheets.</p>
+{% endif %}
+{% if changes %}
+<h3 class="pv-sub">Responsive changes</h3>
+<ul class="pv-changes">
+{% for change in changes %}
+<li><strong>{{ change.title }}</strong><span class="pv-label">{{ change.widths }}{% if change.params %} · {{ change.params }}{% endif %}</span>{% if change.evidence %}<span class="pv-label">{{ change.evidence }}</span>{% endif %}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if snapshots %}
+<h3 class="pv-sub">Layout snapshots</h3>
+<div class="pv-table-wrap">
+<table class="pv-table">
+<thead><tr><th scope="col">Viewport</th><th scope="col">Columns</th><th scope="col">Navigation</th><th scope="col">Container</th><th scope="col">Gutter</th><th scope="col">Largest heading</th><th scope="col">Smallest tap target</th></tr></thead>
+<tbody>
+{% for row in snapshots %}
+<tr><td>{{ row.viewport }}</td><td>{{ row.columns }}</td><td>{{ row.nav }}</td><td>{{ row.container }}</td><td>{{ row.gutter }}</td><td>{{ row.heading }}</td><td>{{ row.tap }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+</section>
+</main>
+<footer class="pv-footer">
+<div class="pv-wrap">
+<p>Generated by get-design-markdown {{ tool_version }} · {{ stats.pages }} page{{ "s" if stats.pages != 1 else "" }}, {{ stats.elements }} elements, {{ stats.stylesheets }} stylesheets, {{ stats.hover_states }} hover states.{% if screenshots %} Screenshots:{% for shot in screenshots %} <a href="{{ shot.href }}">{{ shot.label }}</a>{{ "," if not loop.last else "" }}{% endfor %}.{% endif %}</p>
+{% if warnings %}
+<details class="pv-details">
+<summary>Analysis warnings ({{ warnings|length }})</summary>
+<ul>
+{% for warning in warnings %}
+<li>{{ warning }}</li>
+{% endfor %}
+</ul>
+</details>
+{% endif %}
+</div>
+</footer>
+</body>
+</html>
