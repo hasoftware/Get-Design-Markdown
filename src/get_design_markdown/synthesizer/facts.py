@@ -99,7 +99,8 @@ LEAD_MAX_SCALE: Final = 1.5
 MAX_SURFACE_CHECKS: Final = 3
 #: Two chromatic action colors whose OKLCH hues differ by at most this are one accent family.
 SAME_FAMILY_HUE_DEG: Final = 20.0
-#: Warning written by analyzer/analyze.py when analyzer parts were skipped, and its labels.
+#: Warning that analysis.json files of earlier versions carry when analyzer parts were skipped
+#: (the glue now stops instead), and its labels.
 SKIPPED_WARNING_PREFIX: Final = "Chưa phân tích"
 SKIPPED_LABELS: Final = {
     "Màu sắc": "colors",
@@ -887,10 +888,11 @@ class DesignFacts:
         return max(ranked, key=lambda item: item[0])[1]
 
     def skipped_parts(self) -> frozenset[str]:
-        """Analyzer parts the glue skipped (not built yet), read from its warning
-        "Chưa phân tích (để trống trong analysis.json): Typography (GĐ4), Đổ bóng (GĐ4)…".
+        """Analyzer parts an earlier version of the glue skipped, read from its warning
+        "Chưa phân tích (để trống trong analysis.json): Typography (…), Đổ bóng (…)".
 
-        An empty list in analysis.json then means "not analyzed", not "none on the page".
+        An empty list in such an analysis.json means "not analyzed", not "none on the page".
+        Current versions stop with an error instead, so this is only for older files.
         """
         skipped: set[str] = set()
         for warning in self.analysis.warnings:

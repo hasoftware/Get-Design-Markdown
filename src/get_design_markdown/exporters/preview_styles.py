@@ -19,7 +19,6 @@ from get_design_markdown.analyzer.css_values import (
     parse_px,
 )
 from get_design_markdown.analyzer.naming import FULL_RADIUS_PX, PILL_RADIUS_PX, parse_token_ref
-from get_design_markdown.errors import NotImplementedYetError
 from get_design_markdown.exporters.safe_css import (
     clean_font_name,
     css_backdrop_filter,
@@ -76,11 +75,8 @@ def _google_substitute(family: FontFamilyInfo) -> str | None:
     if family.is_google_font or not family.substitutes:
         return None
     for candidate in family.substitutes:
-        try:
-            if fonts.lookup_font(candidate).is_google_font:
-                return candidate
-        except NotImplementedYetError:
-            return None
+        if fonts.lookup_font(candidate).is_google_font:
+            return candidate
     return None
 
 

@@ -11,7 +11,6 @@ import pytest
 
 from get_design_markdown.analyzer import fonts
 from get_design_markdown.analyzer.fonts import FontLookup
-from get_design_markdown.errors import NotImplementedYetError
 from get_design_markdown.exporters.preview import render_preview
 from get_design_markdown.models.analysis import (
     Breakpoint,
@@ -356,9 +355,9 @@ def test_google_substitute_for_proprietary_font(monkeypatch: pytest.MonkeyPatch)
     assert "Inter (substitute)" in html
 
 
-def test_no_substitute_before_font_table_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_substitute_without_a_google_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     def lookup(family: str) -> FontLookup:
-        raise NotImplementedYetError("chưa có")
+        return FontLookup(name=family, is_google_font=False)
 
     monkeypatch.setattr(fonts, "lookup_font", lookup)
     html = render_preview(_proprietary_font_analysis())

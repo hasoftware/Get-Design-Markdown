@@ -1,4 +1,4 @@
-"""Tests of analyzer/layout.py: shell, container, responsive changes (+ the GĐ4 glue run)."""
+"""Tests of analyzer/layout.py: shell, container, responsive changes (+ the glue run)."""
 
 from __future__ import annotations
 
@@ -112,7 +112,6 @@ def test_fixture_foundations_through_analyze_capture() -> None:
     assert [(c.kind, c.params) for c in result.layout.changes] == [
         (c.kind, c.params) for c in reference.layout.changes
     ]
-    assert not any("GĐ4" in warning for warning in result.warnings)
 
 
 # ─── Shell ───────────────────────────────────────────────────────────────────

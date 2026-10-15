@@ -14,7 +14,7 @@ import yaml
 
 from get_design_markdown import __version__
 from get_design_markdown.console import console, err_console, print_info, print_success
-from get_design_markdown.errors import NotImplementedYetError, SynthesisValidationError
+from get_design_markdown.errors import SynthesisValidationError
 from get_design_markdown.models.analysis import DesignAnalysis
 from get_design_markdown.models.synthesis import SynthesisResult, ValidationIssue
 from get_design_markdown.storage import (
@@ -96,16 +96,7 @@ def run_synthesize(
     analysis = load_model(DesignAnalysis, folder / ANALYSIS_FILE)
     print_info(f"Dựng DESIGN.md cho {analysis.site.name} (ngôn ngữ: {lang}).")
     text = render.render_design_md(analysis, lang=lang, examples=examples)
-    try:
-        issues = validate.validate_design_md(text)
-    except NotImplementedYetError:
-        issues = [
-            ValidationIssue(
-                rule="self-check",
-                severity="info",
-                message="Bước tự kiểm DESIGN.md chưa được xây dựng (giai đoạn 6).",
-            )
-        ]
+    issues = validate.validate_design_md(text)
     print_issues(issues)
     errors = [issue for issue in issues if issue.severity == "error"]
     if errors:

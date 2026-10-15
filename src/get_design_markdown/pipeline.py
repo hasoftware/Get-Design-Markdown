@@ -24,7 +24,6 @@ from get_design_markdown.console import (
     print_warning,
     progress_status,
 )
-from get_design_markdown.errors import NotImplementedYetError
 from get_design_markdown.exporters.export import run_export
 from get_design_markdown.models.raw import CaptureOptions, RawCapture, RobotsCheck
 from get_design_markdown.storage import (
@@ -126,7 +125,7 @@ def run_get(
     open_browser: bool = False,
     threshold: float = DEFAULT_DELTA_E,
 ) -> GetResult:
-    """The whole pipeline; exports that are not built yet only produce a warning."""
+    """The whole pipeline: collect, analyze, synthesize, export; any stage error stops it."""
     print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
     folder = run_collect(url, out_root=out_root, options=options)
     print_step(2, 4, "Phân tích thiết kế (Tầng 2)")
@@ -134,10 +133,7 @@ def run_get(
     print_step(3, 4, "Dựng DESIGN.md (Tầng 3)")
     run_synthesize(folder, lang=lang, prompt_only=prompt_only, examples=examples)
     print_step(4, 4, "Xuất tokens.json và preview.html")
-    try:
-        run_export(folder)
-    except NotImplementedYetError as error:
-        print_warning(error.message)
+    run_export(folder)
 
     files = [
         folder / name

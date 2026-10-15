@@ -107,20 +107,9 @@ def test_analyze_capture_assembles_sample(sample_analyzers: DesignAnalysis) -> N
     assert result == sample_analyzers
 
 
-def test_analyze_capture_skips_unimplemented_parts(
-    sample_analyzers: DesignAnalysis, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(components, "analyze_components", _not_implemented)
-    monkeypatch.setattr(shapes, "analyze_shadows", _not_implemented)
-    result = analyze.analyze_capture(load_raw_sample(), now=FIXED_TIME)
-    assert result.components == [] and result.shadows == []
-    assert result.colors.tokens
-    assert any("Component (GĐ5)" in warning for warning in result.warnings)
-    assert any("Đổ bóng (GĐ4)" in warning for warning in result.warnings)
-
-
-def test_analyze_capture_all_unimplemented_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    for module, name in (
+@pytest.mark.parametrize(
+    ("module", "name"),
+    [
         (colors, "analyze_colors"),
         (typography, "analyze_typography"),
         (spacing, "analyze_spacing"),
@@ -129,8 +118,13 @@ def test_analyze_capture_all_unimplemented_raises(monkeypatch: pytest.MonkeyPatc
         (breakpoints, "analyze_breakpoints"),
         (layout, "analyze_layout"),
         (components, "analyze_components"),
-    ):
-        monkeypatch.setattr(module, name, _not_implemented)
+    ],
+)
+def test_analyze_capture_stops_when_an_analyzer_fails(
+    sample_analyzers: DesignAnalysis, monkeypatch: pytest.MonkeyPatch, module: Any, name: str
+) -> None:
+    # Every stage is built: a failing analyzer is an error, never an empty part with a warning.
+    monkeypatch.setattr(module, name, _not_implemented)
     with pytest.raises(NotImplementedYetError):
         analyze.analyze_capture(load_raw_sample())
 
@@ -208,13 +202,20 @@ def test_site_name(title: str, domain: str, expected: str) -> None:
     assert analyze.site_name(title, domain) == expected
 
 
-def test_run_analyze_writes_file_and_falls_back_to_summary(
+def test_run_analyze_writes_file_and_prints_the_report(
     sample_analyzers: DesignAnalysis, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     save_model(load_raw_sample(), tmp_path / RAW_FILE)
-    monkeypatch.setattr(report, "build_report", _not_implemented)
+    reported: list[DesignAnalysis] = []
+
+    def fake_report(analysis: DesignAnalysis) -> str:
+        reported.append(analysis)
+        return "report"
+
+    monkeypatch.setattr(report, "build_report", fake_report)
     result = analyze.run_analyze(tmp_path, now=FIXED_TIME)
     assert load_model(DesignAnalysis, tmp_path / ANALYSIS_FILE) == result
+    assert reported == [result]
 
 
 # ─── synthesizer/synthesize.py ───────────────────────────────────────────────
@@ -267,7 +268,11 @@ def test_run_synthesize_refuses_invalid_output(
 def test_run_synthesize_prompt_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     folder = _analysis_folder(tmp_path)
     monkeypatch.setattr(render, "render_design_md", lambda *a, **k: DESIGN_TEXT)
-    monkeypatch.setattr(validate, "validate_design_md", _not_implemented)
+    monkeypatch.setattr(
+        validate,
+        "validate_design_md",
+        lambda text: [ValidationIssue(rule="self-check", severity="info", message="ok")],
+    )
     monkeypatch.setattr(
         prompt_export, "prepare_prompt_images", lambda *a, **k: ["prompt-images/desktop.png"]
     )
@@ -286,23 +291,45 @@ def test_run_synthesize_requires_renderer(tmp_path: Path, monkeypatch: pytest.Mo
         synthesize.run_synthesize(_analysis_folder(tmp_path))
 
 
-# ─── exporters/export.py ─────────────────────────────────────────────────────
-
-
-def test_run_export_writes_available_exports(
+def test_run_synthesize_requires_the_self_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     folder = _analysis_folder(tmp_path)
+    monkeypatch.setattr(render, "render_design_md", lambda *a, **k: DESIGN_TEXT)
+    monkeypatch.setattr(validate, "validate_design_md", _not_implemented)
+    with pytest.raises(NotImplementedYetError):
+        synthesize.run_synthesize(folder)
+    assert not (folder / DESIGN_FILE).exists()
+
+
+# ─── exporters/export.py ─────────────────────────────────────────────────────
+
+
+def test_run_export_writes_both_exports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    folder = _analysis_folder(tmp_path)
     monkeypatch.setattr(tokens, "build_tokens", lambda analysis: {"color": {"$type": "color"}})
-    monkeypatch.setattr(preview, "render_preview", _not_implemented)
+    monkeypatch.setattr(preview, "render_preview", lambda analysis: "<html></html>")
     written = export.run_export(folder)
-    assert written == [folder / TOKENS_FILE]
+    assert written == [folder / TOKENS_FILE, folder / PREVIEW_FILE]
     assert json.loads((folder / TOKENS_FILE).read_text(encoding="utf-8")) == {
         "color": {"$type": "color"}
     }
-    monkeypatch.setattr(tokens, "build_tokens", _not_implemented)
+
+
+@pytest.mark.parametrize(
+    ("module", "name"), [(tokens, "build_tokens"), (preview, "render_preview")]
+)
+def test_run_export_stops_when_an_exporter_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, module: Any, name: str
+) -> None:
+    folder = _analysis_folder(tmp_path)
+    monkeypatch.setattr(tokens, "build_tokens", lambda analysis: {})
+    monkeypatch.setattr(preview, "render_preview", lambda analysis: "<html></html>")
+    monkeypatch.setattr(module, name, _not_implemented)
     with pytest.raises(NotImplementedYetError):
         export.run_export(folder)
+    # Nothing is written half-way.
+    assert not (folder / TOKENS_FILE).exists() and not (folder / PREVIEW_FILE).exists()
 
 
 # ─── pipeline.py + cli.py ────────────────────────────────────────────────────
@@ -348,7 +375,7 @@ def test_run_get_full_pipeline(
 ) -> None:
     monkeypatch.setattr(render, "render_design_md", lambda *a, **k: DESIGN_TEXT)
     monkeypatch.setattr(validate, "validate_design_md", lambda text: [])
-    monkeypatch.setattr(tokens, "build_tokens", _not_implemented)
+    monkeypatch.setattr(tokens, "build_tokens", lambda analysis: {})
     monkeypatch.setattr(preview, "render_preview", lambda analysis: "<html></html>")
     opened: list[str] = []
 
@@ -361,8 +388,8 @@ def test_run_get_full_pipeline(
         "acme.example", out_root=tmp_path, options=CaptureOptions(), open_browser=True
     )
     names = {path.name for path in result.files}
-    assert {DESIGN_FILE, PREVIEW_FILE, ANALYSIS_FILE, RAW_FILE, SYNTHESIS_FILE} <= names
-    assert TOKENS_FILE not in names
+    expected = {DESIGN_FILE, TOKENS_FILE, PREVIEW_FILE, ANALYSIS_FILE, RAW_FILE, SYNTHESIS_FILE}
+    assert expected <= names
     assert result.opened == result.folder / PREVIEW_FILE
     assert opened and opened[0].startswith("file:")
 
@@ -414,10 +441,9 @@ def test_cli_analyze_synthesize_export(
     assert load_model(SynthesisResult, tmp_path / SYNTHESIS_FILE).lang == "vi"
 
     monkeypatch.setattr(tokens, "build_tokens", _not_implemented)
-    monkeypatch.setattr(preview, "render_preview", _not_implemented)
     result = runner.invoke(cli.app, ["export", str(tmp_path)])
     assert result.exit_code == 1
-    assert "giai đoạn 8" in " ".join(result.output.split())
+    assert "Lỗi: chưa có" in " ".join(result.output.split())
 
 
 def test_cli_rejects_unknown_lang(tmp_path: Path) -> None:
