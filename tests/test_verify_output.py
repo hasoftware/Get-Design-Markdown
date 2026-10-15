@@ -129,6 +129,10 @@ def _narrow_screenshot(folder: Path) -> None:
     Image.new("RGB", (100, 8), "white").save(folder / "screenshots" / "home-390.png")
 
 
+def _stale_screenshot(folder: Path) -> None:
+    Image.new("RGB", (1440, 8), "white").save(folder / "screenshots" / "personalize-1440.png")
+
+
 def _set(path: list[str | int], value: Any) -> Callable[[Any], None]:
     def mutate(data: Any) -> None:
         node = data
@@ -207,6 +211,7 @@ CORRUPTIONS: list[Any] = [
     # raw.json
     pytest.param(_drop_screenshot, "raw.screenshots", "error", id="missing-screenshot"),
     pytest.param(_narrow_screenshot, "raw.screenshots", "warning", id="screenshot-width"),
+    pytest.param(_stale_screenshot, "raw.screenshots", "warning", id="unreferenced-screenshot"),
     pytest.param(_write("raw.json", "{"), "raw.schema", "error", id="raw-not-json"),
     pytest.param(
         _json("raw.json", _set(["pages"], "nope")), "raw.schema", "error", id="raw-schema"
@@ -1047,3 +1052,14 @@ def test_format_findings_wraps_long_messages(tmp_path: Path) -> None:
     assert all(len(line) <= 80 for line in lines[2:-1])
     assert lines[-1] == "Kết quả: 1 lỗi, 1 cảnh báo, 1 ghi chú."
     assert verify_output.format_findings([], tmp_path).splitlines()[1] == "Không có phát hiện nào."
+
+
+def test_unreferenced_screenshots_are_named(valid_folder: Path) -> None:
+    _stale_screenshot(valid_folder)
+    (valid_folder / "screenshots" / "notes.txt").write_text("kept", encoding="utf-8")
+    messages = [
+        finding.message
+        for finding in run_verify(valid_folder)
+        if finding.check == "raw.screenshots"
+    ]
+    assert len(messages) == 1 and "screenshots/personalize-1440.png" in messages[0]

@@ -426,6 +426,25 @@ def _load_model(
 # ─── Screenshots ─────────────────────────────────────────────────────────────
 
 
+def _check_unreferenced_screenshots(
+    folder: Path, pages: list[PageCapture], report: _Report
+) -> None:
+    """PNGs directly under screenshots/ that raw.json does not reference (left over from an
+    earlier capture of other sub-pages, or added by hand)."""
+    shots_dir = folder / "screenshots"
+    if not shots_dir.is_dir():
+        return
+    referenced = {shot.path for page in pages for shot in page.screenshots}
+    for file in sorted(shots_dir.glob("*.png")):
+        relative = f"screenshots/{file.name}"
+        if relative not in referenced:
+            report.warning(
+                "raw.screenshots",
+                f"Ảnh chụp {relative} không được raw.json tham chiếu "
+                "(còn sót từ lần thu thập trước?).",
+            )
+
+
 def _expected_screenshot_path(page_name: str, shot: Screenshot) -> str:
     scheme = "-dark" if shot.color_scheme == "dark" else ""
     return f"screenshots/{page_name}{scheme}-{shot.viewport_width}.png"
@@ -584,6 +603,7 @@ def _check_raw(folder: Path, report: _Report, *, partial: bool) -> RawCapture | 
         _check_elements(page, label, report, max_elements)
         for shot in page.screenshots:
             _check_screenshot(folder, shot, report, "raw.screenshots", page=page)
+    _check_unreferenced_screenshots(folder, [page for _, page in captures], report)
 
     widths = list(options.screenshot_widths) if options is not None else []
     widths = widths or list(DEFAULT_SCREENSHOT_WIDTHS)
