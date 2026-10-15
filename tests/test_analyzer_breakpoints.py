@@ -7,6 +7,7 @@ import pytest
 from get_design_markdown.analyzer.breakpoints import (
     analyze_breakpoints,
     boundary_counts,
+    boundary_stats,
     max_width_boundary,
     min_width_boundary,
     query_boundaries,
@@ -165,3 +166,38 @@ def test_duplicate_stylesheet_urls_count_once() -> None:
     assert boundary_counts([sheet, sheet]) == {768.0: 4}
     other = _sheet(("(min-width: 768px)", 4), url="inline:home#1")
     assert boundary_counts([sheet, other]) == {768.0: 8}
+
+
+def test_desktop_first_breakpoints_keep_the_max_width_direction() -> None:
+    # linear.app: almost every width query is max-width, a few mobile-first complements.
+    sheet = _sheet(
+        ("(max-width: 640px)", 367),
+        ("(min-width: 641px)", 1),
+        ("(max-width: 768px)", 212),
+        ("(max-width: 1024px)", 136),
+        ("(max-width: 1280px)", 45),
+        ("(min-width: 1281px)", 3),
+    )
+    result = analyze_breakpoints([sheet])
+    assert [(bp.name, bp.min_width_px, bp.max_width_px, bp.occurrences) for bp in result] == [
+        ("sm", None, 640.0, 368),
+        ("md", None, 768.0, 212),
+        ("lg", None, 1024.0, 136),
+        ("xl", None, 1280.0, 48),
+    ]
+
+
+def test_breakpoint_direction_follows_the_majority_per_boundary() -> None:
+    sheet = _sheet(
+        ("(min-width: 768px)", 30),
+        ("(max-width: 767.98px)", 6),
+        ("(max-width: 1023.98px)", 9),
+        ("(max-width: 1023px)", 2),
+        ("(min-width: 1024px)", 4),
+    )
+    result = analyze_breakpoints([sheet])
+    assert [(bp.min_width_px, bp.max_width_px, bp.occurrences) for bp in result] == [
+        (768.0, None, 36),
+        (None, 1023.98, 15),  # the max-width value written most, never a rounded guess
+    ]
+    assert boundary_stats([sheet])[1024.0].max_values == {1023.98: 9, 1023.0: 2}

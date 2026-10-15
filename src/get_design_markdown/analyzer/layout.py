@@ -13,15 +13,26 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
   padding measured at the widest viewport.
 - changes: for each consecutive pair of snapshots (wider -> narrower), in ResponsiveChangeKind
   order — nav collapsing to a hamburger (nav links gone and a menu button visible at the
-  narrower width; below_px = the most used breakpoint in (narrow, wide], else the wider width),
-  nav hidden (no menu button), sidebar hidden, fewer columns, largest
+  narrower width), nav hidden (no menu button), sidebar hidden, fewer columns, largest
   heading shrinking >= 10%, container becoming fluid (once), gutter shrinking >= 2px,
   horizontal scrollers appearing and tap targets under 24px at phone widths (<= 480px).
+- The collapse names the most used breakpoint consistent with both snapshots: a min-width
+  boundary b with narrow < b <= wide, or a max-width value m with narrow <= m < wide (a
+  desktop-first "(max-width: 768px)" still matches the 768px capture). params: below_px = the
+  first width that keeps the links (b, or floor(m) + 1) and, for max-width, max_px = the
+  widest collapsed width (m). Without a consistent breakpoint below_px is left out, so the
+  change reads "between <narrow> and <wide>px" rather than naming a threshold.
+- Tap targets: the collector reports the smallest interactive box per viewport. A reading
+  below 70% of the widest viewport's comes from content scaled down with the page (a product
+  mockup, a carousel of cards), not from controls built for touch, so it is cleared from the
+  snapshot and no tap-target claim is made from it.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
 
@@ -41,6 +52,9 @@ GUTTER_SHRINK_PX = 2.0
 FLUID_TOLERANCE_PX = 2.0
 PHONE_MAX_WIDTH = 480
 MIN_TAP_TARGET_PX = 24.0
+#: A narrower viewport's smallest tap target below this share of the widest one is scaled
+#: content (mockups, card carousels shrunk with the page), not a real control.
+SCALED_TAP_RATIO = 0.7
 TOP_BAR_MAX_Y = 160.0
 TOP_BAR_MAX_HEIGHT = 200.0
 TOP_BAR_MIN_WIDTH = 600.0
@@ -113,14 +127,35 @@ def layout_shell(page: PageCapture | None, snapshots: Sequence[LayoutSnapshot]) 
     return "unknown"
 
 
-def _collapse_breakpoint(breakpoints: Sequence[Breakpoint], narrow: int, wide: int) -> float | None:
-    inside = [
-        bp for bp in breakpoints if bp.min_width_px is not None and narrow < bp.min_width_px <= wide
-    ]
-    if not inside:
+@dataclass(frozen=True, slots=True)
+class CollapsePoint:
+    """Where the nav collapses: widths < below_px; max_px = widest collapsed width (max-width)."""
+
+    below_px: float
+    max_px: float | None
+    query: str
+    occurrences: int
+
+
+def collapse_point(
+    breakpoints: Sequence[Breakpoint], narrow: int, wide: int
+) -> CollapsePoint | None:
+    """The most used breakpoint consistent with "links at `wide`, menu at `narrow`"."""
+    candidates: list[CollapsePoint] = []
+    for bp in breakpoints:
+        low, high = bp.min_width_px, bp.max_width_px
+        if low is not None and high is None and narrow < low <= wide:
+            candidates.append(
+                CollapsePoint(float(low), None, f"min-width: {_num(low)}px", bp.occurrences)
+            )
+        elif high is not None and low is None and narrow <= high < wide:
+            last = float(math.floor(high))
+            candidates.append(
+                CollapsePoint(last + 1.0, last, f"max-width: {_num(high)}px", bp.occurrences)
+            )
+    if not candidates:
         return None
-    best = max(inside, key=lambda bp: (bp.occurrences, bp.min_width_px or 0.0))
-    return best.min_width_px
+    return max(candidates, key=lambda point: (point.occurrences, point.below_px))
 
 
 def _pair_changes(
@@ -135,19 +170,22 @@ def _pair_changes(
     # A menu button already reported at the wider width (a "More" toggle...) does not change
     # the story: the links went away and a menu button is what remains.
     if nav_lost and narrow.hamburger_visible:
-        below = _collapse_breakpoint(breakpoints, narrow.viewport_width, wide.viewport_width)
+        point = collapse_point(breakpoints, narrow.viewport_width, wide.viewport_width)
+        params: dict[str, float] = {}
+        evidence = (
+            f"{wide.visible_nav_links} visible nav links at {wide.viewport_width}px, "
+            f"hamburger at {narrow.viewport_width}px"
+        )
+        if point is None:
+            evidence += " (no @media breakpoint consistent with both widths)"
+        else:
+            params["below_px"] = point.below_px
+            if point.max_px is not None:
+                params["max_px"] = point.max_px
+            evidence += f"; @media ({point.query})"
+        params["links"] = float(wide.visible_nav_links)
         yield ResponsiveChange(
-            **widths,
-            kind=Kind.NAV_COLLAPSES_TO_HAMBURGER,
-            params={
-                "below_px": float(below if below is not None else wide.viewport_width),
-                "links": float(wide.visible_nav_links),
-            },
-            evidence=(
-                f"{wide.visible_nav_links} visible nav links at {wide.viewport_width}px, "
-                f"hamburger at {narrow.viewport_width}px"
-                + ("" if below is not None else " (no matching @media breakpoint)")
-            ),
+            **widths, kind=Kind.NAV_COLLAPSES_TO_HAMBURGER, params=params, evidence=evidence
         )
     elif nav_lost:
         yield ResponsiveChange(
@@ -231,6 +269,23 @@ def _pair_changes(
         )
 
 
+def discount_scaled_tap_targets(snapshots: Sequence[LayoutSnapshot]) -> list[LayoutSnapshot]:
+    """Clear min_tap_target_px where it falls below SCALED_TAP_RATIO of the widest
+    snapshot's reading: real controls do not shrink that much on narrow screens, scaled-down
+    illustrations do (snapshots sorted widest first)."""
+    if not snapshots or snapshots[0].min_tap_target_px is None:
+        return list(snapshots)
+    reference = snapshots[0].min_tap_target_px
+    return [
+        snapshot.model_copy(update={"min_tap_target_px": None})
+        if index > 0
+        and snapshot.min_tap_target_px is not None
+        and snapshot.min_tap_target_px < reference * SCALED_TAP_RATIO
+        else snapshot
+        for index, snapshot in enumerate(snapshots)
+    ]
+
+
 def responsive_changes(
     snapshots: Sequence[LayoutSnapshot],
     breakpoints: Sequence[Breakpoint] = (),
@@ -240,7 +295,7 @@ def responsive_changes(
     """Changes between consecutive snapshots (sorted widest first)."""
     changes: list[ResponsiveChange] = []
     fluid_done = False
-    for wide, narrow in pairwise(snapshots):
+    for wide, narrow in pairwise(discount_scaled_tap_targets(snapshots)):
         if narrow.viewport_width >= wide.viewport_width:
             continue
         for change in _pair_changes(wide, narrow, breakpoints, container_px, fluid_done):
@@ -260,7 +315,9 @@ def analyze_layout(
         by_width: dict[int, LayoutSnapshot] = {}
         for snapshot in main.layouts:
             by_width.setdefault(snapshot.viewport_width, snapshot)
-        snapshots = sorted(by_width.values(), key=lambda s: -s.viewport_width)
+        snapshots = discount_scaled_tap_targets(
+            sorted(by_width.values(), key=lambda s: -s.viewport_width)
+        )
     container_px = container_max_width(pages)
     return LayoutInfo(
         container_max_width_px=container_px,

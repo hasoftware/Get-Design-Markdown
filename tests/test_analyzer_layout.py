@@ -7,7 +7,12 @@ from typing import Any
 import pytest
 
 from get_design_markdown.analyzer import analyze
-from get_design_markdown.analyzer.layout import analyze_layout, layout_shell, responsive_changes
+from get_design_markdown.analyzer.layout import (
+    analyze_layout,
+    discount_scaled_tap_targets,
+    layout_shell,
+    responsive_changes,
+)
 from get_design_markdown.models.analysis import (
     Breakpoint,
     LayoutInfo,
@@ -168,14 +173,49 @@ def test_nav_collapse_uses_most_used_breakpoint_in_range() -> None:
     assert change.params == {"below_px": 940.0, "links": 7.0}
 
 
-def test_nav_collapse_without_breakpoint_falls_back_to_wider_width() -> None:
+def test_nav_collapse_without_consistent_breakpoint_names_no_threshold() -> None:
     snapshots = [
         _snap(1440, nav_visible=True, visible_nav_links=4),
         _snap(768, hamburger_visible=True),
     ]
     [change] = responsive_changes(snapshots)
-    assert change.params["below_px"] == 1440.0
-    assert "no matching @media breakpoint" in change.evidence
+    assert change.params == {"links": 4.0}  # "between 1440px and 768px", no invented threshold
+    assert "no @media breakpoint consistent with both widths" in change.evidence
+    # A breakpoint outside (768, 1440] cannot explain the change either.
+    [change] = responsive_changes(snapshots, [Breakpoint(name="sm", min_width_px=640)])
+    assert "below_px" not in change.params
+
+
+def test_nav_collapse_at_desktop_first_max_width_boundary() -> None:
+    # linear.app: links at 1440 and 1024, hamburger from (max-width: 768px) down.
+    snapshots = [
+        _snap(1440, nav_visible=True, visible_nav_links=6),
+        _snap(768, hamburger_visible=True),
+    ]
+    breakpoints = [
+        Breakpoint(name="sm", max_width_px=640, occurrences=367),
+        Breakpoint(name="md", max_width_px=768, occurrences=212),
+        Breakpoint(name="lg", max_width_px=1024, occurrences=136),
+        Breakpoint(name="xl", max_width_px=1280, occurrences=45),
+    ]
+    [change] = responsive_changes(snapshots, breakpoints)
+    assert change.params == {"below_px": 769.0, "max_px": 768.0, "links": 6.0}
+    assert "@media (max-width: 768px)" in change.evidence
+
+
+def test_nav_collapse_ignores_max_width_that_misses_the_narrow_capture() -> None:
+    # (max-width: 767.98px) no longer matches at 768px, so it cannot explain the 768 menu.
+    snapshots = [
+        _snap(1440, nav_visible=True, visible_nav_links=5),
+        _snap(768, hamburger_visible=True),
+    ]
+    breakpoints = [
+        Breakpoint(name="md", max_width_px=767.98, occurrences=50),
+        Breakpoint(name="lg", min_width_px=1024, occurrences=10),
+    ]
+    [change] = responsive_changes(snapshots, breakpoints)
+    assert change.params == {"below_px": 1024.0, "links": 5.0}
+    assert "@media (min-width: 1024px)" in change.evidence
 
 
 def test_menu_button_already_visible_still_counts_as_collapse() -> None:
@@ -264,3 +304,27 @@ def test_off_canvas_or_low_asides_are_not_sidebars() -> None:
     drawer = _el(1, "aside", (1440, 0, 400, 900), landmark="aside")
     low = _el(2, "aside", (0, 1200, 300, 900), landmark="aside")
     assert analyze_layout([_page([HEADER, drawer, low])]).shell == "top-nav"
+
+
+# ─── Tap targets ─────────────────────────────────────────────────────────────
+
+
+def test_scaled_down_tap_targets_are_not_claimed() -> None:
+    # linear.app: a hero app mockup scaled with the page yields 14px / 12px "buttons".
+    snapshots = [
+        _snap(1440, min_tap_target_px=24),
+        _snap(768, min_tap_target_px=14),
+        _snap(390, min_tap_target_px=12),
+    ]
+    assert responsive_changes(snapshots) == []
+    cleaned = discount_scaled_tap_targets(snapshots)
+    assert [s.min_tap_target_px for s in cleaned] == [24.0, None, None]
+    info = analyze_layout([_page(layouts=snapshots)])
+    assert [s.min_tap_target_px for s in info.snapshots] == [24.0, None, None]
+
+
+def test_small_tap_targets_seen_at_every_width_are_claimed() -> None:
+    snapshots = [_snap(1440, min_tap_target_px=20), _snap(390, min_tap_target_px=18)]
+    [change] = responsive_changes(snapshots)
+    assert change.kind == Kind.TAP_TARGETS_SMALL and change.params == {"min_px": 18.0}
+    assert discount_scaled_tap_targets(snapshots) == snapshots

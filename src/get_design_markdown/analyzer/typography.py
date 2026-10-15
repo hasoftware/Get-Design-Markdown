@@ -19,20 +19,23 @@ How it works (pure, deterministic):
    own stack first among the substitutes.
 3. Levels: samples grouped by (size rounded to 0.5px, family); groups of the same family less
    than 1px apart merge into the heavier one; one-off groups are dropped unless they hold an h1/h2,
-   are >= 32px or monospace; at most 10 groups survive: the least prominent (usage x size^2, so a
-   single hero headline outweighs many small labels; h1/h2 and >= 32px groups last) merge into
-   the nearest size of the same family.
+   are >= 32px or monospace. Whenever groups must merge (at most 10 levels overall, 5 above
+   body, body-sm/caption below it), the cheapest merge goes first: usage x log distance to the
+   nearest size of the same family, where sub-page text counts half again (the main page leads)
+   and groups holding >= 8% of the text merge last. The body and h1 groups never merge away.
+   Merged groups only add to a level's count and tags: its size, weight, line height, letter
+   spacing and samples come from the text measured at the level's own size.
 4. Names come from naming.TYPE_LEVEL_ORDER. "body" is the heaviest 14-18px running-text group.
    A rare (<= 2 elements) headline at most 25% larger than the h1 joins the h1 level, so
-   "display" is the hero headline rather than a one-off call-to-action. Larger groups (<= 5,
-   the least prominent merged first, never the h1) get display / heading / title / subtitle /
-   body-lg through a monotonic assignment (a larger level never gets a later name) that
-   minimizes the usage-weighted cost of departing from each group's preferred name (h1 ->
-   display, h2 or >= 28px -> heading, h3/h4 or 20-28px semibold -> title, semibold -> subtitle,
-   regular -> body-lg). Smaller groups get code (monospace), ui (interactive-dominated, weight
-   >= 500), overline (uppercase, tracking >= 0.5px), then body-sm for the largest remaining and
-   caption for the smallest; groups left without a sensible name merge into the nearest named
-   level of the same family.
+   "display" is the hero headline rather than a one-off call-to-action. Larger groups (<= 5)
+   get display / heading / title / subtitle / body-lg through a monotonic assignment (a larger
+   level never gets a later name) that minimizes the usage-weighted cost of departing from each
+   group's preferred name (h1 -> display, h2 or >= 28px -> heading, h3/h4 or 20-28px semibold ->
+   title, semibold -> subtitle, regular -> body-lg). Smaller groups get code (monospace), ui
+   (interactive-dominated, weight >= 500; or, when three or more small groups remain, the
+   heaviest interactive-dominated one), overline (uppercase, tracking >= 0.5px), then body-sm
+   for the largest remaining and caption for the smallest, after the cheapest extra groups
+   merged into their neighbours.
 5. Scale ratio: the distinct non-code level sizes >= the base size are fitted to
    base x r^k for the classic ratios. The fit error is measured in scale steps (log distance to
    the nearest step / log r), so fine ratios cannot win just by having a denser grid. A ratio is
@@ -43,6 +46,7 @@ How it works (pure, deterministic):
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -88,8 +92,10 @@ MAX_LEVELS = 10
 MAX_TAGS = 4
 MAX_SAMPLES = 3
 MIN_FONT_SIZE_PX = 6.0
-#: Weights used by less than this share of the text are ignored in weights_used.
+#: Weights used by less than this share of the text are ignored in weights_used...
 MIN_WEIGHT_SHARE = 0.01
+#: ...unless a font-weight custom property declares them and this many text elements use them.
+MIN_TOKEN_WEIGHT_ELEMENTS = 3
 #: Weights used by less than this share of a family's own text are left out of its weights.
 FAMILY_WEIGHT_MIN_SHARE = 0.02
 DEFAULT_BASE_SIZE_PX = 16.0
@@ -155,7 +161,12 @@ _GENERIC_CATEGORIES: dict[str, FontCategory] = {
 }
 
 _ABOVE_NAMES = ("display", "heading", "title", "subtitle", "body-lg")
+_BELOW_NAMES = ("body-sm", "caption")
 _INFINITE = 1e9
+#: A group holding at least this share of the text merges only after every smaller one.
+KEEP_SHARE = 0.08
+#: Sub-page text counts this much again when ranking merges, so the main page leads.
+SUB_PAGE_RANK = 0.5
 
 
 # ─── Samples ─────────────────────────────────────────────────────────────────
@@ -416,11 +427,23 @@ def analyze_families(
 class _Group:
     size: float
     family: str
+    #: Every sample mapped to the level, merged groups included (count, tags, usage).
     members: list[_Sample] = field(default_factory=list)
+    #: Samples measured at the group's own size (within 1px): the level's style and samples.
+    core: list[_Sample] = field(default_factory=list)
+
+    def add(self, sample: _Sample) -> None:
+        self.members.append(sample)
+        self.core.append(sample)
 
     @property
     def value(self) -> float:
         return sum(sample.value for sample in self.members)
+
+    @property
+    def rank_value(self) -> float:
+        """Usage for merge decisions: sub-page text counts SUB_PAGE_RANK again."""
+        return sum(s.value * (1.0 if s.page_index == 0 else SUB_PAGE_RANK) for s in self.members)
 
     @property
     def count(self) -> int:
@@ -432,7 +455,7 @@ class _Group:
 
     @property
     def weight(self) -> int:
-        mode = _weighted_mode((s.weight, s.value) for s in self.members)
+        mode = _weighted_mode((s.weight, s.value) for s in self.core or self.members)
         assert isinstance(mode, int)
         return mode
 
@@ -444,31 +467,26 @@ class _Group:
 
     @property
     def tags(self) -> list[str]:
+        """Tags by usage, the level's own text first and merged groups' tags after."""
         totals = self.tag_values()
+        own: dict[str, float] = defaultdict(float)
+        for sample in self.core:
+            own[sample.tag] += sample.value
         first = {sample.tag: sample.order for sample in reversed(self.members)}
-        return sorted(totals, key=lambda tag: (-totals[tag], first[tag]))
+        return sorted(totals, key=lambda tag: (-own.get(tag, 0.0), -totals[tag], first[tag]))
 
     def share(self, predicate_attr: str) -> float:
         total = self.value or 1.0
         return sum(s.value for s in self.members if getattr(s, predicate_attr)) / total
 
     @property
-    def prominence(self) -> float:
-        """Usage weighted by visual size: one 48px headline outweighs a dozen 10px labels."""
-        return self.value * (self.size / 16.0) ** 2
-
-    @property
-    def protected(self) -> bool:
-        """Display/heading text that is never merged away for being rare."""
-        return self.size >= 32 or any(tag in ("h1", "h2") for tag in self.tag_values())
-
-    @property
     def letter_spacing_px(self) -> float:
-        mode = _weighted_mode((s.letter_spacing_px, s.value) for s in self.members)
+        mode = _weighted_mode((s.letter_spacing_px, s.value) for s in self.core or self.members)
         assert isinstance(mode, float)
         return mode
 
     def absorb(self, other: _Group) -> None:
+        """Map another group's text to this level without changing the level's style."""
         self.members.extend(other.members)
 
 
@@ -479,8 +497,8 @@ def _group_samples(samples: Sequence[_Sample]) -> list[_Group]:
         group = groups.get(key)
         if group is None:
             group = groups[key] = _Group(key[0], key[1])
-        group.members.append(sample)
-    # Sizes of the same family less than 1px apart merge into the heavier group.
+        group.add(sample)
+    # Sizes of the same family less than 1px apart merge into the heavier group (same level).
     kept: list[_Group] = []
     for group in sorted(groups.values(), key=lambda g: (-g.value, -g.size)):
         target = next(
@@ -494,7 +512,8 @@ def _group_samples(samples: Sequence[_Sample]) -> list[_Group]:
         if target is None:
             kept.append(group)
         else:
-            target.absorb(group)
+            for sample in group.members:
+                target.add(sample)
     return kept
 
 
@@ -505,20 +524,76 @@ def _keep_group(group: _Group) -> bool:
 
 
 def _nearest_same_family(group: _Group, others: Iterable[_Group]) -> _Group | None:
+    """Closest size (log distance) of the same family; the heavier group wins ties."""
     candidates = [other for other in others if other is not group and other.family == group.family]
     if not candidates:
         return None
-    return min(candidates, key=lambda other: (abs(other.size - group.size), -other.value))
+    return min(
+        candidates,
+        key=lambda other: (abs(math.log(other.size / group.size)), -other.value, -other.size),
+    )
 
 
-def _limit_groups(groups: list[_Group], limit: int) -> list[_Group]:
-    groups = list(groups)
-    while len(groups) > limit:
-        weakest = min(groups, key=lambda g: (g.protected, g.prominence, g.count, -g.size))
-        target = _nearest_same_family(weakest, groups)
-        groups.remove(weakest)
+def _merge_cheapest(
+    pool: list[_Group],
+    limit: int,
+    groups: list[_Group],
+    *,
+    total: float,
+    targets: Sequence[_Group] = (),
+    fixed: Sequence[_Group] = (),
+) -> None:
+    """Merge groups of `pool` into their nearest same-family neighbour (in the pool or in
+    `targets`) until `limit` remain, cheapest first. Cost = main-page-weighted usage x log size
+    distance, so a rare size next to another goes before a well-used or distinct one; groups
+    with >= KEEP_SHARE of the text go last, `fixed` groups never, and a group without a
+    same-family neighbour only when nothing else can merge."""
+    while len(pool) > limit:
+        best: tuple[tuple[bool, bool, float, float, float], _Group, _Group | None] | None = None
+        for group in pool:
+            if any(group is other for other in fixed):
+                continue
+            target = _nearest_same_family(group, [*pool, *targets])
+            distance = 0.0 if target is None else abs(math.log(target.size / group.size))
+            key = (
+                group.value >= KEEP_SHARE * total,
+                target is None,
+                group.rank_value * distance,
+                group.rank_value,
+                -group.size,
+            )
+            if best is None or key < best[0]:
+                best = (key, group, target)
+        if best is None:
+            return
+        _, group, target = best
+        pool.remove(group)
+        if group in groups:
+            groups.remove(group)
         if target is not None:
-            target.absorb(weakest)
+            target.absorb(group)
+
+
+def _h1_group(groups: Sequence[_Group]) -> _Group | None:
+    """The group holding most of the h1 text (main page first)."""
+    best: tuple[float, _Group] | None = None
+    for group in groups:
+        h1 = sum(
+            s.value * (1.0 if s.page_index == 0 else SUB_PAGE_RANK)
+            for s in group.members
+            if s.tag == "h1"
+        )
+        if h1 > 0 and (best is None or h1 > best[0]):
+            best = (h1, group)
+    return None if best is None else best[1]
+
+
+def _limit_groups(
+    groups: list[_Group], limit: int, *, body: _Group | None, total: float
+) -> list[_Group]:
+    groups = list(groups)
+    fixed = [group for group in (body, _h1_group(groups)) if group is not None]
+    _merge_cheapest(list(groups), limit, groups, total=total, fixed=fixed)
     return groups
 
 
@@ -585,10 +660,9 @@ def _merge_into_named(
 def _absorb_into_h1(above: list[_Group], groups: list[_Group]) -> None:
     """One-off headlines slightly larger than the page's h1 (a closing call-to-action, a big
     stat) join the h1 level, so "display" names the hero headline."""
-    h1_groups = [g for g in above if g.tag_values().get("h1", 0.0) > 0]
-    if not h1_groups:
+    h1 = _h1_group(above)
+    if h1 is None:
         return
-    h1 = max(h1_groups, key=lambda g: g.tag_values()["h1"])
     for group in [g for g in above if g.size > h1.size]:
         if (
             group.family == h1.family
@@ -601,10 +675,46 @@ def _absorb_into_h1(above: list[_Group], groups: list[_Group]) -> None:
             groups.remove(group)
 
 
-def _name_groups(groups: list[_Group], primary_is_mono: bool) -> list[tuple[str, _Group]]:
-    body = _pick_body(groups)
-    if body is None:
-        return []
+def _name_below(
+    below: list[_Group],
+    names: dict[int, str],
+    groups: list[_Group],
+    *,
+    targets: Sequence[_Group],
+    total: float,
+) -> None:
+    """ui / overline / body-sm / caption for the groups smaller than body (largest first)."""
+    ui = [g for g in below if g.share("interactive") > 0.5 and g.weight >= 500]
+    if ui:
+        chosen = max(ui, key=lambda g: (g.value, g.size))
+        names[id(chosen)] = "ui"
+        below.remove(chosen)
+    overline = [g for g in below if g.share("uppercase") > 0.5 and g.letter_spacing_px >= 0.5]
+    if overline:
+        chosen = max(overline, key=lambda g: (g.value, g.size))
+        names[id(chosen)] = "overline"
+        below.remove(chosen)
+    if len(below) > len(_BELOW_NAMES) and "ui" not in names.values():
+        # Three small sizes in use: an interactive-dominated one (nav/footer links in a
+        # regular weight) is the UI text rather than an extra size to fold away.
+        interactive = [g for g in below if g.share("interactive") > 0.5]
+        if interactive:
+            chosen = max(interactive, key=lambda g: (g.value, g.size))
+            names[id(chosen)] = "ui"
+            below.remove(chosen)
+    named = [g for g in groups if id(g) in names and names[id(g)] != "code"]
+    _merge_cheapest(below, len(_BELOW_NAMES), groups, total=total, targets=named)
+    below.sort(key=lambda g: -g.size)
+    if len(below) == 1:
+        names[id(below[0])] = "body-sm" if below[0].size >= 13.5 else "caption"
+    elif len(below) == 2:
+        names[id(below[0])] = "body-sm"
+        names[id(below[1])] = "caption"
+
+
+def _name_groups(
+    groups: list[_Group], body: _Group, *, primary_is_mono: bool, total: float
+) -> list[tuple[str, _Group]]:
     names: dict[int, str] = {id(body): "body"}
 
     def is_code(group: _Group) -> bool:
@@ -628,55 +738,47 @@ def _name_groups(groups: list[_Group], primary_is_mono: bool) -> list[tuple[str,
 
     above.sort(key=lambda g: -g.size)
     _absorb_into_h1(above, groups)
-    while len(above) > len(_ABOVE_NAMES):
-        weakest = min(
-            above, key=lambda g: ("h1" in g.tag_values(), g.protected, g.prominence, g.count)
-        )
-        target = _nearest_same_family(weakest, above)
-        above.remove(weakest)
-        groups.remove(weakest)
-        if target is not None:
-            target.absorb(weakest)
+    h1 = _h1_group(above)
+    _merge_cheapest(
+        above,
+        len(_ABOVE_NAMES),
+        groups,
+        total=total,
+        targets=[body],
+        fixed=[] if h1 is None else [h1],
+    )
+    above.sort(key=lambda g: -g.size)
     names.update(_name_above(above))
 
     below.sort(key=lambda g: -g.size)
-    ui = [g for g in below if g.share("interactive") > 0.5 and g.weight >= 500]
-    if ui:
-        chosen = max(ui, key=lambda g: (g.value, g.size))
-        names[id(chosen)] = "ui"
-        below.remove(chosen)
-    overline = [g for g in below if g.share("uppercase") > 0.5 and g.letter_spacing_px >= 0.5]
-    if overline:
-        chosen = max(overline, key=lambda g: (g.value, g.size))
-        names[id(chosen)] = "overline"
-        below.remove(chosen)
-    if len(below) == 1:
-        names[id(below[0])] = "body-sm" if below[0].size >= 13.5 else "caption"
-    elif len(below) >= 2:
-        names[id(below[0])] = "body-sm"
-        names[id(below[-1])] = "caption"
-        named = [g for g in groups if id(g) in names]
-        _merge_into_named(below[1:-1], named, groups)
-
+    _name_below(below, names, groups, targets=[body], total=total)
     return [(names[id(g)], g) for g in groups if id(g) in names]
 
 
 def _level(name: str, group: _Group) -> TypeLevel:
-    members = group.members
-    size_mode = _weighted_mode((s.size, s.value) for s in members)
+    # Style and samples come from the text measured at the level's own size; merged groups
+    # only add to the count and tags.
+    core = group.core or group.members
+    size_mode = _weighted_mode((s.size, s.value) for s in core)
     assert isinstance(size_mode, float)
     size = round(size_mode, 2)
-    heights = [(s.line_height_px, s.value) for s in members if s.line_height_px is not None]
+    heights = [(s.line_height_px, s.value) for s in core if s.line_height_px is not None]
     line_height_px: float | None = None
     if heights:
         mode = _weighted_mode(heights)
         assert isinstance(mode, float)
         line_height_px = round(mode, 2)
-    transform = _weighted_mode((s.transform, s.value) for s in members)
+    transform = _weighted_mode((s.transform, s.value) for s in core)
     assert isinstance(transform, str)
     samples: list[str] = []
     for sample in sorted(
-        members, key=lambda s: (s.page_index, 0 if len(s.text) >= 4 else 1, s.order)
+        core,
+        key=lambda s: (
+            abs(s.size - size) > 0.01,
+            s.page_index,
+            0 if len(s.text) >= 4 else 1,
+            s.order,
+        ),
     ):
         if sample.text not in samples:
             samples.append(sample.text)
@@ -700,8 +802,13 @@ def _level(name: str, group: _Group) -> TypeLevel:
 def analyze_levels(samples: Sequence[_Sample], *, primary_is_mono: bool = False) -> list[TypeLevel]:
     """Semantic type levels, largest first."""
     groups = [g for g in _group_samples(samples) if _keep_group(g)]
-    groups = _limit_groups(groups, MAX_LEVELS)
-    levels = [_level(name, group) for name, group in _name_groups(groups, primary_is_mono)]
+    body = _pick_body(groups)
+    if body is None:
+        return []
+    total = sum(group.value for group in groups) or 1.0
+    groups = _limit_groups(groups, MAX_LEVELS, body=body, total=total)
+    named = _name_groups(groups, body, primary_is_mono=primary_is_mono, total=total)
+    levels = [_level(name, group) for name, group in named]
     order = {name: position for position, name in enumerate(TYPE_LEVEL_ORDER)}
     levels.sort(key=lambda level: (-level.size_px, order.get(level.name, len(order))))
     return levels
@@ -759,14 +866,49 @@ def fit_scale_ratio(sizes: Iterable[float], base: float) -> ScaleFit | None:
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
 
-def _weights_used(samples: Sequence[_Sample]) -> list[int]:
+_WEIGHT_VARIABLE_RE = re.compile(r"weight|(?:^|-)fw(?:-|$)", re.IGNORECASE)
+
+
+def token_weights(
+    pages: Sequence[PageCapture], stylesheets: Sequence[StylesheetInfo] = ()
+) -> set[int]:
+    """Numeric weights declared by font-weight custom properties (--font-weight-semibold: 590)."""
+    variables = [
+        *(variable for page in pages for variable in page.css_variables),
+        *(variable for sheet in stylesheets for variable in sheet.variables),
+    ]
+    weights: set[int] = set()
+    for variable in variables:
+        if not _WEIGHT_VARIABLE_RE.search(variable.name):
+            continue
+        for raw in (variable.resolved, variable.declared):
+            value = (raw or "").strip()
+            if value.isdigit() and 1 <= int(value) <= 1000:
+                weights.add(int(value))
+                break
+    return weights
+
+
+def _weights_used(
+    samples: Sequence[_Sample],
+    levels: Sequence[TypeLevel] = (),
+    declared: Iterable[int] = (),
+) -> list[int]:
+    """Weights carrying >= 1% of the text, the weights of the reported levels, and weights a
+    font-weight custom property declares that at least three text elements use (an accent such
+    as Linear's 590 semibold on tier names stays listed, never forbidden)."""
     total = sum(sample.value for sample in samples)
     if total <= 0:
         return []
     totals: dict[int, float] = defaultdict(float)
+    counts: dict[int, int] = defaultdict(int)
     for sample in samples:
         totals[sample.weight] += sample.value
-    return sorted(weight for weight, value in totals.items() if value / total >= MIN_WEIGHT_SHARE)
+        counts[sample.weight] += 1
+    used = {weight for weight, value in totals.items() if value / total >= MIN_WEIGHT_SHARE}
+    used.update(level.weight for level in levels)
+    used.update(weight for weight in declared if counts.get(weight, 0) >= MIN_TOKEN_WEIGHT_ELEMENTS)
+    return sorted(used)
 
 
 def analyze_typography(
@@ -787,7 +929,7 @@ def analyze_typography(
     return Typography(
         families=families,
         levels=levels,
-        weights_used=_weights_used(samples),
+        weights_used=_weights_used(samples, levels, token_weights(pages, stylesheets)),
         base_size_px=base,
         scale_ratio=None if fit is None else fit.ratio,
         scale_ratio_name=None if fit is None else fit.name,

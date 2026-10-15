@@ -14,6 +14,12 @@ queries) are dropped too (component one-offs such as a single 1115px query); a c
 as Tailwind's 640/768/1024/1280 keeps a breakpoint written only once. When more than
 seven remain, the most frequent seven are kept. Names come from naming.BREAKPOINT_NAMES with
 768px as "md".
+
+Each breakpoint keeps the direction most of its queries are written in. Mobile-first
+(min-width) boundaries fill min_width_px with the boundary; desktop-first (max-width)
+boundaries fill max_width_px with the max-width value written most (768 for
+"(max-width: 768px)", which still matches at 768px), so a desktop-first site reads
+"<= 768px" instead of a reversed ">= 768px".
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field
 
 from get_design_markdown.analyzer.css_values import parse_media_query, split_top_level
 from get_design_markdown.analyzer.naming import BREAKPOINT_NAMES, name_scale
@@ -62,19 +69,58 @@ def max_width_boundary(value: float) -> float:
     return float(integer + 1) if integer % 2 == 1 else float(integer)
 
 
-def query_boundaries(media: MediaQuery) -> Iterator[float]:
-    """Width boundaries (px) of one captured media query."""
+def _query_widths(media: MediaQuery) -> tuple[float | None, float | None]:
+    """(min-width, max-width) of a screen media query in px; (None, None) otherwise."""
     if not _is_screen_query(media.query):
-        return
+        return None, None
     min_width = media.min_width_px
     max_width = media.max_width_px
     if min_width is None and max_width is None:
         parsed = parse_media_query(media.query)
         min_width, max_width = parsed.min_width_px, parsed.max_width_px
-    if min_width is not None and min_width > 0:
+    return (
+        min_width if min_width is not None and min_width > 0 else None,
+        max_width if max_width is not None and max_width > 0 else None,
+    )
+
+
+def query_boundaries(media: MediaQuery) -> Iterator[float]:
+    """Width boundaries (px) of one captured media query."""
+    min_width, max_width = _query_widths(media)
+    if min_width is not None:
         yield min_width_boundary(min_width)
-    if max_width is not None and max_width > 0:
+    if max_width is not None:
         yield max_width_boundary(max_width)
+
+
+@dataclass(slots=True)
+class BoundaryStats:
+    """Occurrences of one width boundary per query direction."""
+
+    min_count: int = 0
+    max_count: int = 0
+    #: Max-width values written for this boundary (768 or 767.98...) -> occurrences.
+    max_values: dict[float, int] = field(default_factory=dict)
+
+    @property
+    def count(self) -> int:
+        return self.min_count + self.max_count
+
+    @property
+    def desktop_first(self) -> bool:
+        return self.max_count > self.min_count
+
+    def add(self, other: BoundaryStats) -> None:
+        self.min_count += other.min_count
+        self.max_count += other.max_count
+        for value, count in other.max_values.items():
+            self.max_values[value] = self.max_values.get(value, 0) + count
+
+    def max_value(self) -> float | None:
+        """The max-width value written most (larger value on ties)."""
+        if not self.max_values:
+            return None
+        return max(self.max_values, key=lambda value: (self.max_values[value], value))
 
 
 def _unique_sheets(stylesheets: Sequence[StylesheetInfo]) -> Iterator[StylesheetInfo]:
@@ -86,41 +132,58 @@ def _unique_sheets(stylesheets: Sequence[StylesheetInfo]) -> Iterator[Stylesheet
         yield sheet
 
 
-def boundary_counts(stylesheets: Sequence[StylesheetInfo]) -> dict[float, int]:
-    counts: dict[float, int] = {}
+def boundary_stats(stylesheets: Sequence[StylesheetInfo]) -> dict[float, BoundaryStats]:
+    """Occurrences per width boundary and query direction (stylesheets counted once)."""
+    stats: dict[float, BoundaryStats] = {}
     for sheet in _unique_sheets(stylesheets):
         for media in sheet.media_queries:
             weight = max(media.occurrences, 1)
-            for boundary in query_boundaries(media):
-                counts[boundary] = counts.get(boundary, 0) + weight
-    return counts
+            min_width, max_width = _query_widths(media)
+            if min_width is not None:
+                entry = stats.setdefault(min_width_boundary(min_width), BoundaryStats())
+                entry.min_count += weight
+            if max_width is not None:
+                entry = stats.setdefault(max_width_boundary(max_width), BoundaryStats())
+                entry.max_count += weight
+                value = round(max_width, 2)
+                entry.max_values[value] = entry.max_values.get(value, 0) + weight
+    return stats
+
+
+def boundary_counts(stylesheets: Sequence[StylesheetInfo]) -> dict[float, int]:
+    return {boundary: entry.count for boundary, entry in boundary_stats(stylesheets).items()}
 
 
 def analyze_breakpoints(stylesheets: Sequence[StylesheetInfo]) -> list[Breakpoint]:
     """Real width breakpoints only (ascending), named from naming.BREAKPOINT_NAMES (pure)."""
-    counts = boundary_counts(stylesheets)
-    merged: dict[float, int] = {}
-    for boundary in sorted(counts, key=lambda value: (-counts[value], value)):
+    stats = boundary_stats(stylesheets)
+    merged: dict[float, BoundaryStats] = {}
+    for boundary in sorted(stats, key=lambda value: (-stats[value].count, value)):
         target = next((kept for kept in merged if abs(kept - boundary) <= MERGE_DISTANCE_PX), None)
         if target is None:
-            merged[boundary] = counts[boundary]
-        else:
-            merged[target] += counts[boundary]
+            merged[boundary] = BoundaryStats()
+            target = boundary
+        merged[target].add(stats[boundary])
     merged = {
-        boundary: count
-        for boundary, count in merged.items()
+        boundary: entry
+        for boundary, entry in merged.items()
         if MIN_BREAKPOINT_PX <= boundary <= MAX_BREAKPOINT_PX
     }
     if len(merged) >= PRUNE_FROM_COUNT:
         # Component one-offs (a single 1115px query) are not site breakpoints.
-        floor = max(2.0, MIN_SHARE * sum(merged.values()))
-        merged = {boundary: count for boundary, count in merged.items() if count >= floor}
+        floor = max(2.0, MIN_SHARE * sum(entry.count for entry in merged.values()))
+        merged = {boundary: entry for boundary, entry in merged.items() if entry.count >= floor}
     if len(merged) > MAX_BREAKPOINTS:
-        ranked = sorted(merged, key=lambda value: (-merged[value], value))[:MAX_BREAKPOINTS]
+        ranked = sorted(merged, key=lambda value: (-merged[value].count, value))[:MAX_BREAKPOINTS]
         merged = {boundary: merged[boundary] for boundary in ranked}
     boundaries = sorted(merged)
     names = name_scale(boundaries, BREAKPOINT_NAMES, anchor_value=ANCHOR_PX)
-    return [
-        Breakpoint(name=name, min_width_px=boundary, occurrences=merged[boundary])
-        for name, boundary in zip(names, boundaries, strict=True)
-    ]
+    result: list[Breakpoint] = []
+    for name, boundary in zip(names, boundaries, strict=True):
+        entry = merged[boundary]
+        max_value = entry.max_value() if entry.desktop_first else None
+        if max_value is not None:
+            result.append(Breakpoint(name=name, max_width_px=max_value, occurrences=entry.count))
+        else:
+            result.append(Breakpoint(name=name, min_width_px=boundary, occurrences=entry.count))
+    return result

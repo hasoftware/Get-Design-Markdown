@@ -20,6 +20,7 @@ from get_design_markdown.models.analysis import FontRole, Typography
 from get_design_markdown.models.raw import (
     BoundingBox,
     ComputedStyle,
+    CssVariable,
     ElementSample,
     FontFace,
     PageCapture,
@@ -347,6 +348,123 @@ def test_rare_display_text_survives_crowded_small_sizes() -> None:
     assert levels[0].name == "display" and levels[0].size_px == 48.0
     assert len(levels) <= 10
     assert len({level.name for level in levels}) == len(levels)
+
+
+def test_main_page_section_heading_beats_rare_sub_page_sizes() -> None:
+    # stripe.com: the 32px h2 repeated on the home page must keep its own level while a few
+    # pricing-only headings (38px, 24px, 20px, all h1) compete for the five names above body.
+    home = _page(
+        [
+            _el(0, "h1", "Financial infrastructure", font_size="48px", font_weight="300"),
+            *_texts(
+                10,
+                6,
+                "h2",
+                "32px",
+                "Flexible solutions for every business model.",
+                font_weight="300",
+                line_height="35.2px",
+                letter_spacing="-0.64px",
+            ),
+            *_texts(20, 8, "h3", "26px", "Accept and optimize payments", font_weight="300"),
+            *_texts(40, 30, "p", "16px", "Regular paragraph text of the home page " * 2),
+        ],
+        "home",
+    )
+    pricing = _page(
+        [
+            *_texts(0, 2, "h1", "38px", "Pricing tier", font_weight="500"),
+            *_texts(10, 2, "h1", "24px", "Starter", font_weight="500"),
+            *_texts(20, 3, "h1", "20px", "Feature", font_weight="500"),
+            *_texts(30, 1, "h1", "26px", "Custom plans", font_weight="300"),
+        ],
+        "pricing",
+    )
+    levels = analyze_typography([home, pricing]).levels
+    by_size = {level.size_px: level for level in levels}
+    assert 32.0 in by_size, [(level.name, level.size_px) for level in levels]
+    heading = by_size[32.0]
+    assert (heading.weight, heading.line_height_px, heading.letter_spacing_px) == (
+        300,
+        35.2,
+        -0.64,
+    )
+    assert heading.samples == ["Flexible solutions for every business model."]
+    assert by_size[48.0].name == "display"
+    assert len(levels) == len({level.name for level in levels})
+    # Merged groups add to a level's count, never to its samples or style.
+    measured = {
+        element.text: float(element.styles.font_size[:-2])
+        for page in (home, pricing)
+        for element in page.elements
+    }
+    for level in levels:
+        assert {measured[text] for text in level.samples} == {level.size_px}, level
+    title = by_size[26.0]
+    assert title.count > 9 and title.samples == ["Accept and optimize payments", "Custom plans"]
+
+
+def test_well_used_small_sizes_keep_their_own_levels() -> None:
+    # linear.app: 14px (quote names), 13px nav/footer links and 12px labels are all in use.
+    elements = [
+        *_texts(0, 20, "p", "15px", "Purpose-built for planning and building products."),
+        *_texts(100, 15, "span", "14px", "Customer quote attribution"),
+        *_texts(200, 25, "a", "13px", "Resources"),
+        *_texts(300, 10, "span", "12px", "Small label text"),
+    ]
+    levels = analyze_typography([_page(elements)]).levels
+    assert [(level.name, level.size_px, level.count) for level in levels] == [
+        ("body", 15.0, 20),
+        ("body-sm", 14.0, 15),
+        ("ui", 13.0, 25),
+        ("caption", 12.0, 10),
+    ]
+
+
+def test_regular_lead_size_is_not_folded_into_a_medium_label_size() -> None:
+    # linear.app: 24px/400 lead paragraphs next to 20px/510 card titles and a 72px closing
+    # headline repeated on the page.
+    elements = [
+        _el(0, "h1", "The product development", font_size="64px", font_weight="510"),
+        *_texts(10, 3, "h2", "72px", "Built for the future.", font_weight="510"),
+        *_texts(20, 4, "h2", "48px", "A new species of tool", font_weight="510"),
+        *_texts(30, 2, "p", "32px", "q" * 50),
+        *_texts(40, 3, "p", "24px", "Lead paragraph text here", line_height="31.92px"),
+        *_texts(50, 10, "a", "20px", "Faster app launch", font_weight="510"),
+        *_texts(70, 10, "button", "18px", "+"),
+        *_texts(100, 20, "p", "15px", "p" * 50),
+    ]
+    levels = analyze_typography([_page(elements)]).levels
+    assert [level.size_px for level in levels] == [64.0, 48.0, 32.0, 24.0, 20.0, 15.0]
+    lead = levels[3]
+    assert (lead.weight, lead.line_height_px, lead.count) == (400, 31.92, 3)
+    assert levels[4].weight == 510
+    assert levels[0].name == "display" and levels[0].tags == ["h1", "h2"]
+
+
+def test_weights_used_keep_declared_accent_and_level_weights() -> None:
+    variables = [
+        CssVariable(name="--font-weight-semibold", declared="590", resolved="590", source="root"),
+        CssVariable(name="--font-weight-bold", declared="680", resolved="680", source="root"),
+        CssVariable(name="--space-4", declared="16px", resolved="16px", source="root"),
+    ]
+    elements = [
+        _el(0, "h1", "Hero", font_size="64px", font_weight="700"),
+        *_texts(10, 60, "p", "16px", "w" * 50),
+        *_texts(100, 3, "span", "16px", "Basic", font_weight="590"),
+        *_texts(110, 2, "span", "16px", "Note", font_weight="560"),
+    ]
+    page = _page(elements).model_copy(update={"css_variables": variables})
+    typography = analyze_typography([page])
+    # 590: a declared font-weight token on 3 elements; 700: the display level's weight;
+    # 680 declared but unused and 560 on two elements only stay out.
+    assert typography.weights_used == [400, 590, 700]
+    sheet = StylesheetInfo(
+        url="https://x.test/a.css",
+        variables=[CssVariable(name="--fw-medium", declared="560", source="stylesheet")],
+    )
+    elements.append(_el(120, "span", "Note", font_size="16px", font_weight="560"))
+    assert analyze_typography([_page(elements)], [sheet]).weights_used == [400, 560, 700]
 
 
 def test_body_is_never_renamed_code() -> None:
