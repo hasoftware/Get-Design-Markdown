@@ -10,6 +10,7 @@ import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rich.markup import escape
 from rich.table import Table
 
 from get_design_markdown.analyzer.analyze import DEFAULT_DELTA_E, run_analyze
@@ -81,7 +82,7 @@ def run_collect(url: str, *, out_root: Path, options: CaptureOptions) -> Path:
     """robots.txt check, browser capture, raw.json. Returns the site folder."""
     page_url = normalize_url(url)
     folder = site_dir(out_root, page_url)
-    console.print(f"[bold]Thu thập[/] {page_url} → {folder}")
+    console.print(f"[bold]Thu thập[/] {escape(page_url)} → {escape(str(folder))}")
     robots = asyncio.run(check_robots(page_url, timeout_s=min(options.timeout_s, ROBOTS_TIMEOUT_S)))
     report_robots(robots)
     with progress_status("Đang thu thập") as progress:
