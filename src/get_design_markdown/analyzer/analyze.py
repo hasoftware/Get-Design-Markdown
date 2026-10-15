@@ -118,6 +118,32 @@ def _token_values(palette: ColorPalette) -> dict[str, str]:
     return {token.name: token.value for token in palette.tokens}
 
 
+def _canvas_value(palette: ColorPalette) -> str:
+    return _token_values(palette).get("canvas", "?")
+
+
+def _no_separate_dark_theme(light: ColorPalette, dark: ColorPalette) -> str | None:
+    """Why the prefers-color-scheme: dark capture is not a dark theme of its own (None if it is).
+
+    Measured capture noise (canvas and surface swapping, a token missing) must not become a
+    "dark theme": the dark capture counts only when its canvas is dark while the default capture's
+    canvas is light.
+    """
+    if _token_values(dark) == _token_values(light):
+        return "Bản dark mode giống hệt bản sáng — trang không có giao diện tối riêng, đã bỏ qua."
+    if dark.scheme != "dark":
+        return (
+            f"Bản dark mode vẫn có nền sáng (canvas {_canvas_value(dark)}) — trang không có "
+            "giao diện tối riêng, đã bỏ qua."
+        )
+    if light.scheme == "dark":
+        return (
+            f"Trang vốn dùng nền tối (canvas {_canvas_value(light)}) ở cả hai bản chụp — "
+            "không có giao diện tối riêng, đã bỏ qua bản dark mode."
+        )
+    return None
+
+
 def _build_stats(raw: RawCapture, palette: ColorPalette, component_count: int) -> AnalysisStats:
     variable_names = {variable.name for page in raw.pages for variable in page.css_variables}
     variable_names.update(
@@ -211,13 +237,11 @@ def analyze_capture(
             None,
         )
         if dark_palette is not None and dark_palette.tokens:
-            if _token_values(dark_palette) == _token_values(palette):
-                warnings.append(
-                    "Bản dark mode giống hệt bản sáng — trang không có giao diện tối riêng, "
-                    "đã bỏ qua."
-                )
-            else:
+            reason = _no_separate_dark_theme(palette, dark_palette)
+            if reason is None:
                 dark_theme = ThemeAnalysis(colors=dark_palette)
+            else:
+                warnings.append(reason)
 
     if runner.skipped and len(runner.skipped) == runner.attempted:
         raise NotImplementedYetError(

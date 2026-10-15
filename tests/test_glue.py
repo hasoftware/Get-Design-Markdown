@@ -144,6 +144,47 @@ def test_analyze_capture_drops_identical_dark_theme(
     assert any("dark mode" in warning for warning in result.warnings)
 
 
+def test_analyze_capture_drops_a_dark_capture_with_a_light_canvas(
+    sample_analyzers: DesignAnalysis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # stripe.com: the dark capture swaps canvas and surface but stays white.
+    light = sample_analyzers.colors
+    swapped = [
+        token.model_copy(update={"value": "#f8fafc" if token.name == "canvas" else "#ffffff"})
+        if token.name in ("canvas", "surface")
+        else token
+        for token in light.tokens
+    ]
+    noisy = light.model_copy(update={"tokens": swapped})
+
+    def fake_colors(pages: list[PageCapture], *args: Any, **kwargs: Any) -> ColorPalette:
+        return noisy if pages[0].color_scheme == "dark" else light
+
+    monkeypatch.setattr(colors, "analyze_colors", fake_colors)
+    result = analyze.analyze_capture(load_raw_sample())
+    assert result.dark is None
+    assert any("nền sáng (canvas #f8fafc)" in warning for warning in result.warnings)
+
+
+def test_analyze_capture_drops_a_dark_capture_of_a_dark_only_site(
+    sample_analyzers: DesignAnalysis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # linear.app: dark by default; the dark capture only lost the primary token.
+    assert sample_analyzers.dark is not None
+    dark = sample_analyzers.dark.colors
+    without_primary = dark.model_copy(
+        update={"tokens": [token for token in dark.tokens if token.name != "primary"]}
+    )
+
+    def fake_colors(pages: list[PageCapture], *args: Any, **kwargs: Any) -> ColorPalette:
+        return without_primary if pages[0].color_scheme == "dark" else dark
+
+    monkeypatch.setattr(colors, "analyze_colors", fake_colors)
+    result = analyze.analyze_capture(load_raw_sample())
+    assert result.dark is None
+    assert any("vốn dùng nền tối" in warning for warning in result.warnings)
+
+
 def test_analyze_capture_rejects_empty_capture() -> None:
     raw = load_raw_sample()
     with pytest.raises(AnalysisError):
