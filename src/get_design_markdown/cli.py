@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import functools
 import io
+import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, ParamSpec, TypeVar
+from typing import Annotated, Any, ParamSpec, TypeVar
 
 import typer
+from typer import rich_utils
+from typer.core import TyperCommand, TyperGroup
 
 from get_design_markdown import __version__
 from get_design_markdown.analyzer.analyze import DEFAULT_DELTA_E, run_analyze
@@ -26,12 +29,62 @@ from get_design_markdown.synthesizer.synthesize import run_synthesize
 P = ParamSpec("P")
 R = TypeVar("R")
 
+# ─── Vietnamese help screens ─────────────────────────────────────────────────
+
+HELP_OPTION_TEXT = "Hiện hướng dẫn này rồi thoát."
+USAGE_PREFIX = "Cách dùng: "
+
+
+def _localize_help_option(option: Any) -> Any:
+    if option is not None:
+        option.help = HELP_OPTION_TEXT
+    return option
+
+
+class VietnameseGroup(TyperGroup):
+    """The gdm group: Vietnamese --help/-h text and usage prefix."""
+
+    def get_help_option(self, ctx: Any) -> Any:
+        return _localize_help_option(super().get_help_option(ctx))
+
+    def format_usage(self, ctx: Any, formatter: Any) -> None:
+        pieces = self.collect_usage_pieces(ctx)
+        formatter.write_usage(ctx.command_path, " ".join(pieces), prefix=USAGE_PREFIX)
+
+
+class VietnameseCommand(TyperCommand):
+    """A gdm sub-command: Vietnamese --help/-h text and usage prefix."""
+
+    def get_help_option(self, ctx: Any) -> Any:
+        return _localize_help_option(super().get_help_option(ctx))
+
+    def format_usage(self, ctx: Any, formatter: Any) -> None:
+        pieces = self.collect_usage_pieces(ctx)
+        formatter.write_usage(ctx.command_path, " ".join(pieces), prefix=USAGE_PREFIX)
+
+
+def _localize_help_screen() -> None:
+    """Panel titles and labels of Typer's Rich help screens (read when a screen is drawn)."""
+    rich_utils.ARGUMENTS_PANEL_TITLE = "Tham số"
+    rich_utils.OPTIONS_PANEL_TITLE = "Tùy chọn"
+    rich_utils.COMMANDS_PANEL_TITLE = "Lệnh"
+    rich_utils.ERRORS_PANEL_TITLE = "Lỗi"
+    rich_utils.ABORTED_TEXT = "Đã hủy."
+    rich_utils.DEFAULT_STRING = "[mặc định: {}]"
+    rich_utils.REQUIRED_LONG_STRING = "[bắt buộc]"
+    rich_utils.RICH_HELP = "Chạy [blue]'{command_path} {help_option}'[/] để xem hướng dẫn."
+
+
+_localize_help_screen()
+
 app = typer.Typer(
     name="gdm",
     help=(
         "Trích xuất ngôn ngữ thiết kế của một trang web thành DESIGN.md "
         "(spec DESIGN.md của Google Labs) để AI coding agent tạo UI theo phong cách tương tự."
     ),
+    cls=VietnameseGroup,
+    context_settings={"help_option_names": ["--help", "-h"]},
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_show_locals=False,
@@ -138,7 +191,7 @@ DeltaEOption = Annotated[
 ]
 
 
-@app.command()
+@app.command(cls=VietnameseCommand)
 @handle_errors
 def collect(
     url: Annotated[str, typer.Argument(help="URL trang cần phân tích, ví dụ https://stripe.com")],
@@ -153,7 +206,7 @@ def collect(
     run_collect(url, out_root=out or settings.output_dir, options=options)
 
 
-@app.command()
+@app.command(cls=VietnameseCommand)
 @handle_errors
 def analyze(target: TargetArgument, delta_e: DeltaEOption = DEFAULT_DELTA_E) -> None:
     """Tầng 2: phân tích raw.json → analysis.json (thuần code, không dùng AI)."""
@@ -161,7 +214,7 @@ def analyze(target: TargetArgument, delta_e: DeltaEOption = DEFAULT_DELTA_E) -> 
     run_analyze(folder, threshold=delta_e)
 
 
-@app.command()
+@app.command(cls=VietnameseCommand)
 @handle_errors
 def synthesize(
     target: TargetArgument,
@@ -174,7 +227,7 @@ def synthesize(
     run_synthesize(folder, lang=lang.value, prompt_only=prompt_only, examples=examples)
 
 
-@app.command()
+@app.command(cls=VietnameseCommand)
 @handle_errors
 def export(target: TargetArgument, open_browser: OpenOption = False) -> None:
     """Xuất tokens.json (W3C Design Tokens) và preview.html từ analysis.json."""
@@ -184,7 +237,7 @@ def export(target: TargetArgument, open_browser: OpenOption = False) -> None:
         open_result(folder)
 
 
-@app.command()
+@app.command(cls=VietnameseCommand)
 @handle_errors
 def get(
     url: Annotated[str, typer.Argument(help="URL trang cần phân tích.")],
@@ -221,6 +274,115 @@ def _ensure_utf8_stdio() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
+# ─── Vietnamese usage errors ─────────────────────────────────────────────────
+
+_Table = list[tuple["re.Pattern[str]", str]]
+
+#: Click/Typer usage messages (English, hard-coded) -> Vietnamese; full matches, in order.
+_USAGE_MESSAGES: _Table = [
+    (re.compile(r"Missing argument (?P<name>.+)\."), "Thiếu tham số bắt buộc {name}."),
+    (re.compile(r"Missing option (?P<name>.+)\."), "Thiếu tùy chọn bắt buộc {name}."),
+    (re.compile(r"Missing parameter:? ?(?P<name>.*?)\.?"), "Thiếu tham số {name}."),
+    (re.compile(r"Missing command\."), "Thiếu lệnh."),
+    (
+        re.compile(r"No such command (?P<name>.+?)\. Did you mean (?P<suggestion>.+)\?"),
+        "Không có lệnh {name}. Có phải ý bạn là {suggestion}?",
+    ),
+    (re.compile(r"No such command (?P<name>.+)\."), "Không có lệnh {name}."),
+    (
+        re.compile(r"No such option: (?P<name>\S+) \(Possible options: (?P<suggestion>.+)\)"),
+        "Không có tùy chọn {name}. Có phải ý bạn là {suggestion}?",
+    ),
+    (re.compile(r"No such option: (?P<name>\S+)"), "Không có tùy chọn {name}."),
+    (re.compile(r"Option (?P<name>.+) requires an argument\."), "Tùy chọn {name} cần một giá trị."),
+    (
+        re.compile(r"Option (?P<name>.+) requires (?P<count>\d+) arguments\."),
+        "Tùy chọn {name} cần {count} giá trị.",
+    ),
+    (
+        re.compile(r"Option (?P<name>.+) does not take a value\."),
+        "Tùy chọn {name} không nhận giá trị.",
+    ),
+    (
+        re.compile(r"Got unexpected extra arguments? ?(\(s\))? \((?P<args>.*)\)"),
+        "Thừa tham số không dùng tới: {args}.",
+    ),
+    (
+        re.compile(r"Invalid value for (?P<name>.+?): (?P<detail>.+)", re.DOTALL),
+        "Giá trị không hợp lệ cho {name}: {detail}",
+    ),
+    (re.compile(r"Invalid value: (?P<detail>.+)", re.DOTALL), "Giá trị không hợp lệ: {detail}"),
+]
+
+#: Reasons after "Invalid value for X:" (parameter types).
+_VALUE_MESSAGES: _Table = [
+    (
+        re.compile(r"(?P<value>.+) is not in the range (?P<range>.+)\."),
+        "{value} nằm ngoài khoảng {range}.",
+    ),
+    (
+        re.compile(r"(?P<value>.+) is not a valid integer( range)?\."),
+        "{value} không phải số nguyên.",
+    ),
+    (re.compile(r"(?P<value>.+) is not a valid float( range)?\."), "{value} không phải số thực."),
+    (
+        re.compile(r"(?P<value>.+) is not a valid boolean\..*", re.DOTALL),
+        "{value} không phải giá trị đúng/sai.",
+    ),
+    (
+        re.compile(r"(?P<value>.+) is not one of (?P<choices>.+)\."),
+        "{value} không thuộc các giá trị {choices}.",
+    ),
+]
+
+
+def _translate(message: str, table: _Table) -> str | None:
+    for pattern, template in table:
+        match = pattern.fullmatch(message.strip())
+        if match is not None:
+            return template.format(**{k: v for k, v in match.groupdict().items() if v is not None})
+    return None
+
+
+def translate_usage_error(message: str) -> str:
+    """Vietnamese text of a Click/Typer usage error; unknown messages are kept as they are."""
+    for pattern, template in _USAGE_MESSAGES:
+        match = pattern.fullmatch(message.strip())
+        if match is None:
+            continue
+        fields = {key: value for key, value in match.groupdict().items() if value is not None}
+        if "detail" in fields:
+            fields["detail"] = _translate(fields["detail"], _VALUE_MESSAGES) or fields["detail"]
+        return template.format(**fields)
+    return message
+
+
+def _print_usage_error(error: typer.TyperException) -> None:
+    ctx = getattr(error, "ctx", None)
+    hint = "chạy lệnh kèm --help để xem hướng dẫn."
+    if ctx is not None:
+        err_console.print(ctx.get_usage(), markup=False, highlight=False)
+        if ctx.command.get_help_option(ctx) is not None:
+            hint = f"chạy '{ctx.command_path} {ctx.help_option_names[0]}' để xem hướng dẫn."
+    print_error(GdmError(translate_usage_error(error.format_message()), hint=hint))
+
+
+def run(argv: Sequence[str] | None = None) -> int:
+    """Run gdm and return its exit code; usage errors are printed in Vietnamese."""
+    try:
+        result = app(args=None if argv is None else list(argv), standalone_mode=False)
+    except typer.TyperException as error:
+        # Click usage errors: missing argument, unknown command or option, bad value...
+        # For a bare `gdm` (NoArgsIsHelpError) Typer has already drawn the help screen.
+        if type(error).__name__ != "NoArgsIsHelpError":
+            _print_usage_error(error)
+        return error.exit_code
+    except typer.Abort:
+        err_console.print("[yellow]Đã hủy.[/]")
+        return 1
+    return result if isinstance(result, int) else 0
+
+
 def main() -> None:
     _ensure_utf8_stdio()
-    app()
+    sys.exit(run())

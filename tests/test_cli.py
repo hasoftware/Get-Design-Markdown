@@ -63,3 +63,61 @@ def test_analyze_missing_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_get_validates_pages_range() -> None:
     result = runner.invoke(cli.app, ["get", "stripe.com", "--pages", "99"])
     assert result.exit_code == 2
+
+
+# ─── Vietnamese usage errors and help (cli.run) ──────────────────────────────
+
+
+def _run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:
+    code = cli.run(list(args))
+    captured = capsys.readouterr()
+    return code, " ".join((captured.out + captured.err).split())
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (("analyze",), "Lỗi: Thiếu tham số bắt buộc 'target'."),
+        (("bogus",), "Lỗi: Không có lệnh 'bogus'."),
+        (("anlyze",), "Không có lệnh 'anlyze'. Có phải ý bạn là 'analyze'?"),
+        (("analyze", "x", "--bogus"), "Lỗi: Không có tùy chọn --bogus."),
+        (
+            ("collect", "--pages", "11", "https://example.com"),
+            "Giá trị không hợp lệ cho '--pages': 11 nằm ngoài khoảng 0<=x<=10.",
+        ),
+        (("analyze", "x", "--delta-e", "abc"), "'abc' không phải số thực."),
+        (("synthesize", "x", "--lang", "fr"), "'fr' không thuộc các giá trị 'en', 'vi'."),
+        (("analyze", "a", "b"), "Thừa tham số không dùng tới: b."),
+        (("analyze", "--delta-e"), "Tùy chọn '--delta-e' cần một giá trị."),
+    ],
+)
+def test_usage_errors_are_vietnamese(
+    capsys: pytest.CaptureFixture[str], args: tuple[str, ...], expected: str
+) -> None:
+    code, output = _run(capsys, *args)
+    assert code == 2
+    assert expected in output
+    assert "Gợi ý:" in output and "--help" in output
+    for english in ("Missing", "No such", "Invalid value", "Try '", "Usage:", "Error"):
+        assert english not in output, english
+
+
+def test_unknown_usage_messages_are_kept() -> None:
+    assert cli.translate_usage_error("Something new.") == "Something new."
+
+
+def test_help_is_vietnamese(capsys: pytest.CaptureFixture[str]) -> None:
+    for args in (["-h"], ["analyze", "--help"], ["get", "-h"]):
+        code, output = _run(capsys, *args)
+        assert code == 0
+        assert "Cách dùng:" in output
+        assert "Hiện hướng dẫn này rồi" in output
+        assert "Show this message" not in output and "Usage:" not in output
+    _, output = _run(capsys, "analyze", "--help")
+    assert "Tham số" in output and "Tùy chọn" in output and "[bắt buộc]" in output
+
+
+def test_run_returns_the_command_exit_code(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _run(capsys, "--version")[0] == 0
+    code, output = _run(capsys, "collect", "ftp://stripe.com")
+    assert code == 1 and "Lỗi:" in output
