@@ -329,10 +329,11 @@ số hay tham chiếu nào bị đổi.
   nhóm màu, typography, kích thước (spacing, bo góc), đổ bóng, breakpoint, alias cho component
   (`{color.primary}`) và nhóm `dark` khi có dữ liệu dark mode. Mỗi token có `$type` và `$value`, có
   thể nạp vào Style Dictionary, Tokens Studio hay các công cụ hỗ trợ DTCG.
-- **`preview.html`** là trang tĩnh tự chứa (CSS/JS viết inline, không tải gì từ mạng): ô màu kèm
-  mã hex, vai trò và độ tương phản; mẫu từng cấp chữ; button, input, card, badge, navigation dựng
-  lại từ thông số (kể cả hover); thang spacing, bo góc, đổ bóng; nút chuyển light/dark nếu có dữ
-  liệu dark mode. Mở bằng `gdm export <thư-mục> --open` hoặc `gdm get <url> --open`.
+- **`preview.html`** là trang tĩnh tự chứa (CSS/JS viết inline; tài nguyên ngoài duy nhất là một
+  stylesheet Google Fonts tùy chọn cho font của trang, khi offline trang dùng font dự phòng): ô
+  màu kèm mã hex, vai trò và độ tương phản; mẫu từng cấp chữ; button, input, card, badge,
+  navigation dựng lại từ thông số (kể cả hover); thang spacing, bo góc, đổ bóng; nút chuyển
+  light/dark nếu có dữ liệu dark mode. Mở bằng `gdm export <thư-mục> --open` hoặc `gdm get <url> --open`.
 
 ## Biến môi trường
 

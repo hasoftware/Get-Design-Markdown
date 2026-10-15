@@ -109,6 +109,9 @@ TYPOGRAPHY_PROPERTIES: Final = (
 )
 COLOR_PROPERTIES: Final = ("backgroundColor", "textColor", "borderColor", "placeholderColor")
 #: ComponentSpec.properties / states keys documented in models/analysis.py (frozen contract).
+#: The single external stylesheet preview.html may load (Google Fonts for the site's families).
+GOOGLE_FONTS_CSS2: Final = "https://fonts.googleapis.com/css2?"
+
 COMPONENT_PROPERTY_KEYS: Final = (
     "backgroundColor",
     "textColor",
@@ -2458,7 +2461,12 @@ def _check_preview(
             "preview.script",
             f"preview.html nạp script ngoài '{source}' — trang phải tự chứa (JS viết inline).",
         )
+    google_fonts = [href for href in parser.stylesheets if href.startswith(GOOGLE_FONTS_CSS2)]
     for href in parser.stylesheets:
+        if href.startswith(GOOGLE_FONTS_CSS2) and len(google_fonts) == 1:
+            # One optional Google Fonts stylesheet is allowed; offline the page falls back to
+            # the font stacks.
+            continue
         report.warning(
             "preview.external",
             f"preview.html nạp stylesheet ngoài '{href}' — nên viết CSS inline.",

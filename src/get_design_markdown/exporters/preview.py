@@ -978,7 +978,8 @@ def _screenshot_links(analysis: DesignAnalysis) -> list[LinkView]:
 
 
 def render_preview(analysis: DesignAnalysis) -> str:
-    """Self-contained HTML (inline CSS/JS, no network): color swatches with hex + role +
+    """Self-contained HTML (inline CSS/JS; the only external resource is one optional Google
+    Fonts stylesheet, offline the font stacks apply): color swatches with hex + role +
     contrast, typography specimens per level, buttons/inputs/cards/badges/nav rebuilt from
     ComponentSpec with hover styles, spacing/radius/shadow scales, light/dark toggle when
     analysis.dark exists (pure; templates/preview.html.j2)."""

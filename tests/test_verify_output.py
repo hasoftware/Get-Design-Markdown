@@ -85,6 +85,17 @@ def test_valid_folder_has_no_findings(valid_folder: Path) -> None:
     assert run_verify(valid_folder) == []
 
 
+def test_one_google_fonts_stylesheet_is_allowed(valid_folder: Path) -> None:
+    link = (
+        '<link rel="stylesheet" '
+        'href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;display=swap">'
+    )
+    edit_text(valid_folder, "preview.html", "</head>", f"{link}</head>")
+    assert run_verify(valid_folder) == []
+    edit_text(valid_folder, "preview.html", "</head>", f"{link}</head>")
+    assert checks(run_verify(valid_folder), "warning") == {"preview.external"}
+
+
 def test_cli_table_on_valid_folder(valid_folder: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert verify_output.main([str(valid_folder)]) == 0
     output = capsys.readouterr().out
@@ -491,6 +502,16 @@ CORRUPTIONS: list[Any] = [
         "preview.script",
         "error",
         id="preview-external-script",
+    ),
+    pytest.param(
+        _text(
+            "preview.html",
+            "</head>",
+            '<link rel="stylesheet" href="https://cdn.example.com/theme.css"></head>',
+        ),
+        "preview.external",
+        "warning",
+        id="preview-external-stylesheet",
     ),
     pytest.param(
         _text("preview.html", "#16a34a", "green"),
