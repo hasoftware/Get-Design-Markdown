@@ -1,8 +1,11 @@
 """Rendered DESIGN.md files must pass the official linter (`@google/design.md lint`) with 0 errors.
 
-Skipped when npx is missing or the package cannot be fetched. The `designmd` bin alias is used
-instead of `design.md`: on Windows a command named "design.md" resolves to the .md file
-association instead of the package's .cmd shim.
+The linter is downloaded through npx (it needs npm and, on first use, network access); the
+tests skip when npx is missing or the package cannot be fetched. PACKAGE pins the same exact
+version as the DESIGN_MD_LINTER variable of .github/workflows/ci.yml, so local results do not
+depend on the latest release of an alpha spec. The `designmd` bin alias is used instead of
+`design.md`: on Windows a command named "design.md" resolves to the .md file association instead
+of the package's .cmd shim.
 
 Warnings recorded on the Acme sample: two "orphaned-tokens" (`hairline` is only used as a
 component borderColor, which is not a spec property; `success` is used by no component).
@@ -26,7 +29,8 @@ from get_design_markdown.synthesizer.render import render_design_md
 from tests.fixture_data import load_analysis_sample
 
 LINT_TIMEOUT_S = 180
-PACKAGE = "@google/design.md"
+#: Bumped by hand together with DESIGN_MD_LINTER in .github/workflows/ci.yml.
+PACKAGE = "@google/design.md@0.4.0"
 
 
 def _run_linter(path: Path) -> dict[str, Any]:
@@ -113,3 +117,11 @@ def test_official_linter_reports_no_errors(
             finding["path"] for finding in findings if finding.get("rule") == "orphaned-tokens"
         )
         assert orphans == ["colors.hairline", "colors.success"]
+
+
+def test_linter_version_matches_ci() -> None:
+    import yaml
+
+    ci_file = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(ci_file.read_text(encoding="utf-8"))
+    assert workflow["env"]["DESIGN_MD_LINTER"] == PACKAGE
