@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Trích xuất ngôn ngữ thiết kế của một trang web thành DESIGN.md cho AI coding agent."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "hasoftware", email = "hoanganhuet@hotmail.com" }]
 dependencies = [
     "coloraide>=4.0",
     "httpx>=0.27",
@@ -18,6 +21,9 @@ dependencies = [
     "typer>=0.12",
 ]
 
+[project.urls]
+Repository = "https://github.com/hasoftware/Get-Design-Markdown"
+
 [project.scripts]
 get-design-markdown = "get_design_markdown.cli:main"
 gdm = "get_design_markdown.cli:main"
@@ -31,7 +37,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
