@@ -894,6 +894,8 @@ def _ordered_components(components: Sequence[ComponentSpec]) -> list[ComponentSp
 
 
 def _render_kind(spec: ComponentSpec) -> str:
+    if spec.kind is ComponentKind.INPUT and spec.variant == MULTILINE_VARIANT:
+        return "textarea"
     return {
         ComponentKind.BUTTON: "button",
         ComponentKind.LINK: "link",
@@ -930,9 +932,15 @@ def _format_params(params: Mapping[str, float]) -> str:
     return " · ".join(parts)
 
 
+#: Variant the components analyzer gives a <textarea> field ("text-area").
+MULTILINE_VARIANT = "multiline"
+
+
 def _component_label(spec: ComponentSpec) -> str:
     if spec.kind is ComponentKind.INPUT:
-        return "you@example.com"
+        if spec.variant == MULTILINE_VARIANT:
+            return "Message"
+        return "you@example.com" if "input[type=email]" in spec.samples else "Text"
     sample = next((text for text in spec.samples if text.strip()), "")
     if sample and spec.kind not in (ComponentKind.NAVIGATION, ComponentKind.FOOTER):
         return _text(sample, 32)

@@ -402,7 +402,9 @@ table.pv-table{width:100%;border-collapse:collapse;font-size:13px}
 {% elif item.render == "badge" %}
 <span class="cmp ck-badge {{ item.css_class }}{{ twin }}">{{ item.label }}</span>
 {% elif item.render == "input" %}
-<input class="cmp ck-input {{ item.css_class }}{{ twin }}" type="email" placeholder="{{ item.label }}" aria-label="{{ item.name }}">
+<input class="cmp ck-input {{ item.css_class }}{{ twin }}" type="{{ 'email' if '@' in item.label else 'text' }}" placeholder="{{ item.label }}" aria-label="{{ item.name }}">
+{% elif item.render == "textarea" %}
+<textarea class="cmp ck-input {{ item.css_class }}{{ twin }}" rows="3" placeholder="{{ item.label }}" aria-label="{{ item.name }}"></textarea>
 {% elif item.render == "card" %}
 <div class="cmp ck-card {{ item.css_class }}{{ twin }}"><p class="pv-card-title {{ item.title_class }}">{{ item.label }}</p><p class="pv-card-body {{ item.body_class }}">Rebuilt from the measured surface, border, radius, padding and shadow of this card.</p></div>
 {% elif item.render == "nav" %}

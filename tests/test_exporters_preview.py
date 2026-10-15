@@ -363,3 +363,22 @@ def test_no_substitute_without_a_google_candidate(monkeypatch: pytest.MonkeyPatc
     html = render_preview(_proprietary_font_analysis())
     assert "<link" not in html
     assert '--font-primary:"sohne-var", "SF Pro Display", sans-serif' in html
+
+
+def test_text_area_is_rendered_as_a_textarea() -> None:
+    analysis = load_analysis_sample()
+    field = next(spec for spec in analysis.components if spec.name == "text-input")
+    field.name, field.variant, field.samples = "text-area", "multiline", ["textarea"]
+    field.properties.pop("height", None)
+    html = render_preview(analysis)
+    assert re.search(r'<textarea class="cmp ck-input [^"]*" rows="3" placeholder="Message"', html)
+    assert "you@example.com" not in html
+
+
+def test_only_an_email_input_gets_an_email_placeholder() -> None:
+    assert 'type="email" placeholder="you@example.com"' in render_preview(load_analysis_sample())
+    analysis = load_analysis_sample()
+    field = next(spec for spec in analysis.components if spec.name == "text-input")
+    field.samples = ["input[type=text]"]
+    html = render_preview(analysis)
+    assert 'type="text" placeholder="Text"' in html and "you@example.com" not in html
