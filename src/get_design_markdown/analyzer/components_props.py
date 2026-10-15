@@ -18,6 +18,7 @@ from get_design_markdown.analyzer.common import (
 from get_design_markdown.analyzer.components_context import (
     Member,
     PageContext,
+    backdrop,
     canonical_color,
     css_color,
     first_visible_side,
@@ -33,7 +34,9 @@ from get_design_markdown.analyzer.css_values import (
     DEFAULT_FONT_SIZE_PX,
     NORMAL_LINE_HEIGHT,
     RGBA,
+    composite,
     contrast_ratio,
+    delta_e_2000,
     format_box_shadow,
     format_px,
     format_sides_px,
@@ -45,6 +48,7 @@ from get_design_markdown.analyzer.css_values import (
     parse_opacity,
     parse_px,
     primary_font_family,
+    to_oklch,
     visible_shadow_layers,
 )
 from get_design_markdown.analyzer.naming import (
@@ -63,6 +67,7 @@ from get_design_markdown.analyzer.naming import (
 from get_design_markdown.models.analysis import (
     ColorPalette,
     ColorRole,
+    ColorToken,
     ScaleStep,
     SpacingSystem,
     Typography,
@@ -87,6 +92,15 @@ _ROLES_BY_KEY: dict[str, frozenset[ColorRole]] = {
 #: equal the hairline is still a fill), and translucent colors only match the same alpha.
 _FILL_KEYS = frozenset({"backgroundColor", "textColor", "placeholderColor"})
 _REF_MAX_ALPHA_DIFF = 0.01
+REF_MAX_DELTA_E = 3.0
+#: Hover colors this dark (OKLCH lightness, as seen) only snap to a token this close:
+#: CIEDE2000 compresses lightness steps near black (#191a1b vs #0f1011 is only ΔE 2.8).
+DARK_LIGHTNESS = 0.3
+DARK_REF_MAX_DELTA_E = 1.5
+#: Smaller lightness changes (OKLCH) do not give a hover a direction.
+HOVER_LIGHTNESS_EPSILON = 0.005
+#: A component's letter-spacing must match its type level's within this (px).
+_LETTER_SPACING_TOLERANCE_PX = 0.05
 
 #: Canonical order of ComponentSpec.properties keys.
 PROPERTY_ORDER = (
@@ -350,18 +364,22 @@ def color_ref(value: str, tokens: TokenContext, *, key: str) -> str | None:
     """{colors.<token>} of the closest palette token; near-ties go to the roles of `key`."""
     if value == "transparent":
         return None
-    candidates = [
+    token = match_color_token(
+        value,
+        _ref_candidates(tokens, key),
+        prefer_roles=_ROLES_BY_KEY[key],
+        max_alpha_diff=_REF_MAX_ALPHA_DIFF,
+        max_delta_e=REF_MAX_DELTA_E,
+    )
+    return None if token is None else token_ref(COLORS, token.name)
+
+
+def _ref_candidates(tokens: TokenContext, key: str) -> list[ColorToken]:
+    return [
         token
         for token in tokens.palette.tokens
         if key not in _FILL_KEYS or token.role != ColorRole.BORDER
     ]
-    token = match_color_token(
-        value,
-        candidates,
-        prefer_roles=_ROLES_BY_KEY[key],
-        max_alpha_diff=_REF_MAX_ALPHA_DIFF,
-    )
-    return None if token is None else token_ref(COLORS, token.name)
 
 
 def radius_ref(
@@ -387,7 +405,8 @@ def padding_ref(element: ElementSample, tokens: TokenContext) -> str | None:
 
 
 def typography_ref(style: TextStyle, tokens: TokenContext) -> str | None:
-    """Type level with the same size, the exact same weight and the same family."""
+    """Type level with the same size, the exact same weight, the same family and the same
+    letter-spacing (a reference stands for every value of the level)."""
     level = match_type_level(
         style.size_px,
         style.weight,
@@ -398,6 +417,8 @@ def typography_ref(style: TextStyle, tokens: TokenContext) -> str | None:
     if level is None or level.weight != style.weight:
         return None
     if level.font_family and level.font_family.lower() != style.family.lower():
+        return None
+    if abs(level.letter_spacing_px - style.letter_spacing_px) > _LETTER_SPACING_TOLERANCE_PX:
         return None
     return token_ref(TYPOGRAPHY, level.name)
 
@@ -497,13 +518,83 @@ def hover_state(members: Sequence[Member]) -> dict[str, str]:
 
 
 def states_and_refs(
-    members: Sequence[Member], tokens: TokenContext
+    members: Sequence[Member], tokens: TokenContext, canvas: RGBA
 ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
     hover = hover_state(members)
     if not hover:
         return {}, {}
-    refs = color_refs(hover, tokens)
+    source = next((member for member in members if hover_changes(member) == hover), None)
+    refs: dict[str, str] = {}
+    for key, value in hover.items():
+        if key not in _ROLES_BY_KEY:
+            continue
+        ref = (
+            color_ref(value, tokens, key=key)
+            if source is None
+            else hover_color_ref(value, source, tokens, key=key, canvas=canvas)
+        )
+        if ref is not None:
+            refs[key] = ref
     return {HOVER_STATE: hover}, ({HOVER_STATE: ordered_refs(refs)} if refs else {})
+
+
+def _resting_color(member: Member, key: str) -> RGBA | None:
+    """The member's resting value of a hover color property (None when unknown)."""
+    styles = member.element.styles
+    if key == "backgroundColor":
+        return parse_color(styles.background_color)
+    if key == "textColor":
+        return text_color(member.element)
+    if key == "borderColor":
+        border = visible_border(member.element)
+        return None if border is None else border[0]
+    return None
+
+
+def _shown(color: RGBA, behind: RGBA) -> RGBA:
+    return composite(color, behind).with_alpha(1.0)
+
+
+def keeps_change(token: RGBA, rest: RGBA, hover: RGBA, behind: RGBA) -> bool:
+    """A token stands for a hover color only when it reads as the hover, not the rest:
+    nearer the hover than the resting color, and on the same side of the resting lightness
+    (a hover that lightens never snaps to a darker token)."""
+    seen_token, seen_rest, seen_hover = (_shown(c, behind) for c in (token, rest, hover))
+    if delta_e_2000(seen_token, seen_hover) >= delta_e_2000(seen_token, seen_rest):
+        return False
+    rest_l = to_oklch(seen_rest).lightness
+    change = to_oklch(seen_hover).lightness - rest_l
+    if abs(change) < HOVER_LIGHTNESS_EPSILON:
+        return True
+    return (to_oklch(seen_token).lightness - rest_l) * change > 0
+
+
+def hover_color_ref(
+    value: str, member: Member, tokens: TokenContext, *, key: str, canvas: RGBA
+) -> str | None:
+    """{colors.<token>} of a hover color, keeping the direction of the change from the
+    member's resting color; dark hovers need a closer match (ΔE2000 shrinks near black)."""
+    hover = parse_color(value)
+    rest = _resting_color(member, key)
+    if hover is None or hover.is_transparent:
+        return None
+    if rest is None:
+        return color_ref(value, tokens, key=key)
+    behind = backdrop(member.ctx, member.element, canvas)
+    dark = to_oklch(_shown(hover, behind)).lightness < DARK_LIGHTNESS
+    candidates: list[ColorToken] = []
+    for candidate in _ref_candidates(tokens, key):
+        color = parse_color(candidate.value)
+        if color is not None and keeps_change(color, rest, hover, behind):
+            candidates.append(candidate)
+    token = match_color_token(
+        hover,
+        candidates,
+        prefer_roles=_ROLES_BY_KEY[key],
+        max_alpha_diff=_REF_MAX_ALPHA_DIFF,
+        max_delta_e=DARK_REF_MAX_DELTA_E if dark else REF_MAX_DELTA_E,
+    )
+    return None if token is None else token_ref(COLORS, token.name)
 
 
 def has_background_hover(members: Iterable[Member]) -> bool:

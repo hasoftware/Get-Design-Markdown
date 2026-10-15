@@ -22,7 +22,6 @@ How it works:
 
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -86,6 +85,8 @@ from get_design_markdown.analyzer.css_values import (
     format_box_shadow,
     format_px,
     format_sides_px,
+    gradient_colors,
+    parse_px,
 )
 from get_design_markdown.analyzer.naming import COMPONENT_NAME_ORDER, match_color_token
 from get_design_markdown.models.analysis import (
@@ -101,6 +102,13 @@ from get_design_markdown.models.raw import ElementSample, PageCapture
 
 #: Variants named after palette tokens of the same name.
 TOKEN_VARIANTS = ("primary", "secondary", "tertiary")
+#: Multi-line fields: not in naming.COMPONENT_NAME_ORDER, listed right after "text-input".
+TEXT_AREA_NAME = "text-area"
+_NAME_ORDER = tuple(
+    item
+    for name in COMPONENT_NAME_ORDER
+    for item in ((name, TEXT_AREA_NAME) if name == "text-input" else (name,))
+)
 RADIUS_TOLERANCE_PX = 0.5
 #: A weaker-shadow card group must be at least this prominent (vs the main one) to become
 #: the base "card" under a "card-elevated" main group.
@@ -150,8 +158,9 @@ def analyze_components(
 
 
 def sort_components(specs: Sequence[ComponentSpec]) -> list[ComponentSpec]:
-    """naming.COMPONENT_NAME_ORDER first, unknown names after (alphabetically)."""
-    rank = {name: position for position, name in enumerate(COMPONENT_NAME_ORDER)}
+    """naming.COMPONENT_NAME_ORDER first ("text-area" after "text-input"), unknown names
+    after (alphabetically)."""
+    rank = {name: position for position, name in enumerate(_NAME_ORDER)}
     return sorted(specs, key=lambda spec: (rank.get(spec.name, len(rank)), spec.name))
 
 
@@ -265,13 +274,22 @@ class _Builder:
         if ghosts:
             variants["ghost"] = ghosts
         specs: list[ComponentSpec] = []
+        # The first variant (the primary) sets the size class the others are shown at, so a
+        # documented pair ("Get started" / "Contact sales") is one size, as on the page.
+        anchor: Member | None = None
         for variant, groups in variants.items():
             group = _collapse(groups)
             specs.append(
                 self.text_component(
-                    f"button-{variant}", ComponentKind.BUTTON, variant, group.members
+                    f"button-{variant}",
+                    ComponentKind.BUTTON,
+                    variant,
+                    group.members,
+                    size_of=anchor,
                 )
             )
+            if anchor is None:
+                anchor = _representative(by_prominence(group.members))
         return specs
 
     def _filled_variants(self, groups: Sequence[Group], found: Detection) -> dict[str, list[Group]]:
@@ -380,12 +398,26 @@ class _Builder:
         )
 
     def inputs(self, found: Detection) -> list[ComponentSpec]:
-        group = _pick(group_members(found.inputs, _input_key, _same_input))
-        if group is None:
-            return []
-        return [
-            self.text_component("text-input", ComponentKind.INPUT, None, group.members, field=True)
-        ]
+        """text-input from single-line fields; text-area from <textarea> (no fixed height:
+        it follows the rows/content, and must not size a one-line field)."""
+        specs: list[ComponentSpec] = []
+        for name, variant, pool in (
+            ("text-input", None, found.inputs),
+            (TEXT_AREA_NAME, "multiline", found.text_areas),
+        ):
+            group = _pick(group_members(pool, _input_key, _same_input))
+            if group is not None:
+                specs.append(
+                    self.text_component(
+                        name,
+                        ComponentKind.INPUT,
+                        variant,
+                        group.members,
+                        field=True,
+                        fixed_height=pool is found.inputs,
+                    )
+                )
+        return specs
 
     # Containers ──────────────────────────────────────────────────────────
 
@@ -446,17 +478,25 @@ class _Builder:
         *,
         link: bool = False,
         field: bool = False,
+        fixed_height: bool = True,
+        size_of: Member | None = None,
     ) -> ComponentSpec:
-        """Button / link / input / badge: box properties plus text style."""
+        """Button / link / input / badge: box properties plus text style.
+
+        `size_of`: prefer a representative of the same size class as this member (paired
+        buttons are documented at one size)."""
         members = by_prominence(members)
-        representative = _representative(members)
+        representative = _representative(members, size_of=size_of)
         ctx, element = representative.ctx, representative.element
         source = text_source(ctx, element)
         style = text_style(source, self.tokens.typography)
         holder = _padding_holder(ctx, element)
         padded = any(side > 0 for side in padding_px(holder))
         properties = box_properties(
-            element, background=True, height=not link or padded, padding_from=holder
+            element,
+            background=True,
+            height=fixed_height and (not link or padded),
+            padding_from=holder,
         )
         if link and properties.get("backgroundColor") == "transparent":
             del properties["backgroundColor"]
@@ -477,7 +517,7 @@ class _Builder:
         type_ref = typography_ref(style, self.tokens)
         if type_ref is not None:
             refs["typography"] = type_ref
-        states, state_refs = states_and_refs(members, self.tokens)
+        states, state_refs = states_and_refs(members, self.tokens, self.canvas)
         if field:
             samples = collect_samples(input_sample(m.element) for m in members)
         else:
@@ -716,14 +756,31 @@ def _collapse(groups: Sequence[Group]) -> Group:
     return main
 
 
-def _representative(members: Sequence[Member]) -> Member:
-    """Most prominent member among those with the group's most common background."""
-    counts = Counter(background_property(member.element) for member in members)
-    best = max(counts.values())
+def _representative(members: Sequence[Member], *, size_of: Member | None = None) -> Member:
+    """Most prominent member (members come most prominent first) among those with the
+    group's most seen background — votes weighted by prominence, so the hero instance of an
+    outline button outweighs two plain ones far down the page. With `size_of`, a member of
+    the same size class is preferred when the group has one."""
+    seen: dict[str, float] = {}
     for member in members:
-        if counts[background_property(member.element)] == best:
-            return member
-    return members[0]
+        key = background_property(member.element)
+        seen[key] = seen.get(key, 0.0) + member.prominence
+    best = max(seen.values(), default=0.0)
+    pool = [member for member in members if seen[background_property(member.element)] == best]
+    pool = pool or list(members)
+    if size_of is not None:
+        target = _size_class(size_of)
+        same = [member for member in pool if _size_class(member) == target]
+        if same:
+            return same[0]
+    return pool[0]
+
+
+def _size_class(member: Member) -> tuple[int, float]:
+    """(height, label font size) rounded: "small" / "medium" / "large" button classes."""
+    source = text_source(member.ctx, member.element)
+    size = parse_px(source.styles.font_size) or 0.0
+    return round(member.element.box.height), round(size * 2) / 2
 
 
 def _padding_holder(ctx: PageContext, element: ElementSample) -> ElementSample:
@@ -796,17 +853,32 @@ def _padding_source(ctx: PageContext, element: ElementSample) -> ElementSample:
 
 
 def _covering_background(ctx: PageContext, element: ElementSample) -> str | None:
-    """Background of a descendant covering most of a transparent container."""
+    """Fill seen on a transparent container: the background color of a descendant covering
+    most of it, else the tint of a gradient painted by the container or by such a
+    descendant (a translucent dark gradient behind a blurred header), alpha kept."""
     area = element.box.area
     if area <= 0:
         return None
-    for node in ctx.descendants(element, max_depth=3):
-        if node.box.area < COVERING_AREA_SHARE * area:
-            continue
+    covering = [
+        node
+        for node in ctx.descendants(element, max_depth=3)
+        if node.box.area >= COVERING_AREA_SHARE * area
+    ]
+    for node in covering:
         color = own_background(node)
         if color is not None:
             return css_color(color)
+    for node in (element, *covering):
+        tint = _gradient_tint(node)
+        if tint is not None:
+            return css_color(tint)
     return None
+
+
+def _gradient_tint(element: ElementSample) -> RGBA | None:
+    """First visible color stop of the element's background gradient (None without one)."""
+    stops = gradient_colors(element.styles.background_image)
+    return next((stop for stop in stops if not stop.is_transparent), None)
 
 
 def _chrome_hints(ctx: PageContext, element: ElementSample) -> list[str]:

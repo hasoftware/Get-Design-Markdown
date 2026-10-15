@@ -133,6 +133,8 @@ class Detection:
     nav_links: list[Member] = field(default_factory=list)
     text_links: list[Member] = field(default_factory=list)
     inputs: list[Member] = field(default_factory=list)
+    #: Multi-line fields (<textarea>): their height follows rows/content, not the design.
+    text_areas: list[Member] = field(default_factory=list)
     cards: list[Member] = field(default_factory=list)
     badges: list[Member] = field(default_factory=list)
     top_nav: Member | None = None
@@ -237,6 +239,11 @@ def is_text_input(element: ElementSample) -> bool:
         return False
     kind = (element.input_type or "text").lower()
     return kind in TEXT_INPUT_TYPES
+
+
+def is_multiline(element: ElementSample) -> bool:
+    """A multi-line text field (<textarea>)."""
+    return element.tag == "textarea"
 
 
 def _is_labelled(element: ElementSample) -> bool:
@@ -639,7 +646,8 @@ def _detect_page(ctx: PageContext, canvas: RGBA, decorative: set[int], found: De
             continue
         if is_text_input(element):
             if input_candidate(element):
-                found.inputs.append(make_member(ctx, element))
+                pool = found.text_areas if is_multiline(element) else found.inputs
+                pool.append(make_member(ctx, element))
             continue
         if is_clickable(element) and nav_link_candidate(ctx, element):
             found.nav_links.append(make_member(ctx, element))

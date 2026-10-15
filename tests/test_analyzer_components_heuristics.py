@@ -195,16 +195,59 @@ def test_borderless_field_takes_its_frame_from_wrappers() -> None:
         background_color=WHITE,
         padding=("11px", "17px", "11px", "17px"),
     )
-    field = analyze([b.page()])["text-input"]
+    components = analyze([b.page()])
+    field = components["text-area"]
     assert field.properties["borderColor"] == "#d4dee9"
     assert field.properties["borderWidth"] == "1px"
     assert field.properties["rounded"] == "6px"
+    assert "text-input" not in components
+
+
+def test_textarea_is_a_text_area_without_a_fixed_height() -> None:
+    """stripe.com: the only field is a 129px <textarea>; it must not size a one-line input."""
+    b = PageBuilder()
+    field: dict[str, Any] = {
+        "background_color": WHITE,
+        "padding": ("11px", "17px", "11px", "17px"),
+        "border_radius": ("6px", "6px", "6px", "6px"),
+        "font_size": "16px",
+        **border_styles("rgb(212, 222, 233)"),
+    }
+    b.add("textarea", b.main, (337, 300, 766, 129), **field)
+    components = analyze([b.page()])
+    area = components["text-area"]
+    assert area.kind.value == "input" and area.variant == "multiline"
+    assert area.samples == ["textarea"]
+    assert "height" not in area.properties
+    assert area.properties["padding"] == "11px 17px"
+    assert area.properties["borderColor"] == "#d4dee9"
+    assert area.properties["rounded"] == "6px"
+    assert area.properties["fontSize"] == "16px"
+    assert "text-input" not in components
+
+
+def test_single_line_fields_and_textareas_are_separate_components() -> None:
+    b = PageBuilder()
+    styles: dict[str, Any] = {
+        "background_color": WHITE,
+        "padding": ("8px", "12px", "8px", "12px"),
+        **border_styles("rgb(203, 213, 225)"),
+    }
+    b.add("textarea", b.main, (100, 300, 600, 160), **styles)
+    b.add("input", b.main, (100, 500, 320, 40), input_type="email", **styles)
+    components = analyze([b.page()])
+    assert components["text-input"].samples == ["input[type=email]"]
+    assert components["text-input"].properties["height"] == "40px"
+    assert components["text-area"].samples == ["textarea"]
+    names = list(components)
+    assert names.index("text-area") == names.index("text-input") + 1
 
 
 def test_transparent_text_fields_are_ignored() -> None:
     b = PageBuilder()
     b.add("textarea", b.main, (100, 300, 600, 200), color=TRANSPARENT)
-    assert "text-input" not in analyze([b.page()])
+    components = analyze([b.page()])
+    assert "text-input" not in components and "text-area" not in components
 
 
 def _layered_card(b: PageBuilder, parent: int, x: float) -> int:
