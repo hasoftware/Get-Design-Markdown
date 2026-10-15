@@ -39,7 +39,9 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
             f"Biến {name}={raw!r} không phải số nguyên.", hint=f"Ví dụ: {name}={default}"
         ) from None
     if value <= 0:
-        raise ConfigError(f"Biến {name} phải lớn hơn 0 (đang là {value}).")
+        raise ConfigError(
+            f"Biến {name} phải lớn hơn 0 (đang là {value}).", hint=f"Ví dụ: {name}={default}"
+        )
     return value
 
 
@@ -54,7 +56,9 @@ def _positive_float(env: Mapping[str, str], name: str, default: float) -> float:
             f"Biến {name}={raw!r} không phải số.", hint=f"Ví dụ: {name}={default:g}"
         ) from None
     if value <= 0:
-        raise ConfigError(f"Biến {name} phải lớn hơn 0 (đang là {value:g}).")
+        raise ConfigError(
+            f"Biến {name} phải lớn hơn 0 (đang là {value:g}).", hint=f"Ví dụ: {name}={default:g}"
+        )
     return value
 
 

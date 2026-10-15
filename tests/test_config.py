@@ -27,3 +27,13 @@ def test_invalid_values_raise_config_error(name: str, value: str) -> None:
     with pytest.raises(ConfigError) as info:
         load_settings({name: value})
     assert name in info.value.message
+    assert info.value.hint is not None and info.value.hint.startswith(f"Ví dụ: {name}=")
+
+
+def test_non_positive_values_suggest_the_default() -> None:
+    with pytest.raises(ConfigError) as info:
+        load_settings({"GDM_MAX_ELEMENTS": "0"})
+    assert info.value.hint == "Ví dụ: GDM_MAX_ELEMENTS=3000"
+    with pytest.raises(ConfigError) as info:
+        load_settings({"GDM_TIMEOUT": "0"})
+    assert info.value.hint == "Ví dụ: GDM_TIMEOUT=45"
