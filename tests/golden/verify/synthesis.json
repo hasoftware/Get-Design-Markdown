@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "mode": "rules",
+  "lang": "en",
+  "examples": false,
+  "generated_at": "2026-10-15T09:30:00Z",
+  "issues": [
+    {
+      "rule": "token-summary",
+      "severity": "info",
+      "message": "DESIGN.md có 10 màu, 9 cấp chữ, 5 mức bo góc, 9 bước spacing, 17 component."
+    }
+  ],
+  "sections": [
+    "Overview",
+    "Colors",
+    "Typography",
+    "Layout",
+    "Elevation & Depth",
+    "Shapes",
+    "Components",
+    "Do's and Don'ts",
+    "Agent Prompt Guide"
+  ],
+  "token_counts": {
+    "colors": 10,
+    "typography": 9,
+    "rounded": 5,
+    "spacing": 9,
+    "components": 17
+  },
+  "design_md_path": "DESIGN.md",
+  "prompt_path": null,
+  "image_paths": []
+}

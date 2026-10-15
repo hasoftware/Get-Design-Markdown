@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: GitHub Release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Check that the tag matches the project version
+        id: version
+        run: |
+          version=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} không khớp version ${version} trong pyproject.toml (cần v${version})."
+            exit 1
+          fi
+          package_version=$(sed -nE 's/^__version__ = "([^"]+)"$/\1/p' src/get_design_markdown/__init__.py)
+          if [ "${package_version}" != "${version}" ]; then
+            echo "::error::__version__ = ${package_version} khác version ${version} trong pyproject.toml."
+            exit 1
+          fi
+          if [[ "${version}" =~ (a|b|rc|dev)[0-9]+$ ]]; then
+            echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes $PRERELEASE

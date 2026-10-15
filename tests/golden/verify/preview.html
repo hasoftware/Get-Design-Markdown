@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acme Cloud — Design Preview</title>
+    <style>
+    :root {
+      --primary: #4f46e5;
+      --on-primary: #ffffff;
+      --canvas: #ffffff;
+      --surface: #f8fafc;
+      --surface-inverse: #0b1020;
+      --hairline: #e2e8f0;
+      --ink: #0f172a;
+      --muted: #475569;
+      --faint: #94a3b8;
+      --success: #16a34a;
+    }
+    :root[data-theme="dark"] {
+      --primary: #818cf8;
+      --on-primary: #0b1020;
+      --canvas: #0b1020;
+      --surface: #111827;
+      --surface-inverse: #05070f;
+      --hairline: #1e293b;
+      --ink: #f8fafc;
+      --muted: #94a3b8;
+      --faint: #64748b;
+      --success: #4ade80;
+    }
+    body { margin: 0; padding: 32px; background: var(--canvas); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
+    .swatch span { display: inline-block; width: 24px; height: 24px; border-radius: 6px; vertical-align: middle; }
+    .button-primary { background: var(--primary); color: var(--on-primary); border: 0; border-radius: 8px; padding: 12px 20px; }
+    .button-primary:hover { background: #4338ca; }
+    </style>
+  </head>
+  <body>
+    <button type="button" id="theme-toggle">Light / dark</button>
+    <h1>Acme Cloud</h1>
+    <ul>
+      <li class="swatch"><span style="background: var(--primary)"></span><code>primary</code> <code>#4f46e5</code></li>
+      <li class="swatch"><span style="background: var(--on-primary)"></span><code>on-primary</code> <code>#ffffff</code></li>
+      <li class="swatch"><span style="background: var(--canvas)"></span><code>canvas</code> <code>#ffffff</code></li>
+      <li class="swatch"><span style="background: var(--surface)"></span><code>surface</code> <code>#f8fafc</code></li>
+      <li class="swatch"><span style="background: var(--surface-inverse)"></span><code>surface-inverse</code> <code>#0b1020</code></li>
+      <li class="swatch"><span style="background: var(--hairline)"></span><code>hairline</code> <code>#e2e8f0</code></li>
+      <li class="swatch"><span style="background: var(--ink)"></span><code>ink</code> <code>#0f172a</code></li>
+      <li class="swatch"><span style="background: var(--muted)"></span><code>muted</code> <code>#475569</code></li>
+      <li class="swatch"><span style="background: var(--faint)"></span><code>faint</code> <code>#94a3b8</code></li>
+      <li class="swatch"><span style="background: var(--success)"></span><code>success</code> <code>#16a34a</code></li>
+    </ul>
+    <button class="button-primary" type="button">Start building</button>
+    <script>
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        const root = document.documentElement;
+        root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      });
+    </script>
+  </body>
+</html>

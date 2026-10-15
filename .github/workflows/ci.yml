@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "stream/**"
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  lint:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Mypy (src, tests)
+        run: uv run mypy src tests
+      - name: Mypy (scripts)
+        run: uv run mypy scripts
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    env:
+      GDM_REQUIRE_BROWSER: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install Chromium (Linux)
+        if: runner.os == 'Linux'
+        run: uv run playwright install --with-deps chromium
+      - name: Install Chromium (Windows)
+        if: runner.os == 'Windows'
+        run: uv run playwright install chromium
+      - name: Pytest
+        run: uv run pytest -ra --junitxml=pytest-${{ matrix.os }}-${{ matrix.python }}.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-${{ matrix.os }}-${{ matrix.python }}
+          path: pytest-${{ matrix.os }}-${{ matrix.python }}.xml
+          if-no-files-found: ignore
+
+  e2e:
+    name: End-to-end (fixture site)
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GDM_REQUIRE_BROWSER: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Pytest e2e
+        run: uv run pytest -m e2e -ra
+      - name: Pipeline on the fixture site + verify_output
+        id: pipeline
+        run: uv run python scripts/run_e2e.py --out e2e-output
+      - name: Set up Node
+        if: steps.pipeline.outputs.design_md != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Official DESIGN.md linter
+        if: steps.pipeline.outputs.design_md != ''
+        env:
+          DESIGN_MD: ${{ steps.pipeline.outputs.design_md }}
+        # The package's other bin is literally named design.md, which Windows resolves as
+        # a Markdown file; designmd works on every OS.
+        run: npx --yes --package @google/design.md designmd lint "$DESIGN_MD"
+      - name: Upload e2e output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: e2e-output
+          if-no-files-found: ignore
+
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Check wheel contents
+        run: |
+          uv run --no-project python -m zipfile -l dist/*.whl | tee wheel-contents.txt
+          for member in \
+            get_design_markdown/collector/js/extract.js \
+            get_design_markdown/synthesizer/phrases/en.yaml \
+            get_design_markdown/synthesizer/phrases/vi.yaml \
+            get_design_markdown/templates/design.md.j2 \
+            get_design_markdown/templates/prompt.md.j2 \
+            get_design_markdown/templates/preview.html.j2; do
+            if ! grep -q "$member" wheel-contents.txt; then
+              echo "::error::Wheel thiếu $member"
+              exit 1
+            fi
+          done
+      - name: Twine check
+        run: uvx twine check --strict dist/*
+      - name: Smoke test the wheel
+        run: |
+          uv venv --python 3.12 wheel-env
+          uv pip install --python wheel-env/bin/python dist/*.whl
+          wheel-env/bin/gdm --version
+          wheel-env/bin/python -c "from get_design_markdown.resources import resource_text; resource_text('collector', 'js', 'extract.js')"
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
