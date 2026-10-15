@@ -468,15 +468,28 @@ TAP_PAGE = """<!doctype html>
 </main></body></html>"""
 
 
+#: A consent dialog opened with Radix-style hideOthers: the whole app is aria-hidden.
+MODAL_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  body { margin: 0; font: 16px/1.5 sans-serif; }
+  .cta { display: inline-block; width: 160px; height: 30px; }
+  .dialog { visibility: hidden; }
+</style></head><body>
+  <div id="app" aria-hidden="true"><main><a class="cta" href="/start">Start now</a></main></div>
+  <div class="dialog" role="dialog"><button>Accept</button></div>
+</body></html>"""
+
+
 def test_tap_targets_ignore_illustrated_controls() -> None:
-    async def run() -> LayoutSnapshot:
+    async def run(content: str) -> LayoutSnapshot:
         async with browser.open_context(QUICK) as context:
             page = await context.new_page()
-            await page.set_content(TAP_PAGE)
+            await page.set_content(content)
             return await viewports.measure_layout(page, viewport_width=1440)
 
-    layout = asyncio.run(run())
-    assert layout.min_tap_target_px == 44
+    assert asyncio.run(run(TAP_PAGE)).min_tap_target_px == 44
+    # An app hidden by a modal library is still the page, not an illustration.
+    assert asyncio.run(run(MODAL_PAGE)).min_tap_target_px == 30
 
 
 def test_slow_page_times_out(site_url: str, tmp_path: Path) -> None:

@@ -278,7 +278,13 @@
     scaleCache.set(el, result);
     return result;
   };
-  const NOT_A_CONTROL = '[aria-hidden="true"], [inert], [role="img"], [role="presentation"]';
+  const PICTURE = '[role="img"], [role="presentation"]';
+  const hiddenIllustration = (el) => {
+    const root = el.closest('[aria-hidden="true"], [inert]');
+    // Modal libraries (Radix hideOthers, react-modal) hide the whole app - a direct child of
+    // body - while a dialog such as a consent banner is open: that is not an illustration.
+    return !!root && root !== body && root !== docEl && root.parentElement !== body;
+  };
   let minTap = null;
   const INTERACTIVE =
     'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
@@ -286,7 +292,8 @@
     const rect = el.getBoundingClientRect();
     if (rect.top + scrollY >= vh * 3 || rect.width <= 1 || rect.height <= 1) continue;
     if (!visible(el)) continue;
-    if (el.closest(NOT_A_CONTROL) || getComputedStyle(el).pointerEvents === "none") continue;
+    if (el.closest(PICTURE) || hiddenIllustration(el)) continue;
+    if (getComputedStyle(el).pointerEvents === "none") continue;
     if (scaledDown(el)) continue;
     const size = Math.min(rect.width, rect.height);
     if (minTap === null || size < minTap) minTap = size;
