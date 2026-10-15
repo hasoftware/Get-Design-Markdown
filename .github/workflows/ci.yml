@@ -164,6 +164,17 @@ jobs:
             fi
           done < resources.txt
           exit "$missing"
+      - name: Check sdist contents
+        # The sdist holds only files tracked by git (pyproject.toml lists the paths), never
+        # untracked local files such as output/ or notes kept next to the checkout.
+        run: |
+          tar -tzf dist/*.tar.gz | sed 's|^[^/]*/||' | grep -v -e '/$' -e '^$' | sort > sdist-contents.txt
+          git ls-files | sort > tracked.txt
+          untracked=$(comm -23 sdist-contents.txt tracked.txt | grep -vx 'PKG-INFO' || true)
+          if [ -n "$untracked" ]; then
+            echo "::error::Sdist chứa file không được git theo dõi: $untracked"
+            exit 1
+          fi
       - name: Twine check
         run: uvx twine check --strict dist/*
       - name: Smoke test the wheel

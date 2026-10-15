@@ -161,6 +161,23 @@ def test_build_job_checks_every_packaged_resource(ci: dict[str, Any]) -> None:
     assert "resource_text" in smoke["run"] and "resources.txt" in smoke["run"]
 
 
+def test_sdist_is_built_from_an_explicit_file_list(ci: dict[str, Any]) -> None:
+    import tomllib
+
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    sdist = config["tool"]["hatch"]["build"]["targets"]["sdist"]
+    # Hatchling honours .gitignore but not .git/info/exclude: without an explicit list a local
+    # build ships whatever untracked file sits in the working tree.
+    included = set(sdist["only-include"])
+    assert {"src", "tests", "README.md", "LICENSE", "pyproject.toml"} <= included
+    assert not included & {"output", "e2e-output", ".env", ".venv", ".github"}
+    tracked_top = {path.name for path in ROOT.iterdir() if path.name in included}
+    assert tracked_top == included
+    check = next(step for step in steps(ci["jobs"]["build"]) if "tar -tzf" in step.get("run", ""))
+    # CI compares the sdist with the files git tracks, so nothing local slips in.
+    assert "git ls-files" in check["run"] and "comm -23" in check["run"]
+
+
 def test_release_workflow(release: dict[str, Any]) -> None:
     assert release["on"] == {"push": {"tags": ["v*"]}}
     assert release["permissions"] == {"contents": "read"}

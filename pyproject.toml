@@ -43,6 +43,20 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/get_design_markdown"]
 
+[tool.hatch.build.targets.sdist]
+# Explicit list, so a local build never picks up untracked working-tree files
+# (output/, e2e-output/, .env, local notes...).
+only-include = [
+    "src",
+    "tests",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "uv.lock",
+    ".env.example",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not network'"
