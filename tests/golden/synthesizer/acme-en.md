@@ -379,7 +379,7 @@ Primary call to action. Instances: 2, e.g. “Start building free” and “Get 
 - Height: 44px
 - Shadow: level sm — `0px 1px 2px 0px rgba(15, 23, 42, 0.06)`
 - Hover: background → #4338ca
-- Text contrast 6.29:1 (WCAG AA ✓).
+- Text contrast: `{colors.on-primary}` — #ffffff on `{colors.primary}` — #4f46e5: 6.29:1 (WCAG AA ✓).
 - Front matter: `button-primary` and `button-primary-hover`.
 
 ### button-secondary
@@ -393,7 +393,7 @@ Secondary action button. Instances: 1, e.g. “Get updates”.
 - Padding: 12px 20px
 - Height: 44px
 - Hover: background → #1e293b
-- Text contrast 17.85:1 (WCAG AA ✓).
+- Text contrast: `{colors.on-primary}` — #ffffff on `{colors.ink}` — #0f172a: 17.85:1 (WCAG AA ✓).
 - Front matter: `button-secondary` and `button-secondary-hover`.
 
 ### button-outline
@@ -408,7 +408,7 @@ Outlined button for secondary actions. Instances: 1, e.g. “Book a demo”.
 - Padding: 11px 19px
 - Height: 44px
 - Hover: background → `{colors.surface}` — #f8fafc; border color → #cbd5e1
-- Text contrast 17.85:1 (WCAG AA ✓).
+- Text contrast: `{colors.ink}` — #0f172a on `{colors.surface}` — #f8fafc: 17.06:1 (WCAG AA ✓); `{colors.ink}` — #0f172a on `{colors.canvas}` — #ffffff: 17.85:1 (WCAG AA ✓).
 - Front matter: `button-outline` and `button-outline-hover`.
 
 ### button-ghost
@@ -422,7 +422,7 @@ Ghost button with a transparent background. Instances: 1, e.g. “Watch video”
 - Padding: 8px 12px
 - Height: 36px
 - Hover: background → #eef2ff
-- Text contrast 6.29:1 (WCAG AA ✓).
+- Text contrast: `{colors.primary}` — #4f46e5 on `{colors.canvas}` — #ffffff: 6.29:1 (WCAG AA ✓).
 - Front matter: `button-ghost` and `button-ghost-hover`.
 
 ### text-link
@@ -433,7 +433,7 @@ Inline text link. Instances: 1, e.g. “See full pricing →”.
 - Typography: Inter 16px / 500 / 25.6px
 - Text decoration: none
 - Hover: text → #4338ca; text decoration → underline
-- Text contrast 6.29:1 (WCAG AA ✓).
+- Text contrast: `{colors.primary}` — #4f46e5 on `{colors.canvas}` — #ffffff: 6.29:1 (WCAG AA ✓).
 - Front matter: `text-link` and `text-link-hover`.
 
 ### nav-link
@@ -447,7 +447,7 @@ Navigation link. Instances: 5, e.g. “Product”, “Solutions” and “Pricin
 - Height: 36px
 - Text decoration: none
 - Hover: text → `{colors.ink}` — #0f172a
-- Text contrast 7.58:1 (WCAG AA ✓).
+- Text contrast: `{colors.muted}` — #475569 on `{colors.surface}` — #f8fafc: 7.24:1 (WCAG AA ✓); `{colors.muted}` — #475569 on `{colors.canvas}` — #ffffff: 7.58:1 (WCAG AA ✓).
 - Front matter: `nav-link` and `nav-link-hover`.
 
 ### text-input
@@ -463,7 +463,7 @@ Text input field. Instances: 1.
 - Height: 44px
 - Shadow: level sm — `0px 1px 2px 0px rgba(15, 23, 42, 0.06)`
 - Placeholder: `{colors.faint}` — #94a3b8 — contrast only 2.56:1, below 4.5:1
-- Text contrast 17.85:1 (WCAG AA ✓).
+- Text contrast: `{colors.ink}` — #0f172a on `{colors.canvas}` — #ffffff: 17.85:1 (WCAG AA ✓).
 - Front matter: `text-input`.
 
 ### card
@@ -487,14 +487,14 @@ Pill-shaped badge / label. Instances: 1, e.g. “New · Acme Workflows 2.0”.
 - Radius: `{rounded.full}` — 9999px
 - Padding: 4px 12px
 - Height: 28px
-- Text contrast 5.62:1 (WCAG AA ✓).
+- Text contrast: `{colors.primary}` — #4f46e5 on #eef2ff: 5.62:1 (WCAG AA ✓).
 - Front matter: `badge`.
 
 ### top-nav
 
 Top navigation bar. Instances: 1.
 
-- Background: #ffffffcc
+- Background: #ffffffcc (≈ #ffffff over the canvas)
 - Border: bottom 1px · `{colors.hairline}` — #e2e8f0
 - Padding: 0px 24px
 - Height: 64px
@@ -510,7 +510,7 @@ Site footer. Instances: 1.
 - Text: `{colors.faint}` — #94a3b8
 - Typography: `{typography.body-sm}` — Inter 14px / 400 / 1.43
 - Padding: 64px 0px 48px
-- Text contrast 7.38:1 (WCAG AA ✓).
+- Text contrast: `{colors.faint}` — #94a3b8 on `{colors.surface-inverse}` — #0b1020: 7.38:1 (WCAG AA ✓).
 - Front matter: `footer`.
 
 ## Do's and Don'ts
@@ -550,7 +550,7 @@ A ready-made brief for AI coding agents. Every value below is a token defined in
 ### Example Prompts
 
 1. “Build a hero section: background `{colors.canvas}` — #ffffff; headline in `{typography.display}` — Space Grotesk 64px / 700 / 1.05, color `{colors.ink}` — #0f172a; supporting copy in `{typography.body-lg}` — Inter 20px / 400 / 1.6, color `{colors.muted}` — #475569; a button-primary call to action (background `{colors.primary}` — #4f46e5, text `{colors.on-primary}` — #ffffff, typography `{typography.ui}` — Inter 15px / 500 / 1.33, radius `{rounded.md}` — 8px, padding 12px 20px, height 44px).”
-2. “Create a 3-column feature grid: each item is a card (background `{colors.canvas}` — #ffffff, radius `{rounded.xl}` — 16px, padding `{spacing.xxl}` — 32px); card titles in `{typography.title}` — Inter 24px / 600 / 1.33; descriptions in `{typography.body}` — Inter 16px / 400 / 1.6; grid gap `{spacing.xl}` — 24px.”
+2. “Create a 3-column feature grid: each item is a card (background `{colors.canvas}` — #ffffff, radius `{rounded.xl}` — 16px, padding `{spacing.xxl}` — 32px); card titles in `{typography.title}` — Inter 24px / 600 / 1.33; descriptions in `{typography.body}` — Inter 16px / 400 / 1.6.”
 3. “Design a sign-up block: an email field styled as text-input (background `{colors.canvas}` — #ffffff, text `{colors.ink}` — #0f172a, radius `{rounded.sm}` — 6px, padding 10px 14px, height 44px); a submit button styled as button-primary (background `{colors.primary}` — #4f46e5, text `{colors.on-primary}` — #ffffff, typography `{typography.ui}` — Inter 15px / 500 / 1.33, radius `{rounded.md}` — 8px, padding 12px 20px, height 44px).”
 
 ### CSS Custom Properties
@@ -569,15 +569,15 @@ Suggested CSS custom properties, one per front-matter token:
 | `{colors.muted}` | `--color-muted` | #475569 |
 | `{colors.faint}` | `--color-faint` | #94a3b8 |
 | `{colors.success}` | `--color-success` | #16a34a |
-| `{typography.display}` | `--font-display` | `700 64px/1.05 "Space Grotesk", sans-serif` |
-| `{typography.heading}` | `--font-heading` | `700 40px/1.15 "Space Grotesk", sans-serif` |
-| `{typography.title}` | `--font-title` | `600 24px/1.33 Inter, sans-serif` |
-| `{typography.body-lg}` | `--font-body-lg` | `400 20px/1.6 Inter, sans-serif` |
-| `{typography.body}` | `--font-body` | `400 16px/1.6 Inter, sans-serif` |
-| `{typography.ui}` | `--font-ui` | `500 15px/1.33 Inter, sans-serif` |
-| `{typography.body-sm}` | `--font-body-sm` | `400 14px/1.43 Inter, sans-serif` |
-| `{typography.code}` | `--font-code` | `400 14px/1.6 "JetBrains Mono", monospace` |
-| `{typography.caption}` | `--font-caption` | `400 13px/1.5 Inter, sans-serif` |
+| `{typography.display}` | `--font-display` | `700 64px/1.05 "Space Grotesk", Inter, sans-serif` |
+| `{typography.heading}` | `--font-heading` | `700 40px/1.15 "Space Grotesk", Inter, sans-serif` |
+| `{typography.title}` | `--font-title` | `600 24px/1.33 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body-lg}` | `--font-body-lg` | `400 20px/1.6 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body}` | `--font-body` | `400 16px/1.6 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.ui}` | `--font-ui` | `500 15px/1.33 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body-sm}` | `--font-body-sm` | `400 14px/1.43 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.code}` | `--font-code` | `400 14px/1.6 "JetBrains Mono", SFMono-Regular, Menlo, monospace` |
+| `{typography.caption}` | `--font-caption` | `400 13px/1.5 Inter, -apple-system, "Segoe UI", sans-serif` |
 | `{rounded.sm}` | `--radius-sm` | 6px |
 | `{rounded.md}` | `--radius-md` | 8px |
 | `{rounded.lg}` | `--radius-lg` | 12px |

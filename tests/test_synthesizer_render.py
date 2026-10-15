@@ -390,8 +390,9 @@ def test_unusual_component_names_and_states() -> None:
     text = render_design_md(analysis)
     data, _ = split_front_matter(text)
     assert data["components"]["chip-focus"] == {"textColor": "#0f172a"}
-    assert "### chip" in text and "⚠ Text contrast 2.40:1" in text
-    assert "#94a3b8 on #f1f5f9 (2.40:1, chip)" in text
+    # Ratios are recomputed from the printed colors (2.34:1), not the analyzer's 2.40.
+    assert "### chip" in text and "⚠ Text contrast: #94a3b8 on #f1f5f9: 2.34:1" in text
+    assert "#94a3b8 on #f1f5f9 (2.34:1, chip)" in text
     assert _errors(text) == []
 
 

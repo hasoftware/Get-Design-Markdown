@@ -15,6 +15,8 @@ Rule ids follow the official linter (`npx @google/design.md lint`) where one exi
 - "yaml-block" (error/warning): a fenced ```yaml block in the body — the official linter merges
   it into the tokens, so redefining a front-matter key makes it reject the file.
 - "missing-primary", "missing-typography", "unknown-property", "contrast-ratio" (warning).
+- "contrast-claim" (warning): a ratio written right after two color tokens that is not the
+  contrast of those token values (a member's ratio quoted next to the token's hex).
 - "unknown-section", "missing-sections", "orphaned-tokens", "token-summary" (info).
 
 Fenced code blocks (``` or ~~~): "## " lines inside them are not sections. Token references are
@@ -97,6 +99,10 @@ MAX_REFERENCE_DEPTH: Final = 10
 _DIMENSION_RE = re.compile(r"^-?(?:\d+(?:\.\d+)?|\.\d+)(px|em|rem)$")
 _NUMBER_RE = re.compile(r"^-?(?:\d+(?:\.\d+)?|\.\d+)$")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+#: A color token reference (optionally marked "≈ " as a member's nearest token) or a ratio.
+_CLAIM_RE = re.compile(
+    r"(?P<approx>≈ )?`\{colors\.(?P<name>[A-Za-z0-9_-]+)\}`|(?P<ratio>\d+(?:\.\d+)?):1(?!\d)"
+)
 _GROUP_LABELS: Final = {
     COLORS: "màu",
     TYPOGRAPHY: "cấp chữ",
@@ -475,8 +481,7 @@ def _check_components(groups: dict[str, dict[str, Any]]) -> list[ValidationIssue
     issues: list[ValidationIssue] = []
     components = groups.get(COMPONENTS, {})
     colors = groups.get(COLORS, {})
-    canvas = _resolve_color(colors.get("canvas"), colors) or WHITE
-    canvas = canvas if canvas.is_opaque else canvas.with_alpha(1.0)
+    canvas = _canvas_of(colors)
     for name, props in components.items():
         if not isinstance(props, dict):
             issues.append(
@@ -512,6 +517,69 @@ def _check_components(groups: dict[str, dict[str, Any]]) -> list[ValidationIssue
                     "warning",
                     f"components.{name}{inherited}: chữ {foreground.css_hex} trên nền "
                     f"{background.css_hex} chỉ đạt {ratio:.2f}:1, dưới mức WCAG AA 4.5:1.",
+                )
+            )
+    return issues
+
+
+def _canvas_of(colors: dict[str, Any]) -> RGBA:
+    canvas = _resolve_color(colors.get("canvas"), colors) or WHITE
+    return canvas if canvas.is_opaque else canvas.with_alpha(1.0)
+
+
+def _quoted_matches(quoted: str, ratios: tuple[float, ...]) -> bool:
+    """True when a printed ratio ("4.45", "16.4") is one of `ratios` rounded the same way."""
+    decimals = len(quoted.partition(".")[2])
+    tolerance = 0.5 * 10.0**-decimals + 1e-6
+    value = float(quoted)
+    return any(abs(round(ratio, decimals) - value) <= tolerance for ratio in ratios)
+
+
+def _check_contrast_claims(
+    groups: dict[str, dict[str, Any]], body: str, body_start: int
+) -> list[ValidationIssue]:
+    """A ratio written right after two color tokens ("`{colors.ink}` — #061b31 on
+    `{colors.canvas}` — #f6f9fc (16.44:1)") must be the contrast of those two token values:
+    quoting a ratio measured on a slightly different member color next to the token's hex
+    gives the same pair two AA verdicts. Tokens written as "≈ {colors.x}" (a measured member
+    shown with its nearest token) are not claims about the token and are skipped."""
+    colors = groups.get(COLORS, {})
+    if not colors:
+        return []
+    canvas = _canvas_of(colors)
+    issues: list[ValidationIssue] = []
+    reported: set[tuple[str, str, str]] = set()
+    for offset, line in enumerate(body.split("\n")):
+        window: list[tuple[str, bool]] = []
+        for match in _CLAIM_RE.finditer(line):
+            quoted = match.group("ratio")
+            if quoted is None:
+                window.append((match.group("name"), match.group("approx") is not None))
+                continue
+            pair, window = window[-2:], []
+            if len(pair) < 2 or any(approx for _, approx in pair):
+                continue
+            (fg_name, _), (bg_name, _) = pair
+            foreground = _resolve_color(colors.get(fg_name), colors)
+            background = _resolve_color(colors.get(bg_name), colors)
+            if foreground is None or background is None or fg_name == bg_name:
+                continue
+            ratios = (
+                contrast_ratio(foreground, background, base=canvas),
+                contrast_ratio(background, foreground, base=canvas),
+            )
+            key = (fg_name, bg_name, quoted)
+            if _quoted_matches(quoted, ratios) or key in reported:
+                continue
+            reported.add(key)
+            issues.append(
+                _issue(
+                    "contrast-claim",
+                    "warning",
+                    f"Dòng {body_start + offset}: tỉ lệ {quoted}:1 ghi cho {{colors.{fg_name}}} "
+                    f"trên {{colors.{bg_name}}} không khớp giá trị token (tính lại từ "
+                    f"{foreground.css_hex} và {background.css_hex}: {ratios[0]:.2f}:1) — cùng "
+                    "một cặp token sẽ có hai kết luận WCAG khác nhau.",
                 )
             )
     return issues
@@ -569,6 +637,7 @@ def validate_design_md(text: str) -> list[ValidationIssue]:
     """Rules (ids aligned with the official linter): "front-matter" (error), "broken-ref"
     (error), "section-order" (error), "duplicate-section" (error), "missing-primary"
     (warning), "contrast-ratio" (warning, component text/background < 4.5:1),
+    "contrast-claim" (warning, a quoted token-pair ratio that the token values do not give),
     "orphaned-tokens" (info), "token-summary" (info)."""
     parsed = _parse(text)
     issues: list[ValidationIssue] = []
@@ -609,5 +678,6 @@ def validate_design_md(text: str) -> list[ValidationIssue]:
             )
         )
     issues.extend(_check_components(groups))
+    issues.extend(_check_contrast_claims(groups, parsed.body, parsed.body_start))
     issues.extend(_info(groups))
     return issues

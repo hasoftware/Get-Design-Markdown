@@ -58,6 +58,13 @@ class Context:
             return self.p("common.transparent")
         return value
 
+    def flattened(self, value: str, display: str | None = None) -> str:
+        """A translucent fill written with the opaque color it shows over the canvas; other
+        values unchanged."""
+        shown = value if display is None else display
+        opaque = self.facts.flat_hex(value)
+        return shown if opaque is None else self.p("common.flattened", value=shown, opaque=opaque)
+
     def issue_side(self, value: str | None, token: str | None, dark: bool) -> str:
         """One side of a failing contrast pair, with its token when it is a light token."""
         if value is None:

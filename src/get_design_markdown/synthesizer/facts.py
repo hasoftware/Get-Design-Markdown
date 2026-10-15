@@ -17,6 +17,7 @@ from get_design_markdown.analyzer.css_values import (
     WHITE,
     contrast_ratio,
     delta_e_2000,
+    flatten,
     parse_box_shadow,
     parse_color,
     to_oklch,
@@ -87,6 +88,15 @@ KIND_ORDER: Final = (
 )
 #: Two action colors closer than this (ΔE2000) count as one accent.
 SAME_ACCENT_DELTA_E: Final = 3.0
+#: A gradient color this close (ΔE2000, similar alpha) to a structural cluster is not decorative.
+DECORATIVE_MATCH_DELTA_E: Final = 3.0
+DECORATIVE_MATCH_ALPHA: Final = 0.05
+#: The page headline (hero title) is the type level whose tags lead with this tag.
+HEADLINE_TAG: Final = "h1"
+#: A hero lead paragraph is at most this many times the body size.
+LEAD_MAX_SCALE: Final = 1.5
+#: Background tokens listed for the contrast of a component without its own background.
+MAX_SURFACE_CHECKS: Final = 3
 #: Two chromatic action colors whose OKLCH hues differ by at most this are one accent family.
 SAME_FAMILY_HUE_DEG: Final = 20.0
 #: Warning written by analyzer/analyze.py when analyzer parts were skipped, and its labels.
@@ -120,6 +130,50 @@ class ContrastIssue:
     @property
     def passes_large(self) -> bool:
         return self.ratio >= AA_LARGE
+
+
+@dataclass(frozen=True)
+class PairCheck:
+    """A text/background pair whose ratio is recomputed from the values printed with it (the
+    token value when a side is a token), so prose never quotes a ratio measured on a slightly
+    different member color next to a token's hex."""
+
+    foreground: str
+    foreground_token: str | None
+    background: str
+    background_token: str | None
+    ratio: float
+
+    @property
+    def passes(self) -> bool:
+        return self.ratio >= AA_NORMAL
+
+    @property
+    def passes_large(self) -> bool:
+        return self.ratio >= AA_LARGE
+
+    @property
+    def key(self) -> tuple[str, str]:
+        """(foreground token or hex, background token or hex): one entry per printed pair."""
+        return (
+            self.foreground_token or self.foreground.lower(),
+            self.background_token or self.background.lower(),
+        )
+
+
+@dataclass(frozen=True)
+class AlphaBlindPair:
+    """A front-matter entry whose text sits on a translucent fill (see
+    DesignFacts.alpha_blind_pairs)."""
+
+    component: str
+    #: Front-matter entry: the component or its "<name>-<state>" variant.
+    entry: str
+    fill: str
+    #: Text contrast with the fill layered over the canvas.
+    ratio: float
+    #: What a checker that drops alpha computes for the same two values.
+    alpha_blind_ratio: float
 
 
 @dataclass(frozen=True)
@@ -347,6 +401,43 @@ class DesignFacts:
                 props[key] = value
         return props
 
+    def flat_hex(self, value: str | None) -> str | None:
+        """Opaque "#rrggbb" a translucent color shows over the canvas; None for opaque, fully
+        transparent or non-colors."""
+        color = parse_color(value)
+        if color is None or color.is_opaque or color.is_transparent:
+            return None
+        return flatten(color, self.canvas).css_hex
+
+    def alpha_blind_pairs(self) -> list[AlphaBlindPair]:
+        """Front-matter entries pairing text with a raw translucent fill. Checkers that ignore
+        alpha (the official DESIGN.md linter) read #f7f8f8 on #ffffff0d as 1.06:1; the fill
+        really sits over the canvas, where the text reaches 17:1. The front matter keeps the
+        measured translucent value, so the prose documents both readings."""
+        result: list[AlphaBlindPair] = []
+        for spec in self.components:
+            base = self.component_props(spec)
+            entries = [(spec.name, base)] + [
+                (state_variant_name(spec.name, state), self.state_props(spec, state))
+                for state in self.states(spec)
+            ]
+            for name, props in entries:
+                # The entry writes the fill itself; its text may come from the base component.
+                fill = props.get("backgroundColor")
+                text = self.resolve(props.get("textColor") or base.get("textColor"))
+                if fill is None or text is None or parse_token_ref(fill) is not None:
+                    continue
+                color = parse_color(fill)
+                foreground = parse_color(text)
+                if color is None or foreground is None or color.is_opaque or color.is_transparent:
+                    continue
+                measured = self.contrast_on(text, fill)
+                if measured is None:
+                    continue
+                naive = contrast_ratio(foreground.with_alpha(1.0), color.with_alpha(1.0))
+                result.append(AlphaBlindPair(spec.name, name, fill, measured, naive))
+        return result
+
     def resolve(self, value: str | None) -> str | None:
         """A front-matter value with references replaced by their primitive value."""
         if value is None:
@@ -503,7 +594,41 @@ class DesignFacts:
         return None
 
     def heading_level(self) -> TypeLevel | None:
+        """The largest type level."""
         return next(iter(self.levels.values()), None)
+
+    def headline_level(self) -> TypeLevel | None:
+        """The level of the page headline: the level whose tags lead with h1 (tags are listed
+        by frequency), else the level where h1 ranks highest, else the largest level.
+
+        The largest level is often a one-off closing banner (a 72px h2 above the footer), not
+        the hero title an agent should reproduce.
+        """
+        tagged = [
+            (level.tags.index(HEADLINE_TAG), -level.count, index, level)
+            for index, level in enumerate(self.levels.values())
+            if HEADLINE_TAG in level.tags
+        ]
+        if tagged:
+            return min(tagged, key=lambda item: item[:3])[3]
+        return self.heading_level()
+
+    def lead_level(self) -> TypeLevel | None:
+        """Supporting copy under the headline: the largest level led by <p> that is a lead
+        paragraph (between the body size and LEAD_MAX_SCALE x the body size, below the
+        headline), else the body level. A 32px <p> is a pull quote, not a hero lead."""
+        body = self.body_level()
+        if body is None:
+            return None
+        headline = self.headline_level()
+        candidates = [
+            level
+            for level in self.levels.values()
+            if level.tags[:1] == ["p"]
+            and body.size_px <= level.size_px <= body.size_px * LEAD_MAX_SCALE
+            and (headline is None or level.size_px < headline.size_px)
+        ]
+        return max(candidates, key=lambda level: level.size_px, default=body)
 
     def body_level(self) -> TypeLevel | None:
         for name in ("body", "body-lg", "body-sm"):
@@ -531,8 +656,15 @@ class DesignFacts:
 
     def decorative_clusters(self) -> list[ColorCluster]:
         """Decorative-only colors (heaviest first, one per hex), excluding any color that
-        matches a palette token — a gradient stop equal to the canvas is not an accent."""
+        matches a palette token or a structural (non-decorative) cluster of any channel — a
+        gradient stop equal to the canvas, or to a measured secondary text color, is not an
+        accent to keep away from text."""
         tokens = list(self.colors.values())
+        structural = [
+            color
+            for cluster in self.analysis.colors.clusters
+            if not cluster.decorative and (color := parse_color(cluster.hex)) is not None
+        ]
         result: list[ColorCluster] = []
         seen: set[str] = set()
         for cluster in sorted(
@@ -540,6 +672,9 @@ class DesignFacts:
             key=lambda c: (-c.weight, c.id),
         ):
             if cluster.hex in seen or match_color_token(cluster.hex, tokens) is not None:
+                continue
+            color = parse_color(cluster.hex)
+            if color is not None and any(_near(color, other) for other in structural):
                 continue
             seen.add(cluster.hex)
             result.append(cluster)
@@ -574,33 +709,129 @@ class DesignFacts:
         ratio, name = min(options)
         return name, ratio
 
+    # ─── Contrast recomputed from printed values ─────────────────────────────
+
+    def check_pair(
+        self,
+        foreground: str,
+        foreground_token: str | None,
+        background: str,
+        background_token: str | None,
+    ) -> PairCheck | None:
+        ratio = self.contrast_on(foreground, background)
+        if ratio is None:
+            return None
+        return PairCheck(foreground, foreground_token, background, background_token, ratio)
+
+    def check_tokens(self, foreground: str, background: str) -> PairCheck | None:
+        """Contrast of two palette tokens, from their front-matter values."""
+        if foreground not in self.colors or background not in self.colors:
+            return None
+        return self.check_pair(
+            self.colors[foreground].value,
+            foreground,
+            self.colors[background].value,
+            background,
+        )
+
+    def measured_backgrounds(self, foreground: str, token: str | None) -> list[str]:
+        """Background tokens a text color was measured on (light theme, most frequent first):
+        pairs labelled with `token`, or with the same foreground hex when it is no token."""
+        counts: dict[str, int] = {}
+        for pair in self.analysis.colors.contrast_pairs:
+            background = pair.background_token
+            if background is None or background not in self.colors:
+                continue
+            if token is not None:
+                same = pair.foreground_token == token
+            else:
+                same = pair.foreground_token is None and _same_value(pair.foreground, foreground)
+            if same:
+                counts[background] = counts.get(background, 0) + max(pair.occurrences, 1)
+        return sorted(counts, key=lambda name: -counts[name])
+
+    def text_checks(self, foreground: str, token: str | None) -> list[PairCheck]:
+        """A text color without a background of its own, recomputed on each background token
+        it was measured on (worst first; the canvas when it was measured on none)."""
+        names = self.measured_backgrounds(foreground, token)[:MAX_SURFACE_CHECKS]
+        checks = [
+            self.check_pair(foreground, token, self.colors[name].value, name) for name in names
+        ]
+        if not names:
+            canvas = "canvas" if "canvas" in self.colors else None
+            background = self.colors["canvas"].value if canvas else self.canvas.css_hex
+            checks.append(self.check_pair(foreground, token, background, canvas))
+        return sorted((c for c in checks if c is not None), key=lambda c: c.ratio)
+
+    def component_token(self, spec: ComponentSpec, key: str) -> str | None:
+        ref = spec.token_refs.get(key)
+        return _ref_name(ref) if self.has_ref(ref) else None
+
+    def component_contrasts(self, spec: ComponentSpec) -> list[PairCheck]:
+        """Text contrast of a component, recomputed from the colors written for it: on its own
+        fill, or — without one — on every surface its text color was measured on."""
+        foreground = self.component_color(spec, "textColor")
+        if foreground is None:
+            return []
+        fg_token = self.component_token(spec, "textColor")
+        background = self.component_color(spec, "backgroundColor")
+        if background is None:
+            return self.text_checks(foreground, fg_token)
+        bg_token = self.component_token(spec, "backgroundColor")
+        check = self.check_pair(foreground, fg_token, background, bg_token)
+        return [] if check is None else [check]
+
+    def text_failures(self, token: str) -> list[PairCheck]:
+        """Pairs below AA where the palette token is used as a text color (measured pairs and
+        component text), recomputed from token values, worst first."""
+        if token not in self.colors:
+            return []
+        value = self.colors[token].value
+        checks = [
+            check
+            for name in self.measured_backgrounds(value, token)
+            if (check := self.check_tokens(token, name)) is not None
+        ]
+        for spec in self.components:
+            if self.component_token(spec, "textColor") == token:
+                checks.extend(self.component_contrasts(spec))
+        failing: dict[tuple[str, str], PairCheck] = {}
+        for check in checks:
+            if not check.passes:
+                failing.setdefault(check.key, check)
+        return sorted(failing.values(), key=lambda check: check.ratio)
+
     def contrast_issues(self) -> list[ContrastIssue]:
-        """Failing pairs (light theme first, then dark), worst first within each theme."""
+        """Failing pairs (light theme first, then dark), worst first within each theme.
+
+        Light pairs come from the analysis (measured member colors, shown with the ≈ token
+        notation when they differ from the token), then from component text recomputed on
+        the token values printed for the component."""
         light = [
             self._issue(pair, dark=False)
             for pair in self.analysis.colors.contrast_pairs
             if not pair.passes_aa
         ]
-        covered = {pair.context for pair in self.analysis.colors.contrast_pairs}
+        covered = {_issue_key(issue) for issue in light}
         for spec in self.components:
-            ratio = spec.contrast_ratio
-            if ratio is None or ratio >= AA_NORMAL or spec.name in covered:
-                continue
-            foreground = self.component_color(spec, "textColor")
-            if foreground is None:
-                continue
-            fg_ref = spec.token_refs.get("textColor")
-            bg_ref = spec.token_refs.get("backgroundColor")
-            light.append(
-                ContrastIssue(
-                    foreground=foreground,
-                    background=self.component_color(spec, "backgroundColor"),
-                    foreground_token=_ref_name(fg_ref) if self.has_ref(fg_ref) else None,
-                    background_token=_ref_name(bg_ref) if self.has_ref(bg_ref) else None,
-                    ratio=ratio,
-                    context=spec.name,
+            for check in self.component_contrasts(spec):
+                if check.passes or check.key in covered:
+                    continue
+                covered.add(check.key)
+                role = None
+                if check.foreground_token is not None:
+                    role = self.colors[check.foreground_token].role
+                light.append(
+                    ContrastIssue(
+                        foreground=check.foreground,
+                        background=check.background,
+                        foreground_token=check.foreground_token,
+                        background_token=check.background_token,
+                        ratio=check.ratio,
+                        context=spec.name,
+                        foreground_role=role,
+                    )
                 )
-            )
         dark: list[ContrastIssue] = []
         if self.analysis.dark is not None and self.has_dark_theme():
             seen = {(issue.foreground, issue.background, issue.ratio) for issue in light}
@@ -630,27 +861,30 @@ class DesignFacts:
             foreground_role=role,
         )
 
-    def best_text_pair(self) -> ContrastPair | None:
-        """The main running-text pair: a passing pair of light-theme tokens, preferring a
-        primary text token (role TEXT, not muted) on the canvas, then the most frequent."""
-        pairs = [
-            pair
-            for pair in self.analysis.colors.contrast_pairs
-            if pair.passes_aa
-            and pair.foreground_token in self.colors
-            and pair.background_token in self.colors
-        ]
-
-        def rank(pair: ContrastPair) -> tuple[int, int, int]:
-            foreground = self.colors[pair.foreground_token or ""]
-            background = self.colors[pair.background_token or ""]
-            return (
-                foreground.role == ColorRole.TEXT and not foreground.name.startswith("on-"),
-                background.role == ColorRole.BACKGROUND,
-                pair.occurrences,
+    def best_text_pair(self) -> PairCheck | None:
+        """The main running-text pair: a measured pair of light-theme tokens that passes AA
+        on the token values, preferring a primary text token (role TEXT, not on-*) on the
+        canvas, then the most frequent. The ratio is recomputed from the token values."""
+        occurrences: dict[tuple[str, str], int] = {}
+        for pair in self.analysis.colors.contrast_pairs:
+            if pair.foreground_token in self.colors and pair.background_token in self.colors:
+                key = (pair.foreground_token or "", pair.background_token or "")
+                occurrences[key] = occurrences.get(key, 0) + pair.occurrences
+        ranked: list[tuple[tuple[bool, bool, int], PairCheck]] = []
+        for (fg, bg), count in occurrences.items():
+            check = self.check_tokens(fg, bg)
+            if check is None or not check.passes:
+                continue
+            foreground = self.colors[fg]
+            rank = (
+                foreground.role == ColorRole.TEXT and not fg.startswith("on-"),
+                self.colors[bg].role == ColorRole.BACKGROUND,
+                count,
             )
-
-        return max(pairs, key=rank, default=None)
+            ranked.append((rank, check))
+        if not ranked:
+            return None
+        return max(ranked, key=lambda item: item[0])[1]
 
     def skipped_parts(self) -> frozenset[str]:
         """Analyzer parts the glue skipped (not built yet), read from its warning
@@ -690,6 +924,20 @@ class DesignFacts:
 def _ref_name(ref: str | None) -> str | None:
     parsed = parse_token_ref(ref) if ref is not None else None
     return None if parsed is None else parsed[1]
+
+
+def _issue_key(issue: ContrastIssue) -> tuple[str, str]:
+    return (
+        issue.foreground_token or issue.foreground.lower(),
+        issue.background_token or (issue.background or "").lower(),
+    )
+
+
+def _near(first: RGBA, second: RGBA) -> bool:
+    return (
+        abs(first.alpha - second.alpha) <= DECORATIVE_MATCH_ALPHA
+        and delta_e_2000(first, second) < DECORATIVE_MATCH_DELTA_E
+    )
 
 
 def _same_value(first: str | None, second: str | None) -> bool:

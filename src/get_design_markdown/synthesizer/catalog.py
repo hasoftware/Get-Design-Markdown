@@ -83,6 +83,13 @@ class Phrases:
         """The raw template of `key` (KeyError when missing)."""
         return self._flat[key]
 
+    def indefinite(self, word: str) -> str:
+        """The word with its indefinite article where the language has one ("an off-white",
+        "a near-black"; unchanged in Vietnamese)."""
+        vowel = word[:1].lower() in ("a", "e", "i", "o", "u")
+        key = "article.vowel" if vowel else "article.consonant"
+        return self.get(key, word=word)
+
     def join(self, items: list[str]) -> str:
         """Natural-language list: "a", "a and b", "a, b and c" (localized conjunction)."""
         if not items:

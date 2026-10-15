@@ -63,7 +63,7 @@ def _theme_paragraph(ctx: Context) -> str:
             "overview.theme",
             site=site,
             theme=ctx.p(f"trait.theme.{traits.theme}"),
-            canvas=canvas,
+            canvas=ctx.phrases.indefinite(canvas),
             canvas_ref=ctx.canvas_display(),
         )
     ]

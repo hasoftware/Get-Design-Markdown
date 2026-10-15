@@ -8,9 +8,14 @@ list:
   and: " và "
   more: "{count} mục khác"
 
+article:
+  vowel: "{word}"
+  consonant: "{word}"
+
 common:
   transparent: "trong suốt (để lộ bề mặt phía sau)"
   surface_behind: "bề mặt phía sau"
+  flattened: "{value} (≈ {opaque} khi phủ lên nền canvas)"
 
 note:
   source: "**Nguồn:** {url} · **Ngày trích xuất:** {date} · **Các trang đã phân tích:** {pages}"
@@ -68,16 +73,8 @@ trait:
   theme:
     light: "sáng"
     dark: "tối"
-  tint:
-    warm: "ấm"
-    cool: "lạnh"
   canvas:
-    near_black: "gần như đen"
-    dark: "tối"
-    mid_tone: "trung tính"
-    light: "xám sáng {tint}"
     bright_white: "trắng tinh"
-    tinted_white: "trắng ngả {tint}"
   named_color: "{name} {hex}"
   accent:
     none: "nút bấm đơn sắc (không có màu nền nút nào mang sắc độ)"
@@ -354,8 +351,16 @@ components:
   state_contrast_low: "(tương phản chữ ở trạng thái này: {ratio}, dưới mức WCAG AA 4.5:1)"
   seen_samples: "Số lần xuất hiện: {count}, ví dụ {samples}."
   seen: "Số lần xuất hiện: {count}."
-  contrast_fail: "⚠ Tương phản chữ {ratio} — dưới mức WCAG AA (4.5:1); không dùng lại cặp màu này cho chữ cỡ thân bài."
-  contrast_pass: "Tương phản chữ {ratio} (đạt WCAG AA ✓)."
+  contrast_item: "{fg} trên {bg}: {ratio} ({verdict})"
+  verdict:
+    pass: "đạt WCAG AA ✓"
+    large: "✗ dưới mức WCAG AA 4.5:1 — chỉ dùng cho chữ lớn"
+    fail: "✗ dưới mức WCAG AA 4.5:1"
+  contrast_pass: "Tương phản chữ: {pairs}."
+  contrast_fail: "⚠ Tương phản chữ: {pairs}. Không dùng cặp dưới mức WCAG AA (4.5:1) cho chữ cỡ thân bài."
+  contrast_measured_fail: "⚠ Tương phản chữ {ratio} — dưới mức WCAG AA (4.5:1); không dùng lại cặp màu này cho chữ cỡ thân bài."
+  contrast_measured_pass: "Tương phản chữ {ratio} (đạt WCAG AA ✓)."
+  alpha_note: "Nền trong suốt: `{entry}` giữ giá trị đo được {fill}; khi phủ lên nền canvas, chữ đạt {ratio}, còn các công cụ bỏ qua kênh alpha (như linter DESIGN.md) sẽ báo {blind} cho cùng cặp giá trị."
   front_matter: "Front matter: {names}."
   not_in_front_matter: "Không có thuộc tính nào thuộc spec để xuất: chỉ mô tả tại đây."
   example: "{name} — {purpose}: {details} (tương phản {ratio})."
@@ -444,6 +449,9 @@ dos:
   shadows: "Nên giới hạn độ nổi trong các mức đổ bóng đo được: {levels}."
   hamburger: "Nên thu gọn thanh điều hướng trên cùng thành menu hamburger dưới {below}px."
 
+caveat:
+  primary_text: "Khi làm màu chữ, màu này không đạt WCAG AA trên một nền — {pair}."
+
 donts:
   contrast: "Không nên đặt chữ {fg} trên nền {bg}: cặp này chỉ đạt {ratio} ({context}), dưới mức WCAG AA 4.5:1. {remedy}"
   contrast_dark: "Không nên dùng {fg} trên {bg} ở giao diện tối: cặp này chỉ đạt {ratio} ({context}), dưới mức WCAG AA 4.5:1. {remedy}"
@@ -488,11 +496,8 @@ guide:
       cta: "nút kêu gọi hành động kiểu {component} ({details})"
       cta_color: "nút kêu gọi hành động màu {ref}"
       card: "mỗi mục là một {component} ({details})"
-      card_surface: "thẻ đặt trên {ref}"
-      radius: "bo góc {ref}"
       card_title: "tiêu đề thẻ dùng {ref}"
       card_body: "mô tả dùng {ref}"
-      gap: "khoảng cách lưới {ref}"
       input: "ô email theo kiểu {component} ({details})"
       submit: "nút gửi theo kiểu {component} ({details})"
       nav: "thanh {component} ({details})"

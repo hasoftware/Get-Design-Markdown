@@ -379,7 +379,7 @@ Nút kêu gọi hành động chính. Số lần xuất hiện: 2, ví dụ “S
 - Chiều cao: 44px
 - Đổ bóng: mức sm — `0px 1px 2px 0px rgba(15, 23, 42, 0.06)`
 - Hover: nền → #4338ca
-- Tương phản chữ 6.29:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.on-primary}` — #ffffff trên `{colors.primary}` — #4f46e5: 6.29:1 (đạt WCAG AA ✓).
 - Front matter: `button-primary` và `button-primary-hover`.
 
 ### button-secondary
@@ -393,7 +393,7 @@ Nút hành động phụ. Số lần xuất hiện: 1, ví dụ “Get updates�
 - Padding: 12px 20px
 - Chiều cao: 44px
 - Hover: nền → #1e293b
-- Tương phản chữ 17.85:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.on-primary}` — #ffffff trên `{colors.ink}` — #0f172a: 17.85:1 (đạt WCAG AA ✓).
 - Front matter: `button-secondary` và `button-secondary-hover`.
 
 ### button-outline
@@ -408,7 +408,7 @@ Nút viền cho hành động phụ. Số lần xuất hiện: 1, ví dụ “Bo
 - Padding: 11px 19px
 - Chiều cao: 44px
 - Hover: nền → `{colors.surface}` — #f8fafc; màu viền → #cbd5e1
-- Tương phản chữ 17.85:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.ink}` — #0f172a trên `{colors.surface}` — #f8fafc: 17.06:1 (đạt WCAG AA ✓); `{colors.ink}` — #0f172a trên `{colors.canvas}` — #ffffff: 17.85:1 (đạt WCAG AA ✓).
 - Front matter: `button-outline` và `button-outline-hover`.
 
 ### button-ghost
@@ -422,7 +422,7 @@ Nút ghost với nền trong suốt. Số lần xuất hiện: 1, ví dụ “Wa
 - Padding: 8px 12px
 - Chiều cao: 36px
 - Hover: nền → #eef2ff
-- Tương phản chữ 6.29:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.primary}` — #4f46e5 trên `{colors.canvas}` — #ffffff: 6.29:1 (đạt WCAG AA ✓).
 - Front matter: `button-ghost` và `button-ghost-hover`.
 
 ### text-link
@@ -433,7 +433,7 @@ Liên kết trong dòng chữ. Số lần xuất hiện: 1, ví dụ “See full
 - Typography: Inter 16px / 500 / 25.6px
 - Trang trí chữ: none
 - Hover: chữ → #4338ca; trang trí chữ → underline
-- Tương phản chữ 6.29:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.primary}` — #4f46e5 trên `{colors.canvas}` — #ffffff: 6.29:1 (đạt WCAG AA ✓).
 - Front matter: `text-link` và `text-link-hover`.
 
 ### nav-link
@@ -447,7 +447,7 @@ Liên kết điều hướng. Số lần xuất hiện: 5, ví dụ “Product�
 - Chiều cao: 36px
 - Trang trí chữ: none
 - Hover: chữ → `{colors.ink}` — #0f172a
-- Tương phản chữ 7.58:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.muted}` — #475569 trên `{colors.surface}` — #f8fafc: 7.24:1 (đạt WCAG AA ✓); `{colors.muted}` — #475569 trên `{colors.canvas}` — #ffffff: 7.58:1 (đạt WCAG AA ✓).
 - Front matter: `nav-link` và `nav-link-hover`.
 
 ### text-input
@@ -463,7 +463,7 @@ Liên kết điều hướng. Số lần xuất hiện: 5, ví dụ “Product�
 - Chiều cao: 44px
 - Đổ bóng: mức sm — `0px 1px 2px 0px rgba(15, 23, 42, 0.06)`
 - Placeholder: `{colors.faint}` — #94a3b8 — tương phản chỉ 2.56:1, dưới 4.5:1
-- Tương phản chữ 17.85:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.ink}` — #0f172a trên `{colors.canvas}` — #ffffff: 17.85:1 (đạt WCAG AA ✓).
 - Front matter: `text-input`.
 
 ### card
@@ -487,14 +487,14 @@ Nhãn (badge) dạng viên thuốc. Số lần xuất hiện: 1, ví dụ “New
 - Bo góc: `{rounded.full}` — 9999px
 - Padding: 4px 12px
 - Chiều cao: 28px
-- Tương phản chữ 5.62:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.primary}` — #4f46e5 trên #eef2ff: 5.62:1 (đạt WCAG AA ✓).
 - Front matter: `badge`.
 
 ### top-nav
 
 Thanh điều hướng trên cùng. Số lần xuất hiện: 1.
 
-- Nền: #ffffffcc
+- Nền: #ffffffcc (≈ #ffffff khi phủ lên nền canvas)
 - Viền: dưới 1px · `{colors.hairline}` — #e2e8f0
 - Padding: 0px 24px
 - Chiều cao: 64px
@@ -510,7 +510,7 @@ Chân trang. Số lần xuất hiện: 1.
 - Chữ: `{colors.faint}` — #94a3b8
 - Typography: `{typography.body-sm}` — Inter 14px / 400 / 1.43
 - Padding: 64px 0px 48px
-- Tương phản chữ 7.38:1 (đạt WCAG AA ✓).
+- Tương phản chữ: `{colors.faint}` — #94a3b8 trên `{colors.surface-inverse}` — #0b1020: 7.38:1 (đạt WCAG AA ✓).
 - Front matter: `footer`.
 
 ## Do's and Don'ts
@@ -550,7 +550,7 @@ Bản tóm tắt dùng ngay cho AI coding agent. Mọi giá trị bên dưới �
 ### Prompt mẫu
 
 1. “Dựng section hero: nền `{colors.canvas}` — #ffffff; tiêu đề dùng `{typography.display}` — Space Grotesk 64px / 700 / 1.05, màu `{colors.ink}` — #0f172a; đoạn mô tả dùng `{typography.body-lg}` — Inter 20px / 400 / 1.6, màu `{colors.muted}` — #475569; nút kêu gọi hành động kiểu button-primary (nền `{colors.primary}` — #4f46e5, chữ `{colors.on-primary}` — #ffffff, typography `{typography.ui}` — Inter 15px / 500 / 1.33, bo góc `{rounded.md}` — 8px, padding 12px 20px, chiều cao 44px).”
-2. “Tạo lưới tính năng 3 cột: mỗi mục là một card (nền `{colors.canvas}` — #ffffff, bo góc `{rounded.xl}` — 16px, padding `{spacing.xxl}` — 32px); tiêu đề thẻ dùng `{typography.title}` — Inter 24px / 600 / 1.33; mô tả dùng `{typography.body}` — Inter 16px / 400 / 1.6; khoảng cách lưới `{spacing.xl}` — 24px.”
+2. “Tạo lưới tính năng 3 cột: mỗi mục là một card (nền `{colors.canvas}` — #ffffff, bo góc `{rounded.xl}` — 16px, padding `{spacing.xxl}` — 32px); tiêu đề thẻ dùng `{typography.title}` — Inter 24px / 600 / 1.33; mô tả dùng `{typography.body}` — Inter 16px / 400 / 1.6.”
 3. “Thiết kế khối đăng ký: ô email theo kiểu text-input (nền `{colors.canvas}` — #ffffff, chữ `{colors.ink}` — #0f172a, bo góc `{rounded.sm}` — 6px, padding 10px 14px, chiều cao 44px); nút gửi theo kiểu button-primary (nền `{colors.primary}` — #4f46e5, chữ `{colors.on-primary}` — #ffffff, typography `{typography.ui}` — Inter 15px / 500 / 1.33, bo góc `{rounded.md}` — 8px, padding 12px 20px, chiều cao 44px).”
 
 ### Biến CSS
@@ -569,15 +569,15 @@ Biến CSS gợi ý, mỗi token trong front matter một biến:
 | `{colors.muted}` | `--color-muted` | #475569 |
 | `{colors.faint}` | `--color-faint` | #94a3b8 |
 | `{colors.success}` | `--color-success` | #16a34a |
-| `{typography.display}` | `--font-display` | `700 64px/1.05 "Space Grotesk", sans-serif` |
-| `{typography.heading}` | `--font-heading` | `700 40px/1.15 "Space Grotesk", sans-serif` |
-| `{typography.title}` | `--font-title` | `600 24px/1.33 Inter, sans-serif` |
-| `{typography.body-lg}` | `--font-body-lg` | `400 20px/1.6 Inter, sans-serif` |
-| `{typography.body}` | `--font-body` | `400 16px/1.6 Inter, sans-serif` |
-| `{typography.ui}` | `--font-ui` | `500 15px/1.33 Inter, sans-serif` |
-| `{typography.body-sm}` | `--font-body-sm` | `400 14px/1.43 Inter, sans-serif` |
-| `{typography.code}` | `--font-code` | `400 14px/1.6 "JetBrains Mono", monospace` |
-| `{typography.caption}` | `--font-caption` | `400 13px/1.5 Inter, sans-serif` |
+| `{typography.display}` | `--font-display` | `700 64px/1.05 "Space Grotesk", Inter, sans-serif` |
+| `{typography.heading}` | `--font-heading` | `700 40px/1.15 "Space Grotesk", Inter, sans-serif` |
+| `{typography.title}` | `--font-title` | `600 24px/1.33 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body-lg}` | `--font-body-lg` | `400 20px/1.6 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body}` | `--font-body` | `400 16px/1.6 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.ui}` | `--font-ui` | `500 15px/1.33 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.body-sm}` | `--font-body-sm` | `400 14px/1.43 Inter, -apple-system, "Segoe UI", sans-serif` |
+| `{typography.code}` | `--font-code` | `400 14px/1.6 "JetBrains Mono", SFMono-Regular, Menlo, monospace` |
+| `{typography.caption}` | `--font-caption` | `400 13px/1.5 Inter, -apple-system, "Segoe UI", sans-serif` |
 | `{rounded.sm}` | `--radius-sm` | 6px |
 | `{rounded.md}` | `--radius-md` | 8px |
 | `{rounded.lg}` | `--radius-lg` | 12px |

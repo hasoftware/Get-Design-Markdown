@@ -1,8 +1,9 @@
 """Rule-based style traits shared by the front-matter description and the Overview section.
 
 Thresholds (CLAUDE.md, "Synthesizer — dựng bằng luật"):
-- canvas OKLCH lightness < 0.15 -> near-black; > 0.95 -> bright white (tinted when chroma
-  >= 0.015);
+- the canvas is described with the same color name the Colors section gives its token
+  (colornames.color_name: "near-black", "off-white", "cool light gray"…), so the Overview and
+  the palette never disagree; a pure white canvas (the "white" neutral) reads "bright white";
 - every weight >= 600 -> "heavy weights only — no regular 400";
 - chromatic button backgrounds grouped into hue families; families with at least 15% of the
   chromatic button instances count: 0 monochrome, 1 single accent, 2 two-signal, 3+ multi
@@ -19,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from get_design_markdown.analyzer.css_values import to_oklch
+from get_design_markdown.analyzer.css_values import RGBA, to_oklch
 from get_design_markdown.analyzer.naming import PILL_RADIUS_PX
 from get_design_markdown.models.analysis import ComponentKind, FontFamilyInfo, FontRole, ScaleStep
 from get_design_markdown.synthesizer.catalog import Phrases
@@ -62,6 +63,8 @@ class Traits:
     heading_family: FontFamilyInfo | None
     body_family: FontFamilyInfo | None
     mono_family: FontFamilyInfo | None
+    #: Opaque canvas color (None without color data).
+    canvas_color: RGBA | None = None
 
 
 def _canvas_key(facts: DesignFacts) -> tuple[CanvasKey | None, Literal["warm", "cool"] | None]:
@@ -158,6 +161,7 @@ def compute_traits(facts: DesignFacts) -> Traits:
         heading_family=heading,
         body_family=body,
         mono_family=facts.family_with_role(FontRole.MONO),
+        canvas_color=facts.canvas if facts.colors else None,
     )
 
 
@@ -165,10 +169,14 @@ def compute_traits(facts: DesignFacts) -> Traits:
 
 
 def canvas_words(traits: Traits, phrases: Phrases) -> str | None:
-    if traits.canvas is None:
+    """The canvas adjective: the color name the Colors section uses for the same value
+    ("off-white", "near-black"), "bright white" for pure white."""
+    if traits.canvas is None or traits.canvas_color is None:
         return None
-    tint = phrases.get(f"trait.tint.{traits.canvas_tint}") if traits.canvas_tint else ""
-    return phrases.get(f"trait.canvas.{traits.canvas}", tint=tint).strip()
+    name = color_name(traits.canvas_color, phrases)
+    if not name or name == phrases.get("color_name.neutral.white"):
+        return phrases.get("trait.canvas.bright_white")
+    return name
 
 
 def family_hexes(action: ActionColor) -> str:
@@ -226,7 +234,7 @@ def description(facts: DesignFacts, phrases: Phrases) -> str:
             phrases.get(
                 "description.theme_canvas",
                 theme=phrases.get(f"trait.theme.{traits.theme}"),
-                canvas=canvas,
+                canvas=phrases.indefinite(canvas),
             )
         )
     for fragment in (

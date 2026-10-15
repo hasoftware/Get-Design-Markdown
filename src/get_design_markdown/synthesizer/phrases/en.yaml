@@ -7,9 +7,14 @@ list:
   and: " and "
   more: "{count} more"
 
+article:
+  vowel: "an {word}"
+  consonant: "a {word}"
+
 common:
   transparent: "transparent (shows the surface behind it)"
   surface_behind: "the surface behind it"
+  flattened: "{value} (≈ {opaque} over the canvas)"
 
 note:
   source: "**Source:** {url} · **Extracted:** {date} · **Pages analyzed:** {pages}"
@@ -67,16 +72,8 @@ trait:
   theme:
     light: "light"
     dark: "dark"
-  tint:
-    warm: "warm"
-    cool: "cool"
   canvas:
-    near_black: "near-black"
-    dark: "dark"
-    mid_tone: "mid-tone"
-    light: "{tint} light-gray"
     bright_white: "bright white"
-    tinted_white: "{tint} off-white"
   named_color: "{name} {hex}"
   accent:
     none: "monochrome actions (no chromatic button background)"
@@ -93,13 +90,13 @@ trait:
     sharp: "sharp, precise corners (most common radius {radius})"
 
 description:
-  theme_canvas: "{theme} interface on a {canvas} canvas"
+  theme_canvas: "{theme} interface on {canvas} canvas"
   sentence: "Measured design language of {site}: {details}."
   minimal: "Measured design language of {site} (partial capture: no style tokens were measured)."
 
 overview:
   no_colors: "{site}: no color data was measured in this capture."
-  theme: "{site} presents a {theme} interface built on a {canvas} canvas ({canvas_ref})."
+  theme: "{site} presents a {theme} interface built on {canvas} canvas ({canvas_ref})."
   ink: "Primary text is {name} ({ref})."
   type: "Type is set as {type}."
   shape: "The shape language uses {shape}."
@@ -353,8 +350,16 @@ components:
   state_contrast_low: "(text contrast in this state: {ratio}, below WCAG AA 4.5:1)"
   seen_samples: "Instances: {count}, e.g. {samples}."
   seen: "Instances: {count}."
-  contrast_fail: "⚠ Text contrast {ratio} — below WCAG AA (4.5:1); do not reuse this pair for body-size text."
-  contrast_pass: "Text contrast {ratio} (WCAG AA ✓)."
+  contrast_item: "{fg} on {bg}: {ratio} ({verdict})"
+  verdict:
+    pass: "WCAG AA ✓"
+    large: "✗ below WCAG AA 4.5:1 — large text only"
+    fail: "✗ below WCAG AA 4.5:1"
+  contrast_pass: "Text contrast: {pairs}."
+  contrast_fail: "⚠ Text contrast: {pairs}. Do not use a pair below WCAG AA (4.5:1) for body-size text."
+  contrast_measured_fail: "⚠ Text contrast {ratio} — below WCAG AA (4.5:1); do not reuse this pair for body-size text."
+  contrast_measured_pass: "Text contrast {ratio} (WCAG AA ✓)."
+  alpha_note: "Translucent fill: `{entry}` keeps the measured {fill}; layered over the canvas its text measures {ratio}, while checkers that ignore alpha (such as the DESIGN.md linter) report {blind} for the same values."
   front_matter: "Front matter: {names}."
   not_in_front_matter: "No spec-level property to export: described here only."
   example: "{name} — {purpose}: {details} (contrast {ratio})."
@@ -443,6 +448,9 @@ dos:
   shadows: "Do limit elevation to the measured shadow levels: {levels}."
   hamburger: "Do collapse the top nav into a hamburger menu below {below}px."
 
+caveat:
+  primary_text: "As text it falls below WCAG AA on one surface — {pair}."
+
 donts:
   contrast: "Don't set {fg} text on {bg}: it measures only {ratio} ({context}), below WCAG AA 4.5:1. {remedy}"
   contrast_dark: "Don't use {fg} on {bg} in the dark theme: it measures only {ratio} ({context}), below WCAG AA 4.5:1. {remedy}"
@@ -487,11 +495,8 @@ guide:
       cta: "a {component} call to action ({details})"
       cta_color: "a call-to-action button in {ref}"
       card: "each item is a {component} ({details})"
-      card_surface: "cards on {ref}"
-      radius: "corner radius {ref}"
       card_title: "card titles in {ref}"
       card_body: "descriptions in {ref}"
-      gap: "grid gap {ref}"
       input: "an email field styled as {component} ({details})"
       submit: "a submit button styled as {component} ({details})"
       nav: "a {component} bar ({details})"

@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from get_design_markdown.analyzer.css_values import AA_NORMAL, parse_sides_px
+import re
+
+from get_design_markdown.analyzer.css_values import (
+    AA_NORMAL,
+    GENERIC_FONT_FAMILIES,
+    is_generic_family,
+    parse_sides_px,
+)
 from get_design_markdown.analyzer.naming import (
     COLORS,
     ROUNDED,
@@ -11,10 +18,15 @@ from get_design_markdown.analyzer.naming import (
     state_variant_name,
     token_ref,
 )
-from get_design_markdown.models.analysis import ComponentKind, ComponentSpec, ResponsiveChangeKind
+from get_design_markdown.models.analysis import (
+    ComponentKind,
+    ComponentSpec,
+    ResponsiveChangeKind,
+    TypeLevel,
+)
 from get_design_markdown.synthesizer.context import Context
 from get_design_markdown.synthesizer.examples import ExampleSurface
-from get_design_markdown.synthesizer.facts import STATUS_ROLES, is_transparent_value
+from get_design_markdown.synthesizer.facts import STATUS_ROLES, PairCheck, is_transparent_value
 from get_design_markdown.synthesizer.formatting import (
     bullets,
     fmt_num,
@@ -49,6 +61,10 @@ DISPLAY_KEYS = (
 )
 LABELLED_SAMPLE_KINDS = frozenset({ComponentKind.BUTTON, ComponentKind.LINK, ComponentKind.BADGE})
 MAX_SAMPLES = 3
+#: Named families kept in a CSS font hint before the generic fallback.
+MAX_STACK_FAMILIES = 4
+#: Samples are cut at 50 characters; a shorter text matches another only when equal.
+MIN_TRUNCATED_SAMPLE = 24
 _SIDES = ("top", "right", "bottom", "left")
 
 # ─── Components ──────────────────────────────────────────────────────────────
@@ -69,6 +85,8 @@ def _value(ctx: Context, spec: ComponentSpec, key: str, raw: str | None, ref: st
     if key in ("backgroundColor", "textColor", "placeholderColor", "borderColor"):
         if is_transparent_value(raw):
             return ctx.p("common.transparent")
+        if key == "backgroundColor":
+            return ctx.flattened(raw)
         return raw
     if key == "shadow":
         level = next((s for s in ctx.facts.analysis.shadows if s.css == raw), None)
@@ -204,13 +222,40 @@ def _seen(ctx: Context, spec: ComponentSpec) -> str | None:
     return ctx.p("components.seen", count=spec.count)
 
 
+def _verdict(ctx: Context, check: PairCheck) -> str:
+    if check.passes:
+        return ctx.p("components.verdict.pass")
+    return ctx.p("components.verdict.large" if check.passes_large else "components.verdict.fail")
+
+
+def check_text(ctx: Context, check: PairCheck) -> str:
+    """ "`{colors.primary}` — #635bff on `{colors.canvas}` — #f6f9fc: 4.45:1 (…)": both
+    sides written with the values the ratio was computed from."""
+    return ctx.p(
+        "components.contrast_item",
+        fg=ctx.facts.color_display(check.foreground, check.foreground_token),
+        bg=ctx.flattened(
+            check.background, ctx.facts.color_display(check.background, check.background_token)
+        ),
+        ratio=fmt_ratio(check.ratio),
+        verdict=_verdict(ctx, check),
+    )
+
+
 def _contrast_line(ctx: Context, spec: ComponentSpec) -> str | None:
-    ratio = spec.contrast_ratio
-    if ratio is None:
-        return None
-    if ratio < AA_NORMAL:
-        return ctx.p("components.contrast_fail", ratio=fmt_ratio(ratio))
-    return ctx.p("components.contrast_pass", ratio=fmt_ratio(ratio))
+    """Text contrast recomputed from the colors printed for the component; for a component
+    without a fill, on each surface its text color was measured on (worst first)."""
+    checks = ctx.facts.component_contrasts(spec)
+    if not checks:
+        ratio = spec.contrast_ratio
+        if ratio is None:
+            return None
+        key = "components.contrast_measured_" + ("fail" if ratio < AA_NORMAL else "pass")
+        return ctx.p(key, ratio=fmt_ratio(ratio))
+    pairs = "; ".join(check_text(ctx, check) for check in checks)
+    if all(check.passes for check in checks):
+        return ctx.p("components.contrast_pass", pairs=pairs)
+    return ctx.p("components.contrast_fail", pairs=pairs)
 
 
 def _component_block(ctx: Context, spec: ComponentSpec) -> str:
@@ -222,6 +267,17 @@ def _component_block(ctx: Context, spec: ComponentSpec) -> str:
     contrast = _contrast_line(ctx, spec)
     if contrast:
         lines.append(contrast)
+    lines.extend(
+        ctx.p(
+            "components.alpha_note",
+            entry=pair.entry,
+            fill=pair.fill,
+            ratio=fmt_ratio(pair.ratio),
+            blind=fmt_ratio(pair.alpha_blind_ratio),
+        )
+        for pair in ctx.facts.alpha_blind_pairs()
+        if pair.component == spec.name
+    )
     names = [spec.name] if spec.name in ctx.components else []
     names += [
         state_variant_name(spec.name, state)
@@ -317,24 +373,26 @@ def _dos(ctx: Context) -> list[str]:
     if "primary" in facts.colors:
         users = usage.get("primary", [])
         primary_button = facts.component_by_name("button-primary")
+        line: str | None = None
         if primary_button is not None and primary_button.token_refs.get(
             "backgroundColor"
         ) == token_ref(COLORS, "primary"):
-            dos.append(
-                ctx.p(
-                    "dos.primary_action",
-                    ref=ctx.color_ref("primary"),
-                    components=name_list(ctx, users),
-                )
+            line = ctx.p(
+                "dos.primary_action",
+                ref=ctx.color_ref("primary"),
+                components=name_list(ctx, users),
             )
         elif users:
-            dos.append(
-                ctx.p(
-                    "dos.primary_color",
-                    ref=ctx.color_ref("primary"),
-                    components=name_list(ctx, users),
-                )
+            line = ctx.p(
+                "dos.primary_color",
+                ref=ctx.color_ref("primary"),
+                components=name_list(ctx, users),
             )
+        failures = facts.text_failures("primary")
+        if line is not None and failures:
+            line += " " + ctx.p("caveat.primary_text", pair=check_text(ctx, failures[0]))
+        if line is not None:
+            dos.append(line)
     pair = facts.best_text_pair()
     if pair is not None and pair.foreground_token and pair.background_token:
         dos.append(
@@ -345,7 +403,7 @@ def _dos(ctx: Context) -> list[str]:
                 ratio=fmt_ratio(pair.ratio),
             )
         )
-    heading = facts.heading_level()
+    heading = facts.headline_level()
     body = facts.body_level()
     if heading is not None and body is not None and heading.name != body.name:
         dos.append(
@@ -494,7 +552,7 @@ def _quick_reference(ctx: Context) -> list[str]:
     ]
     if neutrals:
         items.append(ctx.p("guide.quick.neutrals", items=ctx.phrases.join(neutrals)))
-    heading = facts.heading_level()
+    heading = facts.headline_level()
     body = facts.body_level()
     if heading is not None and body is not None and heading.name != body.name:
         items.append(
@@ -545,7 +603,7 @@ def _hero_prompt(ctx: Context) -> str | None:
     clauses: list[str] = []
     if "canvas" in facts.colors:
         clauses.append(ctx.p("guide.prompt.clause.canvas", ref=ctx.color_ref("canvas")))
-    heading = facts.heading_level()
+    heading = facts.headline_level()
     ink = ctx.ink()
     if heading is not None:
         key = "guide.prompt.clause.headline_color" if ink else "guide.prompt.clause.headline"
@@ -554,8 +612,8 @@ def _hero_prompt(ctx: Context) -> str | None:
                 key, ref=ctx.level_ref(heading.name), color=ctx.color_ref(ink.name) if ink else ""
             )
         )
-    lead = next((facts.levels[n] for n in ("body-lg", "body") if n in facts.levels), None)
-    if lead is not None:
+    lead = facts.lead_level()
+    if lead is not None and (heading is None or lead.name != heading.name):
         muted = "muted" if "muted" in facts.colors else None
         key = "guide.prompt.clause.lead_color" if muted else "guide.prompt.clause.lead"
         clauses.append(
@@ -571,28 +629,52 @@ def _hero_prompt(ctx: Context) -> str | None:
     return ctx.p("guide.prompt.hero", details="; ".join(clauses))
 
 
+def _sample_key(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def _same_sample(first: str, second: str) -> bool:
+    """Equal sample texts; a prefix counts only when long enough to be a truncated sample."""
+    if not first or not second:
+        return False
+    shorter, longer = sorted((first, second), key=len)
+    return shorter == longer or (
+        len(shorter) >= MIN_TRUNCATED_SAMPLE and longer.startswith(shorter)
+    )
+
+
+def _card_title_level(ctx: Context, card: ComponentSpec) -> TypeLevel | None:
+    """The type level whose measured samples include a title of the card (component samples
+    are the card's first text), so the prompt never guesses a title size by level name."""
+    titles = [_sample_key(sample) for sample in card.samples if sample.strip()]
+    for level in ctx.facts.levels.values():
+        for sample in level.samples:
+            key = _sample_key(sample)
+            if any(_same_sample(key, title) for title in titles):
+                return level
+    return None
+
+
 def _cards_prompt(ctx: Context) -> str | None:
+    """A feature grid built only from a measured card component (None without one)."""
     facts = ctx.facts
-    clauses: list[str] = []
-    brief = _component_brief(ctx, "card")
-    if brief:
-        clauses.append(ctx.p("guide.prompt.clause.card", component="card", details=brief))
-    else:
-        surface = next((n for n in ("surface", "canvas") if n in facts.colors), None)
-        if surface:
-            clauses.append(ctx.p("guide.prompt.clause.card_surface", ref=ctx.color_ref(surface)))
-        radius = next((n for n in ("xl", "lg", "md") if n in facts.radii), None)
-        if radius:
-            clauses.append(ctx.p("guide.prompt.clause.radius", ref=facts.ref(ROUNDED, radius)))
-    title = next((n for n in ("title", "subtitle", "heading") if n in facts.levels), None)
-    if title:
-        clauses.append(ctx.p("guide.prompt.clause.card_title", ref=ctx.level_ref(title)))
+    cards = facts.components_of_kind(ComponentKind.CARD)
+    card = next((spec for spec in cards if spec.name in ctx.components), None)
+    if card is None:
+        return None
+    clauses = [
+        ctx.p(
+            "guide.prompt.clause.card",
+            component=card.name,
+            details=_component_brief(ctx, card.name) or "",
+        )
+    ]
+    title = _card_title_level(ctx, card)
+    if title is not None:
+        clauses.append(ctx.p("guide.prompt.clause.card_title", ref=ctx.level_ref(title.name)))
     body = facts.body_level()
-    if body is not None:
+    if body is not None and (title is None or body.name != title.name):
         clauses.append(ctx.p("guide.prompt.clause.card_body", ref=ctx.level_ref(body.name)))
-    gap = next((n for n in ("xl", "lg") if n in facts.spacing), None)
-    if gap:
-        clauses.append(ctx.p("guide.prompt.clause.gap", ref=facts.ref(SPACING, gap)))
     if len(clauses) < 2:
         return None
     columns = max((s.main_columns for s in facts.analysis.layout.snapshots), default=3)
@@ -637,16 +719,37 @@ def _nav_prompt(ctx: Context) -> str | None:
     return ctx.p("guide.prompt.nav", details="; ".join(clauses))
 
 
-def _font_css(ctx: Context, name: str) -> str:
-    level = ctx.facts.levels[name]
-    family = ctx.facts.families.get(level.font_family)
+def _css_family(name: str) -> str:
+    """A font-family entry: generic keywords bare, other names quoted unless one plain word."""
+    if is_generic_family(name) or re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name):
+        return name
+    escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def font_stack(ctx: Context, family_name: str) -> list[str]:
+    """The font-family list a CSS hint should use: the measured stack (the display name, e.g.
+    "Söhne", is often not a loadable family — the site loads "sohne-var"), led by the display
+    name only for Google Fonts (loaded under that name), cut to MAX_STACK_FAMILIES named
+    families and ending with a generic family."""
+    family = ctx.facts.families.get(family_name)
     generic = "sans-serif"
     if family is not None and family.category in ("serif", "monospace"):
         generic = family.category
+    names = list(family.stack) if family is not None and family.stack else [family_name]
+    if family is not None and family.is_google_font:
+        names.insert(0, family_name)
+    named = unique(name for name in names if name.lower() not in GENERIC_FONT_FAMILIES)
+    generics = [name for name in names if name.lower() in GENERIC_FONT_FAMILIES]
+    return [*named[:MAX_STACK_FAMILIES], generics[-1] if generics else generic]
+
+
+def _font_css(ctx: Context, name: str) -> str:
+    level = ctx.facts.levels[name]
     ratio = ctx.facts.line_height_ratio(level)
     size = fmt_px(level.size_px) + (f"/{fmt_num(ratio)}" if ratio is not None else "")
-    quoted = f'"{level.font_family}"' if " " in level.font_family else level.font_family
-    return f"{level.weight} {size} {quoted}, {generic}"
+    stack = ", ".join(_css_family(family) for family in font_stack(ctx, level.font_family))
+    return f"{level.weight} {size} {stack}"
 
 
 def _mapping_table(ctx: Context) -> str | None:
