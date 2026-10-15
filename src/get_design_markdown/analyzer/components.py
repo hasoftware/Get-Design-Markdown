@@ -102,13 +102,8 @@ from get_design_markdown.models.raw import ElementSample, PageCapture
 
 #: Variants named after palette tokens of the same name.
 TOKEN_VARIANTS = ("primary", "secondary", "tertiary")
-#: Multi-line fields: not in naming.COMPONENT_NAME_ORDER, listed right after "text-input".
+#: Multi-line fields (<textarea>), listed right after "text-input" in COMPONENT_NAME_ORDER.
 TEXT_AREA_NAME = "text-area"
-_NAME_ORDER = tuple(
-    item
-    for name in COMPONENT_NAME_ORDER
-    for item in ((name, TEXT_AREA_NAME) if name == "text-input" else (name,))
-)
 RADIUS_TOLERANCE_PX = 0.5
 #: A weaker-shadow card group must be at least this prominent (vs the main one) to become
 #: the base "card" under a "card-elevated" main group.
@@ -158,9 +153,8 @@ def analyze_components(
 
 
 def sort_components(specs: Sequence[ComponentSpec]) -> list[ComponentSpec]:
-    """naming.COMPONENT_NAME_ORDER first ("text-area" after "text-input"), unknown names
-    after (alphabetically)."""
-    rank = {name: position for position, name in enumerate(_NAME_ORDER)}
+    """naming.COMPONENT_NAME_ORDER first, unknown names after (alphabetically)."""
+    rank = {name: position for position, name in enumerate(COMPONENT_NAME_ORDER)}
     return sorted(specs, key=lambda spec: (rank.get(spec.name, len(rank)), spec.name))
 
 

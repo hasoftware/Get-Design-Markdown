@@ -81,6 +81,7 @@ COMPONENT_NAME_ORDER: Final = (
     "text-link",
     "nav-link",
     "text-input",
+    "text-area",
     "card",
     "card-elevated",
     "badge",

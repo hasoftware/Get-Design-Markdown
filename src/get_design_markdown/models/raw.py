@@ -192,6 +192,8 @@ class LayoutSnapshot(GdmModel):
     visible_nav_links: int = 0
     hamburger_visible: bool = False
     sidebar_visible: bool = False
+    #: Columns of the dominant content grid: the column count whose grid containers cover the
+    #: largest item area (collector/js/layout.js); a grid that stacks at this width counts as 1.
     main_columns: int = 1
     horizontal_scrollers: int = 0
     min_tap_target_px: float | None = None

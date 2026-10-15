@@ -263,6 +263,10 @@ class ComponentSpec(GdmModel):
     "transparent"; lengths use px ("8px", padding as a CSS shorthand "12px 20px"); opacity is a
     unitless number ("0.8", mostly seen in hover states). DESIGN.md front matter keeps only the
     spec's component keys; tokens.json exports the rest.
+
+    Form fields: single-line inputs and selects are "text-input" (kind input, with a height);
+    <textarea> fields are "text-area" (kind input, variant "multiline") without a height, since
+    their height follows rows and content.
     """
 
     #: Front-matter name, e.g. "button-primary"; hover becomes "button-primary-hover".
