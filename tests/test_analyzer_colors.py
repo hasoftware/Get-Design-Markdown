@@ -1028,13 +1028,18 @@ def test_dark_app_text_and_hairline_roles() -> None:
     assert by_name["canvas"].css_variable == "--color-bg-primary"
     assert by_name["surface"].value == "#0f1011"
     assert by_name["ink"].value == "#f7f8f8"
-    # "--color-text-secondary" (#d0d6e0) is barely dimmer than ink: not the muted gray.
-    assert by_name["muted"].value == "#8a8f98"
-    assert by_name["faint"].value == "#62666d"
+    # Four text tiers: "--color-text-secondary" (#d0d6e0) is close to ink but named and heavily
+    # used, so it is the muted tier; the tertiary gray is faint, the quaternary one is dropped.
+    assert by_name["muted"].value == "#d0d6e0"
+    assert by_name["muted"].css_variable == "--color-text-secondary"
+    assert by_name["faint"].value == "#8a8f98"
+    assert by_name["faint"].css_variable == "--color-text-tertiary"
     # The translucent hairline carries far more weight than the hinted "--color-border-primary".
     assert by_name["hairline"].value == "#ffffff14"
     assert by_name["hairline"].css_variable is None
     assert by_name["hairline-strong"].value == "#23252a"
+    # "--color-border-primary" hints a plain hairline, but its value is exactly this token.
+    assert by_name["hairline-strong"].css_variable == "--color-border-primary"
     # The brand variable is never used by an action: no primary, the CTA is neutral.
     assert "primary" not in by_name and "on-primary" not in by_name
 

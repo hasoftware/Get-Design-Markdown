@@ -207,7 +207,10 @@ def cluster_channel(
 
 def _is_decorative_sample(sample: ColorSample, chroma: float, page_areas: Sequence[float]) -> bool:
     element = sample.ref.element
-    if sample.channel == "text" or sample.synthetic is not None:
+    if sample.channel == "text":
+        # Text is decorative only as one layer of a stacked, blended copy of the same text.
+        return sample.traits.layered_text
+    if sample.synthetic is not None:
         return False
     if element.has_own_text or sample.traits.interactive:
         return False
@@ -251,9 +254,12 @@ def build_clusters(
                 and all(item.name != variable.name for item in matched)
             ):
                 matched.append(variable)
-        # Role-hinting names first (they are what token selection reads), then the rest.
+        # Variables holding exactly the representative first, then role-hinting names (what
+        # token selection reads), then the rest; machine-generated names last.
+        rep_hex = cluster.rep.css_hex
         matched.sort(
             key=lambda variable: (
+                0 if variable.color.css_hex == rep_hex else 1,
                 0 if variable.hints else 1,
                 1 if is_generated_name(variable.name) else 0,
             )

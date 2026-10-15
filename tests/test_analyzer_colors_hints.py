@@ -6,6 +6,7 @@ import pytest
 
 from get_design_markdown.analyzer import analyze
 from get_design_markdown.analyzer.colors_hints import (
+    action_hint,
     collect_color_variables,
     is_generated_name,
     name_words,
@@ -67,14 +68,48 @@ def test_name_words() -> None:
         ("--text-error", {"danger"}),
         ("--color-warning", {"warning"}),
         ("--info", {"info"}),
+        ("--hds-color-button-primary-bg", {"primary"}),
+        ("--btn-secondary", {"secondary"}),
+        ("--cta-primary-background", {"primary"}),
+        ("--hds-color-button-primary-text", {"on-primary"}),
+        ("--button-secondary-fg", {"on-secondary"}),
+        ("--hds-color-action-text-secondary", {"muted"}),
+        ("--hds-color-button-secondary-borderDisabled", {"hairline"}),
+        ("--color-button-invert-bg", {"surface-inverse"}),
+        ("--color-fg-primary", {"ink"}),
+        ("--color-fg-secondary", {"muted"}),
+        ("--color-fg-tertiary", {"faint"}),
+        ("--color-fg-quaternary", {"faint"}),
+        ("--primary-contrast", {"on-primary"}),
         ("--blue-500", set()),
         ("--color-primary-hover", set()),
+        ("--button-primary-bg-hover", set()),
         ("--link-active", set()),
         ("--radius-md", set()),
     ],
 )
 def test_variable_hints(name: str, expected: set[str]) -> None:
     assert set(variable_hints(name)) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("--hds-color-button-primary-bg", "primary"),
+        ("--btn-primary", "primary"),
+        ("--cta-secondary", "secondary"),
+        ("--action-tertiary-fill", "tertiary"),
+        ("--button-primary-text", None),
+        ("--button-primary-border", None),
+        ("--button-primary-bg-hover", None),
+        ("--text-on-button-primary", None),
+        ("--brand-500", None),
+        ("--color-primary", None),
+        ("--color-bg-primary", None),
+    ],
+)
+def test_action_hint(name: str, expected: str | None) -> None:
+    assert action_hint(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -143,6 +178,16 @@ def test_collect_color_variables_prefers_page_values() -> None:
         ("--color-border", "#e2e8f0"),
     ]
     assert variables[1].hints == frozenset({"hairline"})
+    assert variables[0].action is None
+
+
+def test_collect_color_variables_marks_action_variables() -> None:
+    variables = collect_color_variables(
+        [CssVariable(name="--button-primary-bg", declared="#533afd", source="root")], []
+    )
+    assert [(v.name, v.hints, v.action) for v in variables] == [
+        ("--button-primary-bg", frozenset({"primary"}), "primary")
+    ]
 
 
 def test_analyze_capture_uses_real_color_analyzer() -> None:

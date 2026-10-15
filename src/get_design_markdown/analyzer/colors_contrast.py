@@ -77,7 +77,7 @@ def contrast_pairs(
     groups: dict[tuple[str, str], _PairGroup] = {}
     order: list[tuple[str, str]] = []
     for sample in text_samples:
-        if sample.traits.on_image:
+        if sample.traits.on_image or sample.traits.layered_text:
             continue
         key = (sample.color.css_hex, sample.traits.effective_background.css_hex)
         group = groups.get(key)

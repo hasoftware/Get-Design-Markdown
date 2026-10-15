@@ -13,6 +13,8 @@ Channels and weights (all multiplied by the page weight: 1.0 main page, 0.5 sub-
 - gradient: color stops of background-image gradients; weight = area / number of stops.
 Images, pictures, videos and iframes paint over the backgrounds behind them. Text drawn over an
 image, video, canvas or opaque gradient has an unknowable background (skipped for contrast).
+Stacked copies of the same text in the same box (layered hero titles blended into one visual
+effect) have an unknowable visible color: their text samples are decorative.
 Box-shadow colors are not palette colors and are ignored.
 """
 
@@ -78,6 +80,8 @@ RING_MAX_PADDING = 3.0
 LINE_WORDS = frozenset(
     {"border", "borders", "divider", "separator", "stroke", "outline", "hairline", "rule", "line"}
 )
+#: Two own-text elements with the same text whose boxes match within this many px are layers.
+LAYER_BOX_TOLERANCE = 2.0
 SyntheticKind = Literal["browser-canvas"]
 
 
@@ -103,6 +107,9 @@ class ElementTraits:
     on_image: bool
     #: Opaque color behind the element's content (own and ancestor backgrounds on the page base).
     effective_background: RGBA
+    #: The element's text is one of several stacked copies (same text, same box): the color
+    #: seen on screen is a blend of the layers, not this text color.
+    layered_text: bool = False
 
 
 @dataclass(slots=True)
@@ -196,12 +203,16 @@ def is_link(element: ElementSample) -> bool:
 
 
 def is_button_like(element: ElementSample) -> bool:
-    """Real buttons, and small clickable boxes with a fill or a border plus padding."""
+    """Real buttons, and small clickable links or labelled boxes with a fill or a border plus
+    padding. A textless clickable box that is not a link (toggle track, swatch, dot) is a
+    control, not a button."""
     if element.role == "button" or element.tag == "button":
         return True
     if element.tag == "input" and (element.input_type or "") in BUTTON_INPUT_TYPES:
         return True
     if not is_interactive(element) or element.tag in ("input", "select", "textarea"):
+        return False
+    if not is_link(element) and not element.text.strip():
         return False
     if own_background(element) is None and not has_visible_border(element):
         return False
@@ -342,6 +353,52 @@ def _over_media(element: ElementSample, media: Sequence[tuple[int, _Rect]]) -> b
     )
 
 
+def _normalized_text(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _same_box(first: ElementSample, second: ElementSample) -> bool:
+    a, b = first.box, second.box
+    return (
+        abs(a.x - b.x) <= LAYER_BOX_TOLERANCE
+        and abs(a.y - b.y) <= LAYER_BOX_TOLERANCE
+        and abs(a.width - b.width) <= LAYER_BOX_TOLERANCE
+        and abs(a.height - b.height) <= LAYER_BOX_TOLERANCE
+    )
+
+
+def layered_text_elements(
+    elements: Sequence[ElementSample], index: dict[int, ElementSample]
+) -> set[int]:
+    """Indexes of own-text elements stacked on another one with the same text and box.
+
+    Such copies (a background and a foreground hero title blended together, an outlined copy
+    over a filled one) render one visual whose color no single layer shows. An element and its
+    own ancestor never count as layers of each other.
+    """
+    by_text: dict[str, list[ElementSample]] = {}
+    for element in elements:
+        if not element.has_own_text or element.box.width <= 0 or element.box.height <= 0:
+            continue
+        text = _normalized_text(element.text)
+        if text:
+            by_text.setdefault(text, []).append(element)
+    result: set[int] = set()
+    for group in by_text.values():
+        if len(group) < 2:
+            continue
+        for position, first in enumerate(group):
+            for second in group[position + 1 :]:
+                if not _same_box(first, second):
+                    continue
+                first_line = {node.index for node in ancestors(first, index)}
+                second_line = {node.index for node in ancestors(second, index)}
+                if second.index in first_line or first.index in second_line:
+                    continue
+                result.update((first.index, second.index))
+    return result
+
+
 def line_weight(element: ElementSample) -> float | None:
     """Length x thickness when the element's background only draws a line, else None.
 
@@ -384,6 +441,8 @@ def _traits(
     context: _PageContext,
     base: RGBA,
     media: Sequence[tuple[int, _Rect]] = (),
+    *,
+    layered_text: bool = False,
 ) -> ElementTraits:
     has_text = element.has_own_text or bool(element.placeholder_color)
     on_image = bool(media) and has_text and _over_media(element, media)
@@ -410,6 +469,7 @@ def _traits(
         hides_background=gradient_hides_background(element.styles.background_image),
         on_image=on_image,
         effective_background=effective_background(element, context.index, base=base),
+        layered_text=layered_text,
     )
 
 
@@ -454,6 +514,7 @@ def collect_samples(pages: Sequence[PageCapture], *, canvas_guess: RGBA = WHITE)
         base = context.base(canvas_guess)
         painted, largest_cover, synthetic_area = _painted_areas(context)
         media = _media_rects(context)
+        layered = layered_text_elements([ref.element for ref in refs], context.index)
         weight_of_page = page_weight(page_index)
         result.page_areas.append(context.document.area)
         if not context.has_root:
@@ -474,7 +535,7 @@ def collect_samples(pages: Sequence[PageCapture], *, canvas_guess: RGBA = WHITE)
             )
         for ref in refs:
             element = ref.element
-            traits = _traits(element, context, base, media)
+            traits = _traits(element, context, base, media, layered_text=element.index in layered)
             styles = element.styles
             background = own_background(element)
             if background is not None:

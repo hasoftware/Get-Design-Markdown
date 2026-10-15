@@ -86,6 +86,12 @@ _SURFACE_WORDS = frozenset(
 _STRONG_WORDS = frozenset({"strong", "heavy", "bold", "emphasis", "intense"})
 #: Variables for interaction states / shades never hint a base role.
 _STATE_WORDS = frozenset({"hover", "active", "pressed", "focus", "visited", "selected", "checked"})
+#: Component words that make "primary"/"secondary" mean an action variant ("--button-primary-bg"
+#: is the fill of the primary button, not the main page background).
+_ACTION_WORDS = frozenset({"button", "buttons", "btn", "cta", "action"})
+#: Variant words of action colors, in token-name form.
+_VARIANT_WORDS = ("primary", "secondary", "tertiary")
+_FG_WORDS = frozenset({"foreground", "fg", "contrast"})
 
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
@@ -137,12 +143,42 @@ def status_from_text(text: str) -> str | None:
     return None
 
 
+def _first_position(words: Sequence[str], vocabulary: frozenset[str]) -> int | None:
+    return next((position for position, word in enumerate(words) if word in vocabulary), None)
+
+
+def _action_variant(words: Sequence[str]) -> str | None:
+    """ "primary"/"secondary"/"tertiary" when the words name a button/CTA variant."""
+    if not set(words) & _ACTION_WORDS:
+        return None
+    return next((variant for variant in _VARIANT_WORDS if variant in words), None)
+
+
+def action_hint(name: str) -> str | None:
+    """Brand token name of a variable that colors an action variant's fill.
+
+    "--button-primary-bg" / "--hds-color-button-primary-bg" / "--btn-primary" -> "primary",
+    "--cta-secondary" -> "secondary"; text, border and state variables ("--button-primary-text",
+    "--button-primary-bg-hover") and plain brand names ("--brand-500") -> None. Such a variable
+    is stronger evidence for an action color than a generic brand-scale name.
+    """
+    words = name_words(name)
+    word_set = set(words)
+    if not words or word_set & (_STATE_WORDS | _TEXT_WORDS | _BORDER_WORDS | _FG_WORDS):
+        return None
+    if "on" in word_set or status_from_words(words) is not None:
+        return None
+    return _action_variant(words)
+
+
 def variable_hints(name: str) -> frozenset[str]:
     """Color token names (naming.COLOR_TOKEN_ROLES) suggested by a custom property name.
 
     "--color-primary" -> {"primary"}, "--text-muted" -> {"muted"}, "--bg-canvas" ->
     {"canvas"}, "--border-subtle" -> {"hairline"}, "--primary-foreground" -> {"on-primary"},
-    "--color-success" -> {"success"}, "--blue-500" -> {} and "--color-primary-hover" -> {}.
+    "--color-fg-secondary" -> {"muted"} (a text tier), "--button-primary-bg" -> {"primary"},
+    "--button-primary-text" -> {"on-primary"}, "--color-success" -> {"success"},
+    "--blue-500" -> {} and "--color-primary-hover" -> {}.
     """
     words = name_words(name)
     word_set = set(words)
@@ -154,9 +190,21 @@ def variable_hints(name: str) -> frozenset[str]:
     has_text = bool(word_set & _TEXT_WORDS)
     has_bg = bool(word_set & _BG_WORDS)
     has_border = bool(word_set & _BORDER_WORDS)
+    variant = _action_variant(words)
+    if variant is not None and not has_border:
+        text_position = _first_position(words, _TEXT_WORDS | _FG_WORDS)
+        if text_position is None:
+            # "--button-primary-bg", "--btn-primary": the fill of that action variant.
+            return frozenset({variant})
+        if words.index(variant) < text_position and variant != "tertiary":
+            # "--button-primary-text": text drawn on that variant.
+            return frozenset({f"on-{variant}"})
     on_target = _after(words, "on")
-    if on_target is not None or (word_set & {"foreground", "fg", "contrast"} and not has_bg):
-        target_words = {on_target} if on_target is not None else word_set
+    fg_position = _first_position(words, _FG_WORDS)
+    if on_target is not None or (fg_position is not None and not has_bg):
+        # "--primary-foreground" is the text on primary; "--color-fg-primary" is the primary
+        # text tier (ink): only words before the fg word name the color it is drawn on.
+        target_words = {on_target} if on_target is not None else set(words[:fg_position])
         if target_words & _BRAND_WORDS:
             return frozenset({"on-primary"})
         if "secondary" in target_words:
@@ -241,6 +289,8 @@ class ColorVariable:
     name: str
     color: RGBA
     hints: frozenset[str]
+    #: Brand token name when the variable colors an action variant ("--button-primary-bg").
+    action: str | None = None
 
 
 def collect_color_variables(
@@ -262,7 +312,7 @@ def collect_color_variables(
         if key in seen:
             return
         seen.add(key)
-        result.append(ColorVariable(name, color, variable_hints(name)))
+        result.append(ColorVariable(name, color, variable_hints(name), action_hint(name)))
 
     for variable in page_variables:
         page_names.add(variable.name)
