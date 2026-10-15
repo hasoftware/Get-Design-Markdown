@@ -45,6 +45,14 @@ TIMEOUT_HINT = (
     "Tăng thời gian chờ bằng biến môi trường GDM_TIMEOUT (ví dụ GDM_TIMEOUT=90) "
     "hoặc kiểm tra kết nối mạng."
 )
+OPEN_FAILED_HINT = (
+    "Kiểm tra lại URL hoặc thử mở trang trong trình duyệt; nếu trang mở được, hãy chạy lại lệnh."
+)
+REDIRECT_LOOP_HINT = (
+    "Thử mở trang trong trình duyệt hoặc dùng địa chỉ cuối cùng sau chuyển hướng "
+    "(ví dụ thêm hoặc bỏ 'www.')."
+)
+UNSAFE_PORT_HINT = "Dùng cổng web thông thường (80, 443, 8000, 8080...) hoặc bỏ số cổng khỏi URL."
 
 #: Upper bound for the networkidle wait after the load event (seconds).
 NETWORK_IDLE_TIMEOUT_S = 15.0
@@ -225,11 +233,18 @@ def navigation_error(url: str, error: Exception) -> CollectError:
     if code == "ERR_INTERNET_DISCONNECTED":
         return NavigationError("Máy không có kết nối Internet.", hint="Kiểm tra kết nối mạng.")
     if code in ("ERR_TOO_MANY_REDIRECTS",):
-        return NavigationError(f"Trang {url} chuyển hướng vòng lặp ({code}).")
+        return NavigationError(
+            f"Trang {url} chuyển hướng vòng lặp ({code}).", hint=REDIRECT_LOOP_HINT
+        )
+    if code == "ERR_UNSAFE_PORT":
+        return NavigationError(
+            f"Không mở được {url} ({code}): Chromium chặn cổng này vì lý do an toàn.",
+            hint=UNSAFE_PORT_HINT,
+        )
     if code:
-        return NavigationError(f"Không mở được {url} ({code}).")
+        return NavigationError(f"Không mở được {url} ({code}).", hint=OPEN_FAILED_HINT)
     first_line = text.strip().splitlines()[0] if text.strip() else type(error).__name__
-    return NavigationError(f"Không mở được {url}: {first_line}")
+    return NavigationError(f"Không mở được {url}: {first_line}", hint=OPEN_FAILED_HINT)
 
 
 async def load_page(page: Page, url: str, *, timeout_s: float) -> LoadResult:

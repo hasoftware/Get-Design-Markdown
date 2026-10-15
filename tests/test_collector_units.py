@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -39,6 +41,7 @@ from get_design_markdown.collector.stylesheets import (
 )
 from get_design_markdown.collector.viewports import (
     layout_from_payload,
+    measurement_order,
     screenshot_name,
     viewport_height_for,
 )
@@ -52,11 +55,15 @@ from get_design_markdown.errors import (
 )
 from get_design_markdown.models.raw import (
     BoundingBox,
+    ColorScheme,
     ComputedStyle,
     ElementSample,
     PageCapture,
+    RawCapture,
+    Screenshot,
     StylesheetInfo,
 )
+from get_design_markdown.storage import screenshot_filename
 from tests.fixture_data import SITE_DIR, load_raw_sample
 
 LONG_TEXT = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 80
@@ -190,6 +197,50 @@ def test_navigation_error_mapping(message: str, kind: type[CollectError], fragme
     error = navigation_error("https://acme.example/", Exception(message))
     assert type(error) is kind
     assert fragment in error.message
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "net::ERR_NAME_NOT_RESOLVED at https://nope.example/",
+        "net::ERR_CONNECTION_REFUSED at http://127.0.0.1:1/",
+        "net::ERR_CERT_AUTHORITY_INVALID",
+        "net::ERR_TIMED_OUT",
+        "net::ERR_INTERNET_DISCONNECTED",
+        "net::ERR_TOO_MANY_REDIRECTS at https://acme.example/",
+        "net::ERR_UNSAFE_PORT at http://127.0.0.1:9/",
+        "net::ERR_ABORTED",
+        "net::ERR_SOMETHING_NEW",
+        "Something odd",
+        "",
+    ],
+)
+def test_every_navigation_error_has_a_vietnamese_hint(message: str) -> None:
+    error = navigation_error("http://127.0.0.1:9/", Exception(message))
+    assert error.hint, f"no hint for {message!r}"
+    assert any(char in error.hint for char in "ạảãáàâăêôơưđểịọ"), error.hint
+
+
+def test_unsafe_port_names_the_cause() -> None:
+    error = navigation_error("http://127.0.0.1:9/", Exception("net::ERR_UNSAFE_PORT"))
+    assert isinstance(error, NavigationError)
+    assert "ERR_UNSAFE_PORT" in error.message and "cổng" in error.message
+    assert error.hint is not None and "cổng" in error.hint
+
+
+def test_access_errors_have_hints() -> None:
+    url = "https://acme.example/"
+    page = PageProbe(title="Acme", text=LONG_TEXT, text_elements=200)
+    challenge = PageProbe(title="Just a moment...", text="Checking your browser")
+    for load, probe in (
+        (_load(403), challenge),
+        (_load(404), page),
+        (_load(502), page),
+        (_load(401), page),
+        (_load(418), page),
+    ):
+        error = access_error(requested_url=url, load=load, probe=probe)
+        assert error is not None and error.hint, (load, probe)
 
 
 def test_missing_chromium_has_install_hint() -> None:
@@ -605,6 +656,13 @@ def test_viewport_heights_and_names() -> None:
     assert screenshot_name("home", 1440, "dark") == "home-dark-1440"
 
 
+def test_measurement_order_is_widest_first() -> None:
+    assert measurement_order([1440, 768, 390]) == [(0, 1440), (1, 768), (2, 390)]
+    assert measurement_order([390, 1440, 768]) == [(1, 1440), (2, 768), (0, 390)]
+    assert measurement_order([768, 768]) == [(0, 768), (1, 768)]
+    assert measurement_order([]) == []
+
+
 def test_layout_from_payload() -> None:
     snapshot = layout_from_payload(
         {"viewport_height": 844, "main_columns": 1, "hamburger_visible": True, "extra": 1},
@@ -612,6 +670,78 @@ def test_layout_from_payload() -> None:
     )
     assert snapshot.viewport_width == 390
     assert snapshot.hamburger_visible is True and snapshot.main_columns == 1
+
+
+def _shot(page: str, width: int, scheme: ColorScheme = "light") -> Screenshot:
+    return Screenshot(
+        name=screenshot_name(page, width, scheme),
+        viewport_width=width,
+        viewport_height=viewport_height_for(width),
+        color_scheme=scheme,
+        path=screenshot_filename(page, width, scheme),
+        full_page=True,
+    )
+
+
+def test_referenced_screenshots_cover_pages_and_dark() -> None:
+    home = "https://acme.example/"
+    pricing = "https://acme.example/pricing"
+    capture = RawCapture(
+        tool_version="0",
+        source_url=home,
+        domain="acme.example",
+        collected_at=datetime(2026, 1, 1, tzinfo=UTC),
+        pages=[
+            PageCapture(url=home, final_url=home, screenshots=[_shot("home", 1440)]),
+            PageCapture(
+                url=pricing, final_url=pricing, name="pricing", screenshots=[_shot("pricing", 390)]
+            ),
+        ],
+        dark=PageCapture(
+            url=home,
+            final_url=home,
+            color_scheme="dark",
+            screenshots=[_shot("home", 1440, "dark")],
+        ),
+    )
+    assert collect.referenced_screenshots(capture) == {
+        "home-1440.png",
+        "pricing-390.png",
+        "home-dark-1440.png",
+    }
+
+
+def test_remove_stale_screenshots(tmp_path: Path) -> None:
+    folder = tmp_path / "screenshots"
+    folder.mkdir()
+    names = [
+        "home-1440.png",
+        "home-dark-1440.png",
+        "contact-sales-1440.png",
+        "contact-sales-390.png",
+        "pricing-2-768.png",
+        "notes.png",  # not a collector name
+        "Logo-1440.png",  # uppercase: never written by the collector
+        "home-1440.png.tmp",
+    ]
+    for name in names:
+        (folder / name).write_bytes(b"x")
+    (folder / "old-1440.png").mkdir()  # a folder, even with a matching name, is kept
+    (tmp_path / "prompt-images").mkdir()
+    (tmp_path / "prompt-images" / "desktop.png").write_bytes(b"x")
+
+    removed = collect.remove_stale_screenshots(tmp_path, {"home-1440.png", "home-dark-1440.png"})
+
+    assert removed == ["contact-sales-1440.png", "contact-sales-390.png", "pricing-2-768.png"]
+    left = sorted(path.name for path in folder.iterdir())
+    kept = ["home-1440.png", "home-dark-1440.png", "notes.png", "Logo-1440.png"]
+    assert left == sorted([*kept, "home-1440.png.tmp", "old-1440.png"])
+    assert (tmp_path / "prompt-images" / "desktop.png").is_file()
+
+
+def test_remove_stale_screenshots_without_folder(tmp_path: Path) -> None:
+    assert collect.remove_stale_screenshots(tmp_path, set()) == []
+    assert collect.remove_stale_screenshots(tmp_path / "missing", set()) == []
 
 
 def test_collect_warnings_are_vietnamese() -> None:

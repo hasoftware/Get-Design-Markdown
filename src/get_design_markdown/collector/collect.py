@@ -12,11 +12,12 @@ states -> layout snapshots and screenshots at each width -> stylesheets from the
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
+from collections.abc import Collection, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -49,10 +50,13 @@ from get_design_markdown.models.raw import (
     Screenshot,
 )
 from get_design_markdown.resources import resource_text
-from get_design_markdown.storage import domain_of, page_slug
+from get_design_markdown.storage import SCREENSHOTS_DIR, domain_of, page_slug
 
 ROBOTS_TIMEOUT_S = 15.0
 OVERLAY_KINDS = {"cookie": "banner cookie", "dialog": "hộp thoại", "backdrop": "lớp nền mờ"}
+#: Names the collector gives its screenshots (storage.screenshot_filename): a page slug,
+#: an optional "-dark", then the viewport width — "home-1440.png", "home-dark-1440.png".
+SCREENSHOT_FILE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*-\d{2,5}\.png$")
 
 
 @dataclass(frozen=True)
@@ -209,6 +213,35 @@ async def capture_page(
             await page.close()
 
 
+def referenced_screenshots(capture: RawCapture) -> set[str]:
+    """File names (inside screenshots/) of every screenshot the capture lists; pure."""
+    pages = [*capture.pages, *([capture.dark] if capture.dark is not None else [])]
+    return {PurePosixPath(shot.path).name for page in pages for shot in page.screenshots}
+
+
+def remove_stale_screenshots(out_dir: Path, keep: Collection[str]) -> list[str]:
+    """Delete collector screenshots in out_dir/screenshots/ that `keep` does not name.
+
+    A re-collect with other sub-pages (or a width that failed this time) would otherwise
+    leave PNGs from an earlier run next to a raw.json that no longer references them. Only
+    files named like collector screenshots are touched; returns the removed names.
+    """
+    folder = out_dir / SCREENSHOTS_DIR
+    if not folder.is_dir():
+        return []
+    removed: list[str] = []
+    for path in sorted(folder.iterdir()):
+        if path.name in keep or not SCREENSHOT_FILE_RE.match(path.name):
+            continue
+        try:
+            if path.is_file():
+                path.unlink()
+                removed.append(path.name)
+        except OSError:
+            continue
+    return removed
+
+
 async def _robots_allows(url: str, *, timeout_s: float) -> tuple[bool, str | None]:
     check = await robots.check_robots(url, timeout_s=min(timeout_s, ROBOTS_TIMEOUT_S))
     if check.allowed is False:
@@ -277,7 +310,8 @@ async def collect_site(
 
     - `url` is already normalized (storage.normalize_url) and robots.txt for it was already
       checked by the caller; the caller also fills RawCapture.robots and writes raw.json.
-    - Writes screenshots under out_dir/screenshots/ (storage.screenshot_filename()).
+    - Writes screenshots under out_dir/screenshots/ (storage.screenshot_filename()) and, once
+      the capture succeeded, removes screenshots of earlier runs that it does not reference.
     - pages[0] is the main page; options.pages > 0 adds sub-pages found by
       discovery.discover_pages(); options.dark adds RawCapture.dark (main page re-captured with
       prefers-color-scheme: dark).
@@ -343,7 +377,7 @@ async def collect_site(
                 with suppress(PlaywrightError):
                     await dark_context.close()
 
-    return RawCapture(
+    capture = RawCapture(
         tool_version=__version__,
         source_url=url,
         domain=domain_of(url),
@@ -354,3 +388,7 @@ async def collect_site(
         stylesheets=registry.sheets,
         warnings=warnings,
     )
+    removed = remove_stale_screenshots(out_dir, referenced_screenshots(capture))
+    if removed:
+        notify(f"Đã xóa {len(removed)} ảnh chụp cũ không còn dùng…")
+    return capture

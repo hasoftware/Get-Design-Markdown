@@ -48,6 +48,11 @@ def screenshot_name(page_name: str, width: int, color_scheme: ColorScheme = "lig
     return f"{page_name}{scheme}-{width}"
 
 
+def measurement_order(widths: Sequence[int]) -> list[tuple[int, int]]:
+    """(position in `widths`, width) pairs, widest first (stable for equal widths); pure."""
+    return sorted(enumerate(widths), key=lambda item: (-item[1], item[0]))
+
+
 def layout_from_payload(payload: dict[str, Any], *, viewport_width: int) -> LayoutSnapshot:
     """LayoutSnapshot from the js/layout.js result; pure."""
     data = {key: value for key, value in payload.items() if key in LayoutSnapshot.model_fields}
@@ -97,15 +102,17 @@ async def capture_viewports(
 ) -> tuple[list[LayoutSnapshot], list[Screenshot]]:
     """Resize to each width, measure the layout and save a (height-capped) screenshot.
 
-    Lazy content is re-triggered at each width with a quick scroll pass limited to the
-    screenshot height. Failures at one width become warnings, not errors.
+    Widths are processed from the widest down (js/layout.js follows the column grids it
+    found at a wider width as they stack); results keep the order of `widths`. Lazy content
+    is re-triggered at each width with a quick scroll pass limited to the screenshot height.
+    Failures at one width become warnings, not errors.
     """
-    layouts: list[LayoutSnapshot] = []
-    shots: list[Screenshot] = []
+    layouts: list[tuple[int, LayoutSnapshot]] = []
+    shots: list[tuple[int, Screenshot]] = []
     notes = warnings if warnings is not None else []
-    truncated: list[str] = []
+    truncated: list[tuple[int, str]] = []
     current = page.viewport_size
-    for width in widths:
+    for position, width in measurement_order(widths):
         height = viewport_height_for(width)
         try:
             if current is None or current["width"] != width or current["height"] != height:
@@ -124,7 +131,7 @@ async def capture_viewports(
             )
             await wait_quietly(page, timeout_s=RESIZE_IDLE_S)
             if measure:
-                layouts.append(await measure_layout(page, viewport_width=width))
+                layouts.append((position, await measure_layout(page, viewport_width=width)))
             relative = screenshot_filename(page_name, width, color_scheme)
             document_height = await take_screenshot(
                 page, path=out_dir / relative, width=width, max_height=max_screenshot_height
@@ -134,23 +141,28 @@ async def capture_viewports(
             notes.append(f"Không chụp được ảnh ở bề rộng {width}px: {first_line}")
             continue
         if document_height > max_screenshot_height:
-            truncated.append(f"{document_height:.0f}px ở {width}px")
+            truncated.append((position, f"{document_height:.0f}px ở {width}px"))
         shots.append(
-            Screenshot(
-                name=screenshot_name(page_name, width, color_scheme),
-                viewport_width=width,
-                viewport_height=height,
-                color_scheme=color_scheme,
-                path=relative,
-                full_page=True,
+            (
+                position,
+                Screenshot(
+                    name=screenshot_name(page_name, width, color_scheme),
+                    viewport_width=width,
+                    viewport_height=height,
+                    color_scheme=color_scheme,
+                    path=relative,
+                    full_page=True,
+                ),
             )
         )
     if truncated:
         notes.append(
-            f"Trang dài ({', '.join(truncated)}) — ảnh chụp chỉ lấy {max_screenshot_height}px "
-            "đầu trang."
+            f"Trang dài ({', '.join(note for _, note in sorted(truncated))}) — ảnh chụp chỉ lấy "
+            f"{max_screenshot_height}px đầu trang."
         )
     if current is not None and (current["width"], current["height"]) != restore:
         with suppress(PlaywrightError):
             await page.set_viewport_size({"width": restore[0], "height": restore[1]})
-    return layouts, shots
+    layouts.sort(key=lambda pair: pair[0])
+    shots.sort(key=lambda pair: pair[0])
+    return [layout for _, layout in layouts], [shot for _, shot in shots]

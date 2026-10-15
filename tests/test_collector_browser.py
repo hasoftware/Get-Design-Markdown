@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from get_design_markdown.collector import browser, robots
+from get_design_markdown.collector import browser, robots, viewports
 from get_design_markdown.collector.collect import collect_site
 from get_design_markdown.errors import (
     BotBlockedError,
@@ -27,15 +27,20 @@ from get_design_markdown.errors import (
 from get_design_markdown.models.raw import (
     CaptureOptions,
     ElementSample,
+    LayoutSnapshot,
     PageCapture,
     RawCapture,
     RobotsCheck,
+    Screenshot,
 )
 from tests.fixture_data import load_site_contract
 
 pytestmark = pytest.mark.browser
 
 QUICK = CaptureOptions(screenshot_widths=[], hover_buttons=0, hover_links=0, timeout_s=20)
+#: Left in screenshots/ before the module capture: removed (stale) or kept (not ours).
+STALE_FILES = ["contact-sales-1440.png", "contact-sales-390.png"]
+KEPT_FILES = ["notes.txt"]
 
 
 def _capture(url: str, out_dir: Path, options: CaptureOptions = QUICK) -> RawCapture:
@@ -46,8 +51,15 @@ def _capture(url: str, out_dir: Path, options: CaptureOptions = QUICK) -> RawCap
 def full(
     site_url: str, tmp_path_factory: pytest.TempPathFactory
 ) -> Iterator[tuple[RawCapture, Path]]:
-    """The fixture site with --dark --pages 3; robots.txt 'forbids' about.html."""
+    """The fixture site with --dark --pages 3; robots.txt 'forbids' about.html.
+
+    The output folder already holds screenshots of an earlier run (a sub-page this run will
+    not capture) plus a file that is not a collector screenshot.
+    """
     out_dir = tmp_path_factory.mktemp("acme")
+    (out_dir / "screenshots").mkdir()
+    for leftover in STALE_FILES + KEPT_FILES:
+        (out_dir / "screenshots" / leftover).write_bytes(b"old")
     messages: list[str] = []
 
     async def fake_robots(url: str, **_: object) -> RobotsCheck:
@@ -275,6 +287,15 @@ def test_screenshots(full: tuple[RawCapture, Path], home: PageCapture) -> None:
     assert (out_dir / "screenshots" / "home-dark-1440.png").is_file()
 
 
+def test_screenshots_folder_matches_the_capture(full: tuple[RawCapture, Path]) -> None:
+    raw, out_dir = full
+    pages = [*raw.pages, *([raw.dark] if raw.dark else [])]
+    listed = {shot.path.removeprefix("screenshots/") for page in pages for shot in page.screenshots}
+    on_disk = {path.name for path in (out_dir / "screenshots").iterdir()}
+    assert on_disk == listed | set(KEPT_FILES)
+    assert not set(STALE_FILES) & on_disk
+
+
 def test_dark_capture(full: tuple[RawCapture, Path]) -> None:
     dark = full[0].dark
     assert dark is not None and dark.color_scheme == "dark"
@@ -367,6 +388,65 @@ def test_unreachable_host_raises(tmp_path: Path) -> None:
     with pytest.raises(NavigationError) as caught:
         _capture(f"http://127.0.0.1:{_free_port()}/", tmp_path)
     assert "ERR_CONNECTION_REFUSED" in caught.value.message
+    assert caught.value.hint
+
+
+def test_unsafe_port_raises_with_a_hint(tmp_path: Path) -> None:
+    with pytest.raises(NavigationError) as caught:
+        _capture("http://127.0.0.1:9/", tmp_path)
+    assert "ERR_UNSAFE_PORT" in caught.value.message
+    assert caught.value.hint is not None and "cổng" in caught.value.hint
+
+
+# A card grid (3 / 2 / 1 columns) whose cards hold 2-column internals, a 4-up stats row that
+# stays 2 columns on phones, and a big aria-hidden 2-column mock-up. At 390 px the nested
+# internals and the mock-up each outweigh the stacked cards once the stats are added, so both
+# exclusions are needed; at 1440 px the widest row (4 stats) is not the main grid.
+GRID_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 sans-serif; }
+  main { max-width: 1232px; margin: 0 auto; padding: 0 16px; }
+  section { margin: 0 0 48px; }
+  .cards, .stats, .mock { display: grid; gap: 16px; }
+  .cards { grid-template-columns: 1fr; }
+  .card { padding: 8px; border: 0; }
+  .inner { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .inner > div { height: 220px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stats > div { height: 80px; }
+  .mock { grid-template-columns: 1fr 1fr; }
+  .mock > div { height: 700px; }
+  @media (min-width: 600px) { .cards { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1000px) {
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .stats { grid-template-columns: repeat(4, 1fr); }
+  }
+</style></head><body><main>
+  <section class="cards">
+    <article class="card"><div class="inner"><div>Deploy</div><div>Fast</div></div></article>
+    <article class="card"><div class="inner"><div>Scale</div><div>Wide</div></div></article>
+    <article class="card"><div class="inner"><div>Observe</div><div>Deep</div></div></article>
+  </section>
+  <section class="stats"><div>99.99%</div><div>120ms</div><div>35+</div><div>24/7</div></section>
+  <section class="mock" aria-hidden="true"><div>Inbox</div><div>Issue</div></section>
+</main></body></html>"""
+
+
+def test_main_columns_follow_the_dominant_grid(tmp_path: Path) -> None:
+    async def run() -> tuple[list[LayoutSnapshot], list[Screenshot]]:
+        async with browser.open_context(QUICK) as context:
+            page = await context.new_page()
+            await page.set_content(GRID_PAGE)
+            # Narrowest first on purpose: the widest width must still be measured first.
+            return await viewports.capture_viewports(
+                page, page_name="grid", out_dir=tmp_path, widths=[390, 768, 1440]
+            )
+
+    layouts, shots = asyncio.run(run())
+    assert [layout.viewport_width for layout in layouts] == [390, 768, 1440]
+    assert [shot.viewport_width for shot in shots] == [390, 768, 1440]
+    assert [layout.main_columns for layout in layouts] == [1, 2, 3]
 
 
 def test_slow_page_times_out(site_url: str, tmp_path: Path) -> None:

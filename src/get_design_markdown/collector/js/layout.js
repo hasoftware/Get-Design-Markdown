@@ -1,7 +1,8 @@
 // Layout snapshot (stream: collector).
 // page.evaluate(script) at scroll position 0 -> fields of models.raw.LayoutSnapshot
 // (viewport_width is filled in by Python). Elements hidden by display/visibility, opacity
-// (own or inherited) or ancestor overflow clipping do not count.
+// (own or inherited) or ancestor overflow clipping do not count. Measure the widest viewport
+// first: the column grids it finds are marked in the DOM and followed at narrower widths.
 () => {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -178,12 +179,22 @@
   const excluded = (el) =>
     scope === body && !!el.closest(`${HEADER_SEL}, ${FOOTER_SEL}, ${NAV_SEL}, aside`);
 
-  // ── Columns: siblings side by side (same top +-4 px), each >= 15% of the viewport ──
-  let columns = 1;
+  // ── Columns of the dominant content grid ──
+  // A grid is a container whose text-bearing children (each >= 15% of the viewport wide and
+  // >= 48 px tall) sit side by side; its column count is the most items in one row (same
+  // top +-4 px). Containers found side by side are marked (GRID_MARK) and keep counting at
+  // the narrower widths measured afterwards, so a grid that stacks reads as 1 column instead
+  // of dropping out. Grids nested in another grid's items (card internals, product mock-ups)
+  // and aria-hidden/inert subtrees are ignored. main_columns is the column count whose grids
+  // cover the largest item area (ties -> fewer columns): one small 2x2 stats block does not
+  // outvote a stacked card grid, and the widest row of the page is not the main grid.
+  const GRID_MARK = "data-gdm-grid";
   const minWidth = vw * 0.15;
-  const parents = [scope, ...scope.querySelectorAll("*")];
-  for (const parent of parents) {
-    if (parent.childElementCount < 2 || excluded(parent)) continue;
+  const grids = [];
+  for (const parent of [scope, ...scope.querySelectorAll("*")]) {
+    const marked = parent.hasAttribute(GRID_MARK);
+    const minItems = marked ? 1 : 2;
+    if (parent.childElementCount < minItems || excluded(parent)) continue;
     const boxes = [];
     for (const child of parent.children) {
       const rect = child.getBoundingClientRect();
@@ -193,20 +204,46 @@
       if (!visible(child) || !textOf(child)) continue;
       boxes.push(rect);
     }
-    if (boxes.length < 2) continue;
+    if (boxes.length < minItems) continue;
     const rows = [];
     for (const rect of boxes) {
       const row = rows.find((item) => Math.abs(item.top - rect.top) <= 4);
       if (row) row.boxes.push(rect);
       else rows.push({ top: rect.top, boxes: [rect] });
     }
+    let count = 1;
     for (const row of rows) {
       const sorted = row.boxes.sort((a, b) => a.left - b.left);
-      let count = 1;
+      let inRow = 1;
       for (let i = 1; i < sorted.length; i += 1) {
-        if (sorted[i].left >= sorted[i - 1].right - 2) count += 1;
+        if (sorted[i].left >= sorted[i - 1].right - 2) inRow += 1;
       }
-      columns = Math.max(columns, count);
+      count = Math.max(count, inRow);
+    }
+    if (count < 2 && !marked) continue;
+    if (parent.closest('[aria-hidden="true"], [inert]')) continue;
+    if (!marked) parent.setAttribute(GRID_MARK, "");
+    const area = boxes.reduce((sum, rect) => sum + rect.width * rect.height, 0);
+    grids.push({ el: parent, count, area });
+  }
+  const gridElements = new Set(grids.map((grid) => grid.el));
+  const areaByColumns = new Map();
+  for (const grid of grids) {
+    let nested = false;
+    for (let node = grid.el.parentElement; node && node !== docEl; node = node.parentElement) {
+      if (gridElements.has(node)) {
+        nested = true;
+        break;
+      }
+    }
+    if (!nested) areaByColumns.set(grid.count, (areaByColumns.get(grid.count) || 0) + grid.area);
+  }
+  let columns = 1;
+  let columnsArea = -1;
+  for (const [count, area] of areaByColumns) {
+    if (area > columnsArea || (area === columnsArea && count < columns)) {
+      columns = count;
+      columnsArea = area;
     }
   }
 

@@ -54,7 +54,10 @@ async def extract_dom(page: Page, *, max_elements: int) -> DomExtraction:
             hint="Trang có thể đã chuyển hướng hoặc đóng trong lúc thu thập — hãy chạy lại.",
         ) from None
     if not isinstance(payload, dict):
-        raise CollectError("Script trích xuất không trả về dữ liệu hợp lệ.")
+        raise CollectError(
+            "Script trích xuất không trả về dữ liệu hợp lệ.",
+            hint="Trang có thể đã chuyển hướng trong lúc thu thập — hãy chạy lại lệnh.",
+        )
     return parse_extraction(payload)
 
 
