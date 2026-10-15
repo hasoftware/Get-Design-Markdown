@@ -1,1 +1,16 @@
-{# DESIGN.md layout (stream: synthesizer, phase GĐ6). Placeholder. #}
+{#- DESIGN.md layout (stream: synthesizer, phase GĐ6).
+    Context: front_matter (YAML text ending with a newline), title, note (Markdown blockquote),
+    sections (narrative.Section list, already in render.DESIGN_SECTIONS order).
+    render.normalize_markdown() collapses blank-line runs afterwards. -#}
+---
+{{ front_matter }}---
+
+# {{ title }}
+
+{{ note }}
+{% for section in sections %}
+
+## {{ section.title }}
+
+{{ section.body }}
+{% endfor %}

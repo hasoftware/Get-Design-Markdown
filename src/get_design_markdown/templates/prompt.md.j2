@@ -1,1 +1,38 @@
-{# prompt.md for --prompt-only (stream: synthesizer, phase GĐ6). Placeholder. #}
+{#- prompt.md for --prompt-only (stream: synthesizer, phase GĐ6).
+    Context: title, how_to, ai_heading, ai_intro, rules, images_heading, images [(path, label)],
+    no_images, summary_heading, summary [(label, value)], draft_heading, fence, design_md.
+    get-design-markdown never calls an AI API: the user pastes this file into Claude Code or
+    claude.ai together with the listed screenshots. -#}
+# {{ title }}
+
+> {{ how_to }}
+
+## {{ ai_heading }}
+
+{{ ai_intro }}
+
+{% for rule in rules %}
+{{ loop.index }}. {{ rule }}
+{% endfor %}
+
+## {{ images_heading }}
+
+{% if images %}
+{% for path, label in images %}
+- `{{ path }}` — {{ label }}
+{% endfor %}
+{% else %}
+{{ no_images }}
+{% endif %}
+
+## {{ summary_heading }}
+
+{% for label, value in summary %}
+- **{{ label }}:** {{ value }}
+{% endfor %}
+
+## {{ draft_heading }}
+
+{{ fence }}markdown
+{{ design_md }}
+{{ fence }}
