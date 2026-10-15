@@ -875,7 +875,10 @@ def _check_analysis_ref(
         if values is None or len(set(values)) != 1:
             return
         value = values[0]
-        pill = value >= naming.PILL_RADIUS_PX and target >= naming.PILL_RADIUS_PX
+        pill = target >= naming.PILL_RADIUS_PX and (
+            value >= naming.PILL_RADIUS_PX
+            or (key == "rounded" and _rounds_the_ends(value, component.properties))
+        )
         if not pill and abs(value - target) > PX_TOLERANCE:
             report.warning(
                 "analysis.refs", f"{owner}.{key} = {measured} nhưng {ref} = {target:g}px."
@@ -1660,8 +1663,20 @@ def _component_target(
     return None
 
 
+def _rounds_the_ends(radius_px: float, properties: Mapping[str, str]) -> bool:
+    """A radius of at least half the measured height (1px tolerance) renders as a pill, so
+    {rounded.full} describes it (the components analyzer maps such radii to "full")."""
+    height = css_values.parse_px(properties.get("height"))
+    return height is not None and radius_px > 0 and radius_px >= height / 2.0 - 1.0
+
+
 def _same_component_value(
-    key: str, written: Any, resolved: Any, measured: str, from_ref: bool
+    key: str,
+    written: Any,
+    resolved: Any,
+    measured: str,
+    from_ref: bool,
+    properties: Mapping[str, str] | None = None,
 ) -> bool:
     if key in COLOR_PROPERTIES:
         if from_ref:
@@ -1671,7 +1686,9 @@ def _same_component_value(
     measured_px = _px_values(measured)
     if written_px is not None and measured_px is not None:
         if key == "rounded" and min(written_px) >= naming.PILL_RADIUS_PX:
-            return min(measured_px) >= naming.PILL_RADIUS_PX
+            return min(measured_px) >= naming.PILL_RADIUS_PX or (
+                properties is not None and _rounds_the_ends(min(measured_px), properties)
+            )
         return all(abs(a - b) <= PX_TOLERANCE for a, b in zip(written_px, measured_px, strict=True))
     return _normalize_text(resolved) == _normalize_text(measured)
 
@@ -1726,7 +1743,9 @@ def _check_components_vs_analysis(
                     "analysis.json.",
                 )
                 continue
-            if not _same_component_value(key, value, resolved, measured, _is_ref(value)):
+            if not _same_component_value(
+                key, value, resolved, measured, _is_ref(value), spec.properties
+            ):
                 report.warning(
                     "design.component-value",
                     f"components.{name}.{key} = {value} nhưng analysis.json đo được {measured}.",

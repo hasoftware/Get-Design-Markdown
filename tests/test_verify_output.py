@@ -697,6 +697,22 @@ def test_analyzer_quality_signals(
     assert any(needle in message for message in messages), messages
 
 
+def _badge_radius(radius: str) -> Callable[[Any], None]:
+    def mutate(data: Any) -> None:
+        badge = next(item for item in data["components"] if item["name"] == "badge")
+        badge["properties"]["rounded"] = radius
+
+    return mutate
+
+
+def test_full_radius_ref_accepts_a_radius_that_rounds_the_ends(valid_folder: Path) -> None:
+    # stripe.com: a 33px button with a 16.5px radius is a pill, referenced as {rounded.full}.
+    edit_json(valid_folder, "analysis.json", _badge_radius("14px"))  # badge height 28px
+    assert run_verify(valid_folder) == []
+    edit_json(valid_folder, "analysis.json", _badge_radius("10px"))
+    assert {"analysis.refs", "design.component-value"} <= checks(run_verify(valid_folder))
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
