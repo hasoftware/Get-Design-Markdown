@@ -1,0 +1,140 @@
+{
+  "description": "Design contract of the static fixture site tests/fixtures/site/ (Acme Cloud). index.html must render the same design as raw_sample.json; e2e tests assert it.",
+  "palette": {
+    "primary": "#4f46e5",
+    "on-primary": "#ffffff",
+    "canvas": "#ffffff",
+    "surface": "#f8fafc",
+    "surface-inverse": "#0b1020",
+    "hairline": "#e2e8f0",
+    "ink": "#0f172a",
+    "muted": "#475569",
+    "faint": "#94a3b8",
+    "success": "#16a34a"
+  },
+  "dark_palette": {
+    "primary": "#818cf8",
+    "on-primary": "#0b1020",
+    "canvas": "#0b1020",
+    "surface": "#111827",
+    "surface-inverse": "#05070f",
+    "hairline": "#1e293b",
+    "ink": "#f8fafc",
+    "muted": "#94a3b8",
+    "faint": "#64748b",
+    "success": "#4ade80"
+  },
+  "decorative_colors": [
+    "#6366f1",
+    "#ec4899"
+  ],
+  "overlay_colors": [
+    "#f59e0b",
+    "#111827"
+  ],
+  "fonts": {
+    "primary": "Inter",
+    "heading": "Space Grotesk",
+    "mono": "JetBrains Mono"
+  },
+  "type_levels_px": {
+    "display": 64.0,
+    "heading": 40.0,
+    "title": 24.0,
+    "body-lg": 20.0,
+    "body": 16.0,
+    "ui": 15.0,
+    "body-sm": 14.0,
+    "code": 14.0,
+    "caption": 13.0
+  },
+  "spacing": {
+    "base_unit_px": 4,
+    "container_max_width_px": 1200,
+    "section_gap_px": 96,
+    "required_steps_px": [
+      4,
+      8,
+      12,
+      16,
+      24,
+      32,
+      48
+    ]
+  },
+  "radii_px": [
+    6.0,
+    8.0,
+    12.0,
+    16.0,
+    9999.0
+  ],
+  "shadow_levels": 2,
+  "breakpoints_px": [
+    640,
+    768,
+    1024,
+    1280
+  ],
+  "components": [
+    "button-primary",
+    "button-secondary",
+    "button-outline",
+    "button-ghost",
+    "text-link",
+    "nav-link",
+    "text-input",
+    "card",
+    "badge",
+    "top-nav",
+    "footer"
+  ],
+  "hover": {
+    "button-primary": {
+      "backgroundColor": "#4338ca"
+    }
+  },
+  "low_contrast_pairs": [
+    {
+      "foreground": "#16a34a",
+      "background": "#ffffff",
+      "ratio": 3.3
+    },
+    {
+      "foreground": "#64748b",
+      "background": "#0b1020",
+      "ratio": 3.98
+    },
+    {
+      "foreground": "#94a3b8",
+      "background": "#ffffff",
+      "ratio": 2.56
+    }
+  ],
+  "layout": {
+    "shell": "top-nav",
+    "hamburger_below_px": 1024,
+    "columns": {
+      "1440": 3,
+      "768": 2,
+      "390": 1
+    }
+  },
+  "pages": {
+    "index.html": "home",
+    "pricing.html": "pricing",
+    "about.html": "about",
+    "docs.html": "docs"
+  },
+  "discoverable_from_nav": [
+    "pricing.html",
+    "about.html",
+    "docs.html"
+  ],
+  "special_pages": {
+    "login.html": "sign-in wall (password form only) -> LoginRequiredError",
+    "challenge.html": "bot challenge, served with ?status=403 -> BotBlockedError",
+    "never-idle.html": "polls fetch() forever -> networkidle fallback, still captured",
+    "lazy.html": "content appended on scroll -> must be captured after scrolling"
+  }
+}

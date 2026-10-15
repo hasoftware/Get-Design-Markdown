@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
-from typing import TypeVar
-from urllib.parse import urlsplit, urlunsplit
+from typing import Any, TypeVar
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ValidationError
 
@@ -20,6 +21,8 @@ PROMPT_FILE = "prompt.md"
 TOKENS_FILE = "tokens.json"
 PREVIEW_FILE = "preview.html"
 SCREENSHOTS_DIR = "screenshots"
+#: Resized screenshots referenced by prompt.md (--prompt-only).
+PROMPT_IMAGES_DIR = "prompt-images"
 
 M = TypeVar("M", bound=BaseModel)
 
@@ -61,6 +64,20 @@ def site_dir(output_root: Path, url: str) -> Path:
     return output_root / domain_of(url)
 
 
+def page_slug(url: str) -> str:
+    """Short page name from the URL path: "/" -> "home", "/docs/api/" -> "docs-api"."""
+    path = unquote(urlsplit(url).path).strip("/").lower()
+    path = re.sub(r"\.(html?|php|aspx?)$", "", path)
+    slug = re.sub(r"[^a-z0-9]+", "-", path).strip("-")
+    return slug[:40].strip("-") or "home"
+
+
+def screenshot_filename(page_name: str, viewport_width: int, color_scheme: str = "light") -> str:
+    """Path relative to the site folder: "screenshots/home-1440.png", "...home-dark-1440.png"."""
+    scheme = "-dark" if color_scheme == "dark" else ""
+    return f"{SCREENSHOTS_DIR}/{page_name}{scheme}-{viewport_width}.png"
+
+
 def resolve_site_dir(target: str, output_root: Path) -> Path:
     """Accept either an existing folder or a URL/domain mapped to output_root/<domain>."""
     path = Path(target)
@@ -78,13 +95,24 @@ def resolve_site_dir(target: str, output_root: Path) -> Path:
     )
 
 
-def save_model(model: BaseModel, path: Path) -> Path:
-    """Write a model as pretty JSON atomically (temp file + replace)."""
+def save_text(text: str, path: Path) -> Path:
+    """Write UTF-8 text (LF newlines) atomically (temp file + replace)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(model.model_dump_json(indent=2), encoding="utf-8")
+    with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
     os.replace(tmp, path)
     return path
+
+
+def save_model(model: BaseModel, path: Path) -> Path:
+    """Write a model as pretty JSON atomically (temp file + replace)."""
+    return save_text(model.model_dump_json(indent=2), path)
+
+
+def save_json(data: Any, path: Path) -> Path:
+    """Write plain JSON data (tokens.json...) atomically, UTF-8, 2-space indent."""
+    return save_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", path)
 
 
 def load_model(model_type: type[M], path: Path) -> M:

@@ -24,7 +24,14 @@ class SynthesisResult(GdmModel):
     tool_version: str
     mode: Literal["rules", "prompt-only"]
     lang: str = "en"
+    examples: bool = False
     generated_at: datetime
     issues: list[ValidationIssue] = Field(default_factory=list)
+    #: "## " section titles in the order written.
+    sections: list[str] = Field(default_factory=list)
+    #: Front-matter group -> number of tokens ("colors": 10, "components": 14...).
+    token_counts: dict[str, int] = Field(default_factory=dict)
     design_md_path: str | None = None
     prompt_path: str | None = None
+    #: Resized screenshots referenced by prompt.md (relative to the site folder).
+    image_paths: list[str] = Field(default_factory=list)

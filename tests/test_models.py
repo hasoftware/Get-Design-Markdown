@@ -4,7 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from get_design_markdown.models.analysis import ColorToken, ComponentSpec, DesignAnalysis
-from get_design_markdown.models.raw import BoundingBox, ElementSample, RawCapture
+from get_design_markdown.models.raw import (
+    BoundingBox,
+    ElementSample,
+    RawCapture,
+    join_sides,
+    split_sides,
+)
 from get_design_markdown.models.synthesis import SynthesisResult, ValidationIssue
 from tests.conftest import FIXED_TIME
 
@@ -70,3 +76,20 @@ def test_hex_color_rejects_other_formats(value: str) -> None:
 def test_token_names_must_be_kebab_case(name: str) -> None:
     with pytest.raises(ValidationError):
         ComponentSpec(name=name, kind="button")
+
+
+def test_join_and_split_sides() -> None:
+    assert join_sides(("8px", "8px", "8px", "8px")) == "8px"
+    joined = join_sides(("rgb(0, 0, 0)", "red", "rgb(0, 0, 0)", "red"))
+    assert joined == "rgb(0, 0, 0) | red | rgb(0, 0, 0) | red"
+    assert split_sides(joined) == ("rgb(0, 0, 0)", "red", "rgb(0, 0, 0)", "red")
+    assert split_sides("8px") == ("8px", "8px", "8px", "8px")
+
+
+def test_color_cluster_requires_a_channel() -> None:
+    from get_design_markdown.models.analysis import ColorCluster
+
+    with pytest.raises(ValidationError):
+        ColorCluster.model_validate({"id": "c1", "hex": "#ffffff"})
+    cluster = ColorCluster(id="c1", channel="border", hex="#e2e8f0")
+    assert cluster.usage.border == 0.0

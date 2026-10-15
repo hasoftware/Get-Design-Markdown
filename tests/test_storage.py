@@ -11,8 +11,12 @@ from get_design_markdown.storage import (
     domain_of,
     load_model,
     normalize_url,
+    page_slug,
     resolve_site_dir,
+    save_json,
     save_model,
+    save_text,
+    screenshot_filename,
     site_dir,
 )
 
@@ -81,3 +85,31 @@ def test_resolve_site_dir_accepts_folder_or_domain(tmp_path: Path) -> None:
     assert resolve_site_dir("https://stripe.com", tmp_path) == folder
     with pytest.raises(OutputNotFoundError):
         resolve_site_dir("linear.app", tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://stripe.com/", "home"),
+        ("https://stripe.com", "home"),
+        ("https://stripe.com/docs/api/", "docs-api"),
+        ("http://127.0.0.1:8000/pricing.html", "pricing"),
+        ("https://linear.app/Customers?x=1", "customers"),
+        ("https://x.test/%C3%A9t%C3%A9/", "t"),
+    ],
+)
+def test_page_slug(url: str, expected: str) -> None:
+    assert page_slug(url) == expected
+
+
+def test_screenshot_filename() -> None:
+    assert screenshot_filename("home", 1440) == "screenshots/home-1440.png"
+    assert screenshot_filename("pricing", 390, "dark") == "screenshots/pricing-dark-390.png"
+
+
+def test_save_text_and_json_use_utf8_and_lf(tmp_path: Path) -> None:
+    text = "Xin chào\nthế giới\n"
+    text_path = save_text(text, tmp_path / "a" / "DESIGN.md")
+    assert text_path.read_bytes() == text.encode()
+    json_path = save_json({"tên": "màu"}, tmp_path / "tokens.json")
+    assert json_path.read_bytes() == '{\n  "tên": "màu"\n}\n'.encode()

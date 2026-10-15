@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import functools
+import os
+import threading
+import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -32,8 +41,106 @@ from get_design_markdown.models.raw import (
     RobotsCheck,
     Screenshot,
 )
+from tests.fixture_data import SITE_DIR
 
 FIXED_TIME = datetime(2026, 10, 15, 9, 30, tzinfo=UTC)
+
+#: Set to 1 in CI so that a missing Chromium fails browser tests instead of skipping them.
+REQUIRE_BROWSER_ENV = "GDM_REQUIRE_BROWSER"
+
+
+# ─── Browser availability (marker "browser") ─────────────────────────────────
+
+
+@functools.cache
+def chromium_problem() -> str | None:
+    """None when Playwright's Chromium can be launched, else the reason."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            browser.close()
+    except Exception as error:  # pragma: no cover - depends on the machine
+        return f"{type(error).__name__}: {str(error).splitlines()[0] if str(error) else ''}"
+    return None
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    browser_items = [item for item in items if item.get_closest_marker("browser")]
+    if not browser_items or os.environ.get(REQUIRE_BROWSER_ENV) == "1":
+        return
+    problem = chromium_problem()
+    if problem is None:
+        return
+    skip = pytest.mark.skip(
+        reason=f"Chromium chưa sẵn sàng ({problem}) — chạy 'python -m uv run playwright "
+        "install chromium'."
+    )
+    for item in browser_items:
+        item.add_marker(skip)
+
+
+# ─── Static fixture site server ──────────────────────────────────────────────
+
+
+class _FixtureSiteHandler(SimpleHTTPRequestHandler):
+    """Serves tests/fixtures/site. Query parameters for collector tests:
+    ?status=403 answers with that status (body still the file), ?delay=2.5 waits first
+    (seconds, capped at 15)."""
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        query = parse_qs(urlsplit(self.path).query)
+        forced = query.get("status", [""])[0]
+        if code == 200 and forced.isdigit():
+            code = int(forced)
+        super().send_response(code, message)
+
+    def do_GET(self) -> None:
+        query = parse_qs(urlsplit(self.path).query)
+        delay = query.get("delay", [""])[0]
+        try:
+            seconds = min(float(delay), 15.0) if delay else 0.0
+        except ValueError:
+            seconds = 0.0
+        if seconds > 0:
+            time.sleep(seconds)
+        super().do_GET()
+
+
+def serve_directory(directory: Path) -> tuple[ThreadingHTTPServer, str]:
+    handler = functools.partial(_FixtureSiteHandler, directory=str(directory))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    return server, f"http://{host!s}:{port}/"
+
+
+@pytest.fixture(scope="session")
+def site_url() -> Iterator[str]:
+    """Base URL ("http://127.0.0.1:<port>/") of tests/fixtures/site served over HTTP.
+
+    The same files are reachable on "http://localhost:<port>/" — a different origin, useful
+    for cross-origin stylesheet tests. Skips when the site does not exist yet.
+    """
+    if not (SITE_DIR / "index.html").is_file():
+        pytest.skip(
+            "Trang fixture tests/fixtures/site/index.html chưa được tạo (stream collector)."
+        )
+    server, url = serve_directory(SITE_DIR)
+    try:
+        yield url
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+# ─── Small hand-made models (GĐ0 tests) ──────────────────────────────────────
 
 
 @pytest.fixture
@@ -43,6 +150,7 @@ def raw_capture() -> RawCapture:
         tag="a",
         classes=["btn", "btn-primary"],
         text="Start now",
+        has_own_text=True,
         href="/start",
         box=BoundingBox(x=100, y=40, width=120, height=40),
         styles=ComputedStyle(
@@ -103,7 +211,15 @@ def design_analysis() -> DesignAnalysis:
         site=SiteInfo(url="https://stripe.com/", name="Stripe", pages_analyzed=["home"]),
         colors=ColorPalette(
             clusters=[
-                ColorCluster(id="c1", hex="#635bff", weight=1200.0, share=0.04, chroma=0.2, hue=280)
+                ColorCluster(
+                    id="c1",
+                    channel="background",
+                    hex="#635bff",
+                    weight=1200.0,
+                    share=0.04,
+                    chroma=0.2,
+                    hue=280,
+                )
             ],
             tokens=[
                 ColorToken(name="primary", value="#635bff", role=ColorRole.BRAND, cluster_id="c1")

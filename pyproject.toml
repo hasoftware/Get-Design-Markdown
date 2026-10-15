@@ -49,6 +49,7 @@ addopts = "-m 'not network'"
 markers = [
     "browser: cần Chromium của Playwright, chạy trên trang fixture cục bộ",
     "network: cần Internet, không chạy mặc định",
+    "e2e: chạy trọn pipeline trên trang fixture cục bộ (cần Chromium)",
 ]
 
 [tool.ruff]

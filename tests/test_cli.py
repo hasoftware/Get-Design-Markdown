@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from get_design_markdown import __version__, cli
+from get_design_markdown import __version__, cli, pipeline
 from get_design_markdown.models.raw import RobotsCheck
 
 runner = CliRunner()
@@ -14,7 +14,7 @@ runner = CliRunner()
 def test_help_lists_all_commands() -> None:
     result = runner.invoke(cli.app, ["--help"])
     assert result.exit_code == 0
-    for command in ("collect", "analyze", "synthesize", "get"):
+    for command in ("collect", "analyze", "synthesize", "export", "get"):
         assert command in result.output
 
 
@@ -37,7 +37,7 @@ def test_collect_reports_robots_result(monkeypatch: pytest.MonkeyPatch, tmp_path
             robots_url="https://stripe.com/robots.txt", allowed=False, note="robots.txt chặn."
         )
 
-    monkeypatch.setattr(cli, "check_robots", fake_check)
+    monkeypatch.setattr(pipeline, "check_robots", fake_check)
     result = runner.invoke(cli.app, ["collect", "stripe.com", "--out", str(tmp_path)])
     assert "robots.txt chặn." in result.output
     assert "Cảnh báo" in result.output

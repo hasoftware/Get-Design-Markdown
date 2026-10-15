@@ -1,0 +1,2598 @@
+{
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "analyzed_at": "2026-10-15T08:05:00Z",
+  "site": {
+    "url": "https://acme.example/",
+    "name": "Acme Cloud",
+    "title": "Acme Cloud — Ship cloud apps without the ops",
+    "description": "Acme Cloud is the developer platform to build, deploy and scale cloud apps.",
+    "lang": "en",
+    "collected_at": "2026-10-15T08:00:00Z",
+    "pages_analyzed": [
+      "home"
+    ]
+  },
+  "colors": {
+    "scheme": "light",
+    "clusters": [
+      {
+        "id": "bg-1",
+        "channel": "background",
+        "hex": "#ffffff",
+        "alpha": 1.0,
+        "weight": 4762736.0,
+        "share": 0.7193,
+        "count": 6,
+        "usage": {
+          "text": 42552.0,
+          "background": 4762736.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 1.0,
+        "chroma": 0.0,
+        "hue": null,
+        "css_variables": [],
+        "members": [
+          "#ffffff"
+        ],
+        "samples": [
+          "body",
+          "input.input",
+          "article.card"
+        ]
+      },
+      {
+        "id": "bg-2",
+        "channel": "background",
+        "hex": "#f8fafc",
+        "alpha": 1.0,
+        "weight": 1152000.0,
+        "share": 0.174,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 1152000.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.9842,
+        "chroma": 0.0034,
+        "hue": 247.86,
+        "css_variables": [
+          "--color-surface"
+        ],
+        "members": [
+          "#f8fafc"
+        ],
+        "samples": [
+          "section.features"
+        ]
+      },
+      {
+        "id": "bg-3",
+        "channel": "background",
+        "hex": "#0b1020",
+        "alpha": 1.0,
+        "weight": 547200.0,
+        "share": 0.0826,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 547200.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.1773,
+        "chroma": 0.0341,
+        "hue": 269.56,
+        "css_variables": [],
+        "members": [
+          "#0b1020"
+        ],
+        "samples": [
+          "footer.site-footer"
+        ]
+      },
+      {
+        "id": "bg-4",
+        "channel": "background",
+        "hex": "#ffffffcc",
+        "alpha": 0.8,
+        "weight": 92160.0,
+        "share": 0.0139,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 92160.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 1.0,
+        "chroma": 0.0,
+        "hue": null,
+        "css_variables": [],
+        "members": [
+          "#ffffffcc"
+        ],
+        "samples": [
+          "header.site-header"
+        ]
+      },
+      {
+        "id": "bg-5",
+        "channel": "background",
+        "hex": "#0f172a",
+        "alpha": 1.0,
+        "weight": 40288.0,
+        "share": 0.0061,
+        "count": 2,
+        "usage": {
+          "text": 328568.0,
+          "background": 40288.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.2077,
+        "chroma": 0.0398,
+        "hue": 265.75,
+        "css_variables": [
+          "--color-ink"
+        ],
+        "members": [
+          "#0f172a"
+        ],
+        "samples": [
+          "button.btn.btn-secondary",
+          "div.code-sample"
+        ]
+      },
+      {
+        "id": "bg-6",
+        "channel": "background",
+        "hex": "#4f46e5",
+        "alpha": 1.0,
+        "weight": 14264.0,
+        "share": 0.0022,
+        "count": 2,
+        "usage": {
+          "text": 15216.0,
+          "background": 14264.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.5106,
+        "chroma": 0.2301,
+        "hue": 276.97,
+        "css_variables": [
+          "--color-primary"
+        ],
+        "members": [
+          "#4f46e5"
+        ],
+        "samples": [
+          "a.btn.btn-primary"
+        ]
+      },
+      {
+        "id": "bg-7",
+        "channel": "background",
+        "hex": "#eef2ff",
+        "alpha": 1.0,
+        "weight": 13072.0,
+        "share": 0.002,
+        "count": 4,
+        "usage": {
+          "text": 0.0,
+          "background": 13072.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.9619,
+        "chroma": 0.0179,
+        "hue": 272.31,
+        "css_variables": [],
+        "members": [
+          "#eef2ff"
+        ],
+        "samples": [
+          "span.badge.badge-pill",
+          "div.card-icon"
+        ]
+      },
+      {
+        "id": "text-1",
+        "channel": "text",
+        "hex": "#0f172a",
+        "alpha": 1.0,
+        "weight": 328568.0,
+        "share": 0.5028,
+        "count": 11,
+        "usage": {
+          "text": 328568.0,
+          "background": 40288.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.2077,
+        "chroma": 0.0398,
+        "hue": 265.75,
+        "css_variables": [
+          "--color-ink"
+        ],
+        "members": [
+          "#0f172a"
+        ],
+        "samples": [
+          "a.logo",
+          "h1.hero-title",
+          "a.btn.btn-outline"
+        ]
+      },
+      {
+        "id": "text-2",
+        "channel": "text",
+        "hex": "#475569",
+        "alpha": 1.0,
+        "weight": 225296.0,
+        "share": 0.3448,
+        "count": 14,
+        "usage": {
+          "text": 225296.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.4455,
+        "chroma": 0.0374,
+        "hue": 257.28,
+        "css_variables": [
+          "--color-muted"
+        ],
+        "members": [
+          "#475569"
+        ],
+        "samples": [
+          "a.nav-link",
+          "p.lead",
+          "p.section-lead"
+        ]
+      },
+      {
+        "id": "text-3",
+        "channel": "text",
+        "hex": "#ffffff",
+        "alpha": 1.0,
+        "weight": 42552.0,
+        "share": 0.0651,
+        "count": 7,
+        "usage": {
+          "text": 42552.0,
+          "background": 4762736.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 1.0,
+        "chroma": 0.0,
+        "hue": null,
+        "css_variables": [],
+        "members": [
+          "#ffffff"
+        ],
+        "samples": [
+          "a.btn.btn-primary",
+          "button.btn.btn-secondary",
+          "h4"
+        ]
+      },
+      {
+        "id": "text-4",
+        "channel": "text",
+        "hex": "#94a3b8",
+        "alpha": 1.0,
+        "weight": 18400.0,
+        "share": 0.0282,
+        "count": 10,
+        "usage": {
+          "text": 18400.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.7107,
+        "chroma": 0.0351,
+        "hue": 256.79,
+        "css_variables": [],
+        "members": [
+          "#94a3b8"
+        ],
+        "samples": [
+          "p.trusted",
+          "a.footer-link"
+        ]
+      },
+      {
+        "id": "text-5",
+        "channel": "text",
+        "hex": "#4f46e5",
+        "alpha": 1.0,
+        "weight": 15216.0,
+        "share": 0.0233,
+        "count": 3,
+        "usage": {
+          "text": 15216.0,
+          "background": 14264.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.5106,
+        "chroma": 0.2301,
+        "hue": 276.97,
+        "css_variables": [
+          "--color-primary"
+        ],
+        "members": [
+          "#4f46e5"
+        ],
+        "samples": [
+          "span.badge.badge-pill",
+          "a.btn.btn-ghost",
+          "a.text-link"
+        ]
+      },
+      {
+        "id": "text-6",
+        "channel": "text",
+        "hex": "#e2e8f0",
+        "alpha": 1.0,
+        "weight": 13440.0,
+        "share": 0.0206,
+        "count": 1,
+        "usage": {
+          "text": 13440.0,
+          "background": 0.0,
+          "border": 5860.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.9288,
+        "chroma": 0.0126,
+        "hue": 255.51,
+        "css_variables": [
+          "--color-border"
+        ],
+        "members": [
+          "#e2e8f0"
+        ],
+        "samples": [
+          "code"
+        ]
+      },
+      {
+        "id": "text-7",
+        "channel": "text",
+        "hex": "#64748b",
+        "alpha": 1.0,
+        "weight": 6000.0,
+        "share": 0.0092,
+        "count": 1,
+        "usage": {
+          "text": 6000.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.5544,
+        "chroma": 0.0407,
+        "hue": 257.42,
+        "css_variables": [],
+        "members": [
+          "#64748b"
+        ],
+        "samples": [
+          "p.copyright"
+        ]
+      },
+      {
+        "id": "text-8",
+        "channel": "text",
+        "hex": "#16a34a",
+        "alpha": 1.0,
+        "weight": 4000.0,
+        "share": 0.0061,
+        "count": 1,
+        "usage": {
+          "text": 4000.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.6271,
+        "chroma": 0.1699,
+        "hue": 149.21,
+        "css_variables": [
+          "--color-success"
+        ],
+        "members": [
+          "#16a34a"
+        ],
+        "samples": [
+          "p.hero-note"
+        ]
+      },
+      {
+        "id": "border-1",
+        "channel": "border",
+        "hex": "#e2e8f0",
+        "alpha": 1.0,
+        "weight": 5860.0,
+        "share": 0.7532,
+        "count": 17,
+        "usage": {
+          "text": 13440.0,
+          "background": 0.0,
+          "border": 5860.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.9288,
+        "chroma": 0.0126,
+        "hue": 255.51,
+        "css_variables": [
+          "--color-border"
+        ],
+        "members": [
+          "#e2e8f0"
+        ],
+        "samples": [
+          "header.site-header",
+          "a.btn.btn-outline",
+          "article.card"
+        ]
+      },
+      {
+        "id": "border-2",
+        "channel": "border",
+        "hex": "#1e293b",
+        "alpha": 1.0,
+        "weight": 1152.0,
+        "share": 0.1481,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 0.0,
+          "border": 1152.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.2795,
+        "chroma": 0.0368,
+        "hue": 260.03,
+        "css_variables": [],
+        "members": [
+          "#1e293b"
+        ],
+        "samples": [
+          "div.footer-bottom"
+        ]
+      },
+      {
+        "id": "border-3",
+        "channel": "border",
+        "hex": "#cbd5e1",
+        "alpha": 1.0,
+        "weight": 768.0,
+        "share": 0.0987,
+        "count": 4,
+        "usage": {
+          "text": 0.0,
+          "background": 0.0,
+          "border": 768.0,
+          "gradient": 0.0
+        },
+        "decorative": false,
+        "lightness": 0.869,
+        "chroma": 0.0198,
+        "hue": 252.89,
+        "css_variables": [],
+        "members": [
+          "#cbd5e1"
+        ],
+        "samples": [
+          "input.input"
+        ]
+      },
+      {
+        "id": "gradient-1",
+        "channel": "gradient",
+        "hex": "#6366f12e",
+        "alpha": 0.18,
+        "weight": 504000.0,
+        "share": 0.5,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 504000.0
+        },
+        "decorative": true,
+        "lightness": 0.5854,
+        "chroma": 0.2041,
+        "hue": 277.12,
+        "css_variables": [],
+        "members": [
+          "#6366f12e"
+        ],
+        "samples": [
+          "section.hero"
+        ]
+      },
+      {
+        "id": "gradient-2",
+        "channel": "gradient",
+        "hex": "#ec48991f",
+        "alpha": 0.122,
+        "weight": 504000.0,
+        "share": 0.5,
+        "count": 1,
+        "usage": {
+          "text": 0.0,
+          "background": 0.0,
+          "border": 0.0,
+          "gradient": 504000.0
+        },
+        "decorative": true,
+        "lightness": 0.6559,
+        "chroma": 0.2118,
+        "hue": 354.31,
+        "css_variables": [],
+        "members": [
+          "#ec48991f"
+        ],
+        "samples": [
+          "section.hero"
+        ]
+      }
+    ],
+    "tokens": [
+      {
+        "name": "primary",
+        "value": "#4f46e5",
+        "role": "brand",
+        "cluster_id": "bg-6",
+        "css_variable": "--color-primary",
+        "evidence": "background of button-primary; text of links"
+      },
+      {
+        "name": "on-primary",
+        "value": "#ffffff",
+        "role": "text",
+        "cluster_id": "text-3",
+        "css_variable": null,
+        "evidence": "text on button-primary"
+      },
+      {
+        "name": "canvas",
+        "value": "#ffffff",
+        "role": "background",
+        "cluster_id": "bg-1",
+        "css_variable": null,
+        "evidence": "body background, largest area"
+      },
+      {
+        "name": "surface",
+        "value": "#f8fafc",
+        "role": "surface",
+        "cluster_id": "bg-2",
+        "css_variable": "--color-surface",
+        "evidence": "alternate section background"
+      },
+      {
+        "name": "surface-inverse",
+        "value": "#0b1020",
+        "role": "surface",
+        "cluster_id": "bg-3",
+        "css_variable": null,
+        "evidence": "footer background"
+      },
+      {
+        "name": "hairline",
+        "value": "#e2e8f0",
+        "role": "border",
+        "cluster_id": "border-1",
+        "css_variable": "--color-border",
+        "evidence": "1px borders of cards, header, outline button"
+      },
+      {
+        "name": "ink",
+        "value": "#0f172a",
+        "role": "text",
+        "cluster_id": "text-1",
+        "css_variable": "--color-ink",
+        "evidence": "headings and body text"
+      },
+      {
+        "name": "muted",
+        "value": "#475569",
+        "role": "text_muted",
+        "cluster_id": "text-2",
+        "css_variable": "--color-muted",
+        "evidence": "secondary paragraphs and nav links"
+      },
+      {
+        "name": "faint",
+        "value": "#94a3b8",
+        "role": "text_muted",
+        "cluster_id": "text-4",
+        "css_variable": null,
+        "evidence": "captions and footer links"
+      },
+      {
+        "name": "success",
+        "value": "#16a34a",
+        "role": "success",
+        "cluster_id": "text-8",
+        "css_variable": "--color-success",
+        "evidence": "positive inline note"
+      }
+    ],
+    "contrast_pairs": [
+      {
+        "foreground": "#475569",
+        "background": "#ffffff",
+        "foreground_token": "muted",
+        "background_token": "canvas",
+        "ratio": 7.58,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 13,
+        "context": "secondary text"
+      },
+      {
+        "foreground": "#0f172a",
+        "background": "#ffffff",
+        "foreground_token": "ink",
+        "background_token": "canvas",
+        "ratio": 17.85,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 10,
+        "context": "body text"
+      },
+      {
+        "foreground": "#94a3b8",
+        "background": "#0b1020",
+        "foreground_token": "faint",
+        "background_token": "surface-inverse",
+        "ratio": 7.38,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 9,
+        "context": "footer links"
+      },
+      {
+        "foreground": "#ffffff",
+        "background": "#0b1020",
+        "foreground_token": "on-primary",
+        "background_token": "surface-inverse",
+        "ratio": 18.93,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 4,
+        "context": "footer headings"
+      },
+      {
+        "foreground": "#4f46e5",
+        "background": "#ffffff",
+        "foreground_token": "primary",
+        "background_token": "canvas",
+        "ratio": 6.29,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": false,
+        "occurrences": 2,
+        "context": "links"
+      },
+      {
+        "foreground": "#ffffff",
+        "background": "#4f46e5",
+        "foreground_token": "on-primary",
+        "background_token": "primary",
+        "ratio": 6.29,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": false,
+        "occurrences": 2,
+        "context": "button-primary"
+      },
+      {
+        "foreground": "#0f172a",
+        "background": "#f8fafc",
+        "foreground_token": "ink",
+        "background_token": "surface",
+        "ratio": 17.06,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 1,
+        "context": "headings on surface"
+      },
+      {
+        "foreground": "#16a34a",
+        "background": "#ffffff",
+        "foreground_token": "success",
+        "background_token": "canvas",
+        "ratio": 3.3,
+        "passes_aa": false,
+        "passes_aa_large": true,
+        "passes_aaa": false,
+        "occurrences": 1,
+        "context": "inline success note"
+      },
+      {
+        "foreground": "#475569",
+        "background": "#f8fafc",
+        "foreground_token": "muted",
+        "background_token": "surface",
+        "ratio": 7.24,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 1,
+        "context": "secondary text on surface"
+      },
+      {
+        "foreground": "#4f46e5",
+        "background": "#eef2ff",
+        "foreground_token": "primary",
+        "background_token": null,
+        "ratio": 5.62,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": false,
+        "occurrences": 1,
+        "context": "badge"
+      },
+      {
+        "foreground": "#64748b",
+        "background": "#0b1020",
+        "foreground_token": null,
+        "background_token": "surface-inverse",
+        "ratio": 3.98,
+        "passes_aa": false,
+        "passes_aa_large": true,
+        "passes_aaa": false,
+        "occurrences": 1,
+        "context": "footer copyright"
+      },
+      {
+        "foreground": "#94a3b8",
+        "background": "#ffffff",
+        "foreground_token": "faint",
+        "background_token": "canvas",
+        "ratio": 2.56,
+        "passes_aa": false,
+        "passes_aa_large": false,
+        "passes_aaa": false,
+        "occurrences": 1,
+        "context": "caption"
+      },
+      {
+        "foreground": "#e2e8f0",
+        "background": "#0f172a",
+        "foreground_token": null,
+        "background_token": "ink",
+        "ratio": 14.48,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 1,
+        "context": "code sample"
+      },
+      {
+        "foreground": "#ffffff",
+        "background": "#0f172a",
+        "foreground_token": "on-primary",
+        "background_token": "ink",
+        "ratio": 17.85,
+        "passes_aa": true,
+        "passes_aa_large": true,
+        "passes_aaa": true,
+        "occurrences": 1,
+        "context": "button-secondary"
+      }
+    ]
+  },
+  "typography": {
+    "families": [
+      {
+        "name": "Inter",
+        "stack": [
+          "Inter",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "sans-serif"
+        ],
+        "role": "primary",
+        "category": "sans-serif",
+        "share": 0.8,
+        "weights": [
+          400,
+          500,
+          600
+        ],
+        "is_google_font": true,
+        "substitutes": []
+      },
+      {
+        "name": "Space Grotesk",
+        "stack": [
+          "Space Grotesk",
+          "Inter",
+          "system-ui",
+          "sans-serif"
+        ],
+        "role": "heading",
+        "category": "sans-serif",
+        "share": 0.17,
+        "weights": [
+          700
+        ],
+        "is_google_font": true,
+        "substitutes": []
+      },
+      {
+        "name": "JetBrains Mono",
+        "stack": [
+          "JetBrains Mono",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "monospace"
+        ],
+        "role": "mono",
+        "category": "monospace",
+        "share": 0.03,
+        "weights": [
+          400
+        ],
+        "is_google_font": true,
+        "substitutes": []
+      }
+    ],
+    "levels": [
+      {
+        "name": "display",
+        "size_px": 64.0,
+        "font_family": "Space Grotesk",
+        "weight": 700,
+        "line_height_px": 67.2,
+        "line_height": 1.05,
+        "letter_spacing_px": -1.5,
+        "text_transform": "none",
+        "tags": [
+          "h1"
+        ],
+        "count": 1,
+        "samples": [
+          "Ship cloud apps without the ops"
+        ]
+      },
+      {
+        "name": "heading",
+        "size_px": 40.0,
+        "font_family": "Space Grotesk",
+        "weight": 700,
+        "line_height_px": 46.0,
+        "line_height": 1.15,
+        "letter_spacing_px": -0.8,
+        "text_transform": "none",
+        "tags": [
+          "h2",
+          "p"
+        ],
+        "count": 5,
+        "samples": [
+          "Everything you need to ship",
+          "99.99%"
+        ]
+      },
+      {
+        "name": "title",
+        "size_px": 24.0,
+        "font_family": "Inter",
+        "weight": 600,
+        "line_height_px": 32.0,
+        "line_height": 1.33,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "h3"
+        ],
+        "count": 3,
+        "samples": [
+          "Deploy in seconds"
+        ]
+      },
+      {
+        "name": "body-lg",
+        "size_px": 20.0,
+        "font_family": "Inter",
+        "weight": 400,
+        "line_height_px": 32.0,
+        "line_height": 1.6,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "p"
+        ],
+        "count": 2,
+        "samples": [
+          "Start free. Pay only for what"
+        ]
+      },
+      {
+        "name": "body",
+        "size_px": 16.0,
+        "font_family": "Inter",
+        "weight": 400,
+        "line_height_px": 25.6,
+        "line_height": 1.6,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "p",
+          "a"
+        ],
+        "count": 5,
+        "samples": [
+          "From first commit to global"
+        ]
+      },
+      {
+        "name": "ui",
+        "size_px": 15.0,
+        "font_family": "Inter",
+        "weight": 500,
+        "line_height_px": 20.0,
+        "line_height": 1.33,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "a",
+          "button"
+        ],
+        "count": 10,
+        "samples": [
+          "Get started",
+          "Pricing"
+        ]
+      },
+      {
+        "name": "body-sm",
+        "size_px": 14.0,
+        "font_family": "Inter",
+        "weight": 400,
+        "line_height_px": 20.0,
+        "line_height": 1.43,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "a",
+          "h4"
+        ],
+        "count": 13,
+        "samples": [
+          "Features",
+          "Product"
+        ]
+      },
+      {
+        "name": "code",
+        "size_px": 14.0,
+        "font_family": "JetBrains Mono",
+        "weight": 400,
+        "line_height_px": 22.4,
+        "line_height": 1.6,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "code"
+        ],
+        "count": 1,
+        "samples": [
+          "npm i @acme/cli"
+        ]
+      },
+      {
+        "name": "caption",
+        "size_px": 13.0,
+        "font_family": "Inter",
+        "weight": 400,
+        "line_height_px": 19.5,
+        "line_height": 1.5,
+        "letter_spacing_px": 0.0,
+        "text_transform": "none",
+        "tags": [
+          "p",
+          "span"
+        ],
+        "count": 7,
+        "samples": [
+          "Uptime SLA"
+        ]
+      }
+    ],
+    "weights_used": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "base_size_px": 16.0,
+    "scale_ratio": 1.25,
+    "scale_ratio_name": "major third"
+  },
+  "spacing": {
+    "base_unit_px": 4,
+    "steps": [
+      {
+        "name": "xxs",
+        "value_px": 4.0,
+        "count": 2,
+        "used_on": [
+          "badge"
+        ]
+      },
+      {
+        "name": "xs",
+        "value_px": 8.0,
+        "count": 9,
+        "used_on": [
+          "nav-link",
+          "button-ghost"
+        ]
+      },
+      {
+        "name": "sm",
+        "value_px": 12.0,
+        "count": 14,
+        "used_on": [
+          "button-primary",
+          "gap"
+        ]
+      },
+      {
+        "name": "md",
+        "value_px": 16.0,
+        "count": 8,
+        "used_on": [
+          "p",
+          "code-sample"
+        ]
+      },
+      {
+        "name": "lg",
+        "value_px": 20.0,
+        "count": 6,
+        "used_on": [
+          "button-primary"
+        ]
+      },
+      {
+        "name": "xl",
+        "value_px": 24.0,
+        "count": 16,
+        "used_on": [
+          "container",
+          "grid gap"
+        ]
+      },
+      {
+        "name": "xxl",
+        "value_px": 32.0,
+        "count": 17,
+        "used_on": [
+          "card",
+          "section gap"
+        ]
+      },
+      {
+        "name": "xxxl",
+        "value_px": 48.0,
+        "count": 5,
+        "used_on": [
+          "section content gap"
+        ]
+      },
+      {
+        "name": "4xl",
+        "value_px": 64.0,
+        "count": 1,
+        "used_on": [
+          "footer"
+        ]
+      }
+    ],
+    "container_max_width_px": 1200.0,
+    "section_gap_px": 96.0,
+    "common_paddings": [
+      "12px 20px",
+      "32px",
+      "8px 12px",
+      "0px 24px"
+    ]
+  },
+  "radii": [
+    {
+      "name": "sm",
+      "value_px": 6.0,
+      "count": 7,
+      "used_on": [
+        "nav-link",
+        "text-input"
+      ]
+    },
+    {
+      "name": "md",
+      "value_px": 8.0,
+      "count": 5,
+      "used_on": [
+        "button-primary",
+        "button-ghost"
+      ]
+    },
+    {
+      "name": "lg",
+      "value_px": 12.0,
+      "count": 4,
+      "used_on": [
+        "card-icon",
+        "code-sample"
+      ]
+    },
+    {
+      "name": "xl",
+      "value_px": 16.0,
+      "count": 3,
+      "used_on": [
+        "card"
+      ]
+    },
+    {
+      "name": "full",
+      "value_px": 9999.0,
+      "count": 1,
+      "used_on": [
+        "badge"
+      ]
+    }
+  ],
+  "shadows": [
+    {
+      "name": "sm",
+      "css": "0px 1px 2px 0px rgba(15, 23, 42, 0.06)",
+      "layers": 1,
+      "count": 3,
+      "used_on": [
+        "button-primary",
+        "input"
+      ]
+    },
+    {
+      "name": "md",
+      "css": "0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06)",
+      "layers": 2,
+      "count": 3,
+      "used_on": [
+        "card"
+      ]
+    }
+  ],
+  "breakpoints": [
+    {
+      "name": "sm",
+      "min_width_px": 640.0,
+      "max_width_px": null,
+      "occurrences": 14
+    },
+    {
+      "name": "md",
+      "min_width_px": 768.0,
+      "max_width_px": null,
+      "occurrences": 40
+    },
+    {
+      "name": "lg",
+      "min_width_px": 1024.0,
+      "max_width_px": null,
+      "occurrences": 44
+    },
+    {
+      "name": "xl",
+      "min_width_px": 1280.0,
+      "max_width_px": null,
+      "occurrences": 9
+    }
+  ],
+  "layout": {
+    "container_max_width_px": 1200.0,
+    "gutter_px": 24.0,
+    "shell": "top-nav",
+    "snapshots": [
+      {
+        "viewport_width": 1440,
+        "viewport_height": 900,
+        "document_height": 2504.0,
+        "nav_visible": true,
+        "visible_nav_links": 5,
+        "hamburger_visible": false,
+        "sidebar_visible": false,
+        "main_columns": 3,
+        "horizontal_scrollers": 0,
+        "min_tap_target_px": 36.0,
+        "container_width_px": 1200.0,
+        "gutter_px": 24.0,
+        "max_heading_px": 64.0
+      },
+      {
+        "viewport_width": 768,
+        "viewport_height": 1024,
+        "document_height": 3420.0,
+        "nav_visible": false,
+        "visible_nav_links": 0,
+        "hamburger_visible": true,
+        "sidebar_visible": false,
+        "main_columns": 2,
+        "horizontal_scrollers": 0,
+        "min_tap_target_px": 40.0,
+        "container_width_px": 768.0,
+        "gutter_px": 24.0,
+        "max_heading_px": 48.0
+      },
+      {
+        "viewport_width": 390,
+        "viewport_height": 844,
+        "document_height": 5180.0,
+        "nav_visible": false,
+        "visible_nav_links": 0,
+        "hamburger_visible": true,
+        "sidebar_visible": false,
+        "main_columns": 1,
+        "horizontal_scrollers": 0,
+        "min_tap_target_px": 40.0,
+        "container_width_px": 390.0,
+        "gutter_px": 20.0,
+        "max_heading_px": 40.0
+      }
+    ],
+    "changes": [
+      {
+        "from_width": 1440,
+        "to_width": 768,
+        "kind": "nav_collapses_to_hamburger",
+        "params": {
+          "below_px": 1024.0,
+          "links": 5.0
+        },
+        "evidence": "5 visible nav links at 1440px, hamburger at 768px"
+      },
+      {
+        "from_width": 1440,
+        "to_width": 768,
+        "kind": "columns_reduce",
+        "params": {
+          "from": 3.0,
+          "to": 2.0
+        },
+        "evidence": "main grid 3 -> 2 columns"
+      },
+      {
+        "from_width": 1440,
+        "to_width": 768,
+        "kind": "heading_scales_down",
+        "params": {
+          "from_px": 64.0,
+          "to_px": 48.0
+        },
+        "evidence": "largest heading 64px -> 48px"
+      },
+      {
+        "from_width": 1440,
+        "to_width": 768,
+        "kind": "container_becomes_fluid",
+        "params": {
+          "max_width_px": 1200.0
+        },
+        "evidence": "container 1200px -> full width"
+      },
+      {
+        "from_width": 768,
+        "to_width": 390,
+        "kind": "columns_reduce",
+        "params": {
+          "from": 2.0,
+          "to": 1.0
+        },
+        "evidence": "grid 2 -> 1 column"
+      },
+      {
+        "from_width": 768,
+        "to_width": 390,
+        "kind": "heading_scales_down",
+        "params": {
+          "from_px": 48.0,
+          "to_px": 40.0
+        },
+        "evidence": "largest heading 48px -> 40px"
+      },
+      {
+        "from_width": 768,
+        "to_width": 390,
+        "kind": "gutter_shrinks",
+        "params": {
+          "from_px": 24.0,
+          "to_px": 20.0
+        },
+        "evidence": "container padding 24px -> 20px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "button-primary",
+      "kind": "button",
+      "variant": "primary",
+      "count": 2,
+      "properties": {
+        "backgroundColor": "#4f46e5",
+        "textColor": "#ffffff",
+        "rounded": "8px",
+        "padding": "12px 20px",
+        "height": "44px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "20px",
+        "shadow": "0px 1px 2px 0px rgba(15, 23, 42, 0.06)"
+      },
+      "token_refs": {
+        "backgroundColor": "{colors.primary}",
+        "textColor": "{colors.on-primary}",
+        "rounded": "{rounded.md}",
+        "typography": "{typography.ui}"
+      },
+      "states": {
+        "hover": {
+          "backgroundColor": "#4338ca"
+        }
+      },
+      "state_token_refs": {},
+      "contrast_ratio": 6.29,
+      "class_hints": [
+        "btn",
+        "btn-primary",
+        "btn-sm"
+      ],
+      "samples": [
+        "Start building free",
+        "Get started"
+      ]
+    },
+    {
+      "name": "button-secondary",
+      "kind": "button",
+      "variant": "secondary",
+      "count": 1,
+      "properties": {
+        "backgroundColor": "#0f172a",
+        "textColor": "#ffffff",
+        "rounded": "8px",
+        "padding": "12px 20px",
+        "height": "44px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "20px"
+      },
+      "token_refs": {
+        "backgroundColor": "{colors.ink}",
+        "textColor": "{colors.on-primary}",
+        "rounded": "{rounded.md}",
+        "typography": "{typography.ui}"
+      },
+      "states": {
+        "hover": {
+          "backgroundColor": "#1e293b"
+        }
+      },
+      "state_token_refs": {},
+      "contrast_ratio": 17.85,
+      "class_hints": [
+        "btn",
+        "btn-secondary"
+      ],
+      "samples": [
+        "Get updates"
+      ]
+    },
+    {
+      "name": "button-outline",
+      "kind": "button",
+      "variant": "outline",
+      "count": 1,
+      "properties": {
+        "backgroundColor": "transparent",
+        "textColor": "#0f172a",
+        "borderColor": "#e2e8f0",
+        "borderWidth": "1px",
+        "rounded": "8px",
+        "padding": "11px 19px",
+        "height": "44px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "20px"
+      },
+      "token_refs": {
+        "textColor": "{colors.ink}",
+        "borderColor": "{colors.hairline}",
+        "rounded": "{rounded.md}",
+        "typography": "{typography.ui}"
+      },
+      "states": {
+        "hover": {
+          "backgroundColor": "#f8fafc",
+          "borderColor": "#cbd5e1"
+        }
+      },
+      "state_token_refs": {
+        "hover": {
+          "backgroundColor": "{colors.surface}"
+        }
+      },
+      "contrast_ratio": 17.85,
+      "class_hints": [
+        "btn",
+        "btn-outline"
+      ],
+      "samples": [
+        "Book a demo"
+      ]
+    },
+    {
+      "name": "button-ghost",
+      "kind": "button",
+      "variant": "ghost",
+      "count": 1,
+      "properties": {
+        "backgroundColor": "transparent",
+        "textColor": "#4f46e5",
+        "rounded": "8px",
+        "padding": "8px 12px",
+        "height": "36px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "20px"
+      },
+      "token_refs": {
+        "textColor": "{colors.primary}",
+        "rounded": "{rounded.md}",
+        "typography": "{typography.ui}"
+      },
+      "states": {
+        "hover": {
+          "backgroundColor": "#eef2ff"
+        }
+      },
+      "state_token_refs": {},
+      "contrast_ratio": 6.29,
+      "class_hints": [
+        "btn",
+        "btn-ghost"
+      ],
+      "samples": [
+        "Watch video"
+      ]
+    },
+    {
+      "name": "text-link",
+      "kind": "link",
+      "variant": "inline",
+      "count": 1,
+      "properties": {
+        "textColor": "#4f46e5",
+        "fontSize": "16px",
+        "fontWeight": "500",
+        "textDecoration": "none"
+      },
+      "token_refs": {
+        "textColor": "{colors.primary}"
+      },
+      "states": {
+        "hover": {
+          "textColor": "#4338ca",
+          "textDecoration": "underline"
+        }
+      },
+      "state_token_refs": {},
+      "contrast_ratio": 6.29,
+      "class_hints": [
+        "text-link"
+      ],
+      "samples": [
+        "See full pricing →"
+      ]
+    },
+    {
+      "name": "nav-link",
+      "kind": "link",
+      "variant": "nav",
+      "count": 5,
+      "properties": {
+        "textColor": "#475569",
+        "rounded": "6px",
+        "padding": "8px 12px",
+        "height": "36px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "20px"
+      },
+      "token_refs": {
+        "textColor": "{colors.muted}",
+        "rounded": "{rounded.sm}",
+        "typography": "{typography.ui}"
+      },
+      "states": {
+        "hover": {
+          "textColor": "#0f172a"
+        }
+      },
+      "state_token_refs": {
+        "hover": {
+          "textColor": "{colors.ink}"
+        }
+      },
+      "contrast_ratio": 7.58,
+      "class_hints": [
+        "nav-link"
+      ],
+      "samples": [
+        "Product",
+        "Solutions",
+        "Pricing"
+      ]
+    },
+    {
+      "name": "text-input",
+      "kind": "input",
+      "variant": null,
+      "count": 1,
+      "properties": {
+        "backgroundColor": "#ffffff",
+        "textColor": "#0f172a",
+        "borderColor": "#cbd5e1",
+        "borderWidth": "1px",
+        "rounded": "6px",
+        "padding": "10px 14px",
+        "height": "44px",
+        "fontFamily": "Inter",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "22px",
+        "placeholderColor": "#94a3b8",
+        "shadow": "0px 1px 2px 0px rgba(15, 23, 42, 0.06)"
+      },
+      "token_refs": {
+        "backgroundColor": "{colors.canvas}",
+        "textColor": "{colors.ink}",
+        "rounded": "{rounded.sm}",
+        "placeholderColor": "{colors.faint}"
+      },
+      "states": {},
+      "state_token_refs": {},
+      "contrast_ratio": 17.85,
+      "class_hints": [
+        "input"
+      ],
+      "samples": [
+        "input[type=email]"
+      ]
+    },
+    {
+      "name": "card",
+      "kind": "card",
+      "variant": null,
+      "count": 3,
+      "properties": {
+        "backgroundColor": "#ffffff",
+        "borderColor": "#e2e8f0",
+        "borderWidth": "1px",
+        "rounded": "16px",
+        "padding": "32px",
+        "shadow": "0px 8px 24px -4px rgba(15, 23, 42, 0.12), 0px 2px 6px 0px rgba(15, 23, 42, 0.06)"
+      },
+      "token_refs": {
+        "backgroundColor": "{colors.canvas}",
+        "borderColor": "{colors.hairline}",
+        "rounded": "{rounded.xl}",
+        "padding": "{spacing.xxl}"
+      },
+      "states": {},
+      "state_token_refs": {},
+      "contrast_ratio": null,
+      "class_hints": [
+        "card"
+      ],
+      "samples": [
+        "Deploy in seconds",
+        "Scale automatically",
+        "Observe everything"
+      ]
+    },
+    {
+      "name": "badge",
+      "kind": "badge",
+      "variant": "pill",
+      "count": 1,
+      "properties": {
+        "backgroundColor": "#eef2ff",
+        "textColor": "#4f46e5",
+        "rounded": "9999px",
+        "padding": "4px 12px",
+        "height": "28px",
+        "fontSize": "13px",
+        "fontWeight": "600",
+        "lineHeight": "20px"
+      },
+      "token_refs": {
+        "textColor": "{colors.primary}",
+        "rounded": "{rounded.full}"
+      },
+      "states": {},
+      "state_token_refs": {},
+      "contrast_ratio": 5.62,
+      "class_hints": [
+        "badge",
+        "badge-pill"
+      ],
+      "samples": [
+        "New · Acme Workflows 2.0"
+      ]
+    },
+    {
+      "name": "top-nav",
+      "kind": "navigation",
+      "variant": null,
+      "count": 1,
+      "properties": {
+        "backgroundColor": "#ffffffcc",
+        "borderColor": "#e2e8f0",
+        "borderWidth": "0px 0px 1px",
+        "height": "64px",
+        "padding": "0px 24px",
+        "position": "sticky",
+        "backdropFilter": "blur(12px)"
+      },
+      "token_refs": {
+        "borderColor": "{colors.hairline}"
+      },
+      "states": {},
+      "state_token_refs": {},
+      "contrast_ratio": null,
+      "class_hints": [
+        "site-header",
+        "nav-inner",
+        "main-nav"
+      ],
+      "samples": [
+        "Acme Product Solutions Pricing Docs Sign in Get st"
+      ]
+    },
+    {
+      "name": "footer",
+      "kind": "footer",
+      "variant": null,
+      "count": 1,
+      "properties": {
+        "backgroundColor": "#0b1020",
+        "textColor": "#94a3b8",
+        "padding": "64px 0px 48px",
+        "fontSize": "14px"
+      },
+      "token_refs": {
+        "backgroundColor": "{colors.surface-inverse}",
+        "textColor": "{colors.faint}",
+        "typography": "{typography.body-sm}"
+      },
+      "states": {},
+      "state_token_refs": {},
+      "contrast_ratio": 7.38,
+      "class_hints": [
+        "site-footer",
+        "footer-link",
+        "footer-col"
+      ],
+      "samples": [
+        "Product Features Pricing Company About Blog Careers"
+      ]
+    }
+  ],
+  "dark": {
+    "colors": {
+      "scheme": "dark",
+      "clusters": [
+        {
+          "id": "bg-1",
+          "channel": "background",
+          "hex": "#0b1020",
+          "alpha": 1.0,
+          "weight": 4762736.0,
+          "share": 0.7193,
+          "count": 6,
+          "usage": {
+            "text": 20952.0,
+            "background": 4762736.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.1773,
+          "chroma": 0.0341,
+          "hue": 269.56,
+          "css_variables": [],
+          "members": [
+            "#0b1020"
+          ],
+          "samples": [
+            "body",
+            "input.input",
+            "article.card"
+          ]
+        },
+        {
+          "id": "bg-2",
+          "channel": "background",
+          "hex": "#111827",
+          "alpha": 1.0,
+          "weight": 1152000.0,
+          "share": 0.174,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 1152000.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.2101,
+          "chroma": 0.0318,
+          "hue": 264.66,
+          "css_variables": [
+            "--color-surface"
+          ],
+          "members": [
+            "#111827"
+          ],
+          "samples": [
+            "section.features"
+          ]
+        },
+        {
+          "id": "bg-3",
+          "channel": "background",
+          "hex": "#05070f",
+          "alpha": 1.0,
+          "weight": 547200.0,
+          "share": 0.0826,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 547200.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.1304,
+          "chroma": 0.0192,
+          "hue": 269.8,
+          "css_variables": [],
+          "members": [
+            "#05070f"
+          ],
+          "samples": [
+            "footer.site-footer"
+          ]
+        },
+        {
+          "id": "bg-4",
+          "channel": "background",
+          "hex": "#0b1020cc",
+          "alpha": 0.8,
+          "weight": 92160.0,
+          "share": 0.0139,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 92160.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.1773,
+          "chroma": 0.0341,
+          "hue": 269.56,
+          "css_variables": [],
+          "members": [
+            "#0b1020cc"
+          ],
+          "samples": [
+            "header.site-header"
+          ]
+        },
+        {
+          "id": "bg-5",
+          "channel": "background",
+          "hex": "#020617",
+          "alpha": 1.0,
+          "weight": 33600.0,
+          "share": 0.0051,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 33600.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.1288,
+          "chroma": 0.0406,
+          "hue": 264.7,
+          "css_variables": [],
+          "members": [
+            "#020617"
+          ],
+          "samples": [
+            "div.code-sample"
+          ]
+        },
+        {
+          "id": "bg-6",
+          "channel": "background",
+          "hex": "#818cf8",
+          "alpha": 1.0,
+          "weight": 14264.0,
+          "share": 0.0022,
+          "count": 2,
+          "usage": {
+            "text": 15216.0,
+            "background": 14264.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.6801,
+          "chroma": 0.1583,
+          "hue": 276.93,
+          "css_variables": [
+            "--color-primary"
+          ],
+          "members": [
+            "#818cf8"
+          ],
+          "samples": [
+            "a.btn.btn-primary"
+          ]
+        },
+        {
+          "id": "bg-7",
+          "channel": "background",
+          "hex": "#818cf826",
+          "alpha": 0.149,
+          "weight": 13072.0,
+          "share": 0.002,
+          "count": 4,
+          "usage": {
+            "text": 0.0,
+            "background": 13072.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.6801,
+          "chroma": 0.1583,
+          "hue": 276.93,
+          "css_variables": [],
+          "members": [
+            "#818cf826"
+          ],
+          "samples": [
+            "span.badge.badge-pill",
+            "div.card-icon"
+          ]
+        },
+        {
+          "id": "bg-8",
+          "channel": "background",
+          "hex": "#f8fafc",
+          "alpha": 1.0,
+          "weight": 6688.0,
+          "share": 0.001,
+          "count": 1,
+          "usage": {
+            "text": 328568.0,
+            "background": 6688.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.9842,
+          "chroma": 0.0034,
+          "hue": 247.86,
+          "css_variables": [
+            "--color-ink"
+          ],
+          "members": [
+            "#f8fafc"
+          ],
+          "samples": [
+            "button.btn.btn-secondary"
+          ]
+        },
+        {
+          "id": "text-1",
+          "channel": "text",
+          "hex": "#f8fafc",
+          "alpha": 1.0,
+          "weight": 328568.0,
+          "share": 0.5028,
+          "count": 11,
+          "usage": {
+            "text": 328568.0,
+            "background": 6688.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.9842,
+          "chroma": 0.0034,
+          "hue": 247.86,
+          "css_variables": [
+            "--color-ink"
+          ],
+          "members": [
+            "#f8fafc"
+          ],
+          "samples": [
+            "a.logo",
+            "h1.hero-title",
+            "a.btn.btn-outline"
+          ]
+        },
+        {
+          "id": "text-2",
+          "channel": "text",
+          "hex": "#94a3b8",
+          "alpha": 1.0,
+          "weight": 239696.0,
+          "share": 0.3668,
+          "count": 23,
+          "usage": {
+            "text": 239696.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.7107,
+          "chroma": 0.0351,
+          "hue": 256.79,
+          "css_variables": [
+            "--color-muted"
+          ],
+          "members": [
+            "#94a3b8"
+          ],
+          "samples": [
+            "a.nav-link",
+            "p.lead",
+            "p.section-lead"
+          ]
+        },
+        {
+          "id": "text-3",
+          "channel": "text",
+          "hex": "#ffffff",
+          "alpha": 1.0,
+          "weight": 21600.0,
+          "share": 0.0331,
+          "count": 4,
+          "usage": {
+            "text": 21600.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 1.0,
+          "chroma": 0.0,
+          "hue": null,
+          "css_variables": [],
+          "members": [
+            "#ffffff"
+          ],
+          "samples": [
+            "h4"
+          ]
+        },
+        {
+          "id": "text-4",
+          "channel": "text",
+          "hex": "#0b1020",
+          "alpha": 1.0,
+          "weight": 20952.0,
+          "share": 0.0321,
+          "count": 3,
+          "usage": {
+            "text": 20952.0,
+            "background": 4762736.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.1773,
+          "chroma": 0.0341,
+          "hue": 269.56,
+          "css_variables": [],
+          "members": [
+            "#0b1020"
+          ],
+          "samples": [
+            "a.btn.btn-primary",
+            "button.btn.btn-secondary"
+          ]
+        },
+        {
+          "id": "text-5",
+          "channel": "text",
+          "hex": "#818cf8",
+          "alpha": 1.0,
+          "weight": 15216.0,
+          "share": 0.0233,
+          "count": 3,
+          "usage": {
+            "text": 15216.0,
+            "background": 14264.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.6801,
+          "chroma": 0.1583,
+          "hue": 276.93,
+          "css_variables": [
+            "--color-primary"
+          ],
+          "members": [
+            "#818cf8"
+          ],
+          "samples": [
+            "span.badge.badge-pill",
+            "a.btn.btn-ghost",
+            "a.text-link"
+          ]
+        },
+        {
+          "id": "text-6",
+          "channel": "text",
+          "hex": "#e2e8f0",
+          "alpha": 1.0,
+          "weight": 13440.0,
+          "share": 0.0206,
+          "count": 1,
+          "usage": {
+            "text": 13440.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.9288,
+          "chroma": 0.0126,
+          "hue": 255.51,
+          "css_variables": [],
+          "members": [
+            "#e2e8f0"
+          ],
+          "samples": [
+            "code"
+          ]
+        },
+        {
+          "id": "text-7",
+          "channel": "text",
+          "hex": "#64748b",
+          "alpha": 1.0,
+          "weight": 10000.0,
+          "share": 0.0153,
+          "count": 2,
+          "usage": {
+            "text": 10000.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.5544,
+          "chroma": 0.0407,
+          "hue": 257.42,
+          "css_variables": [],
+          "members": [
+            "#64748b"
+          ],
+          "samples": [
+            "p.trusted",
+            "p.copyright"
+          ]
+        },
+        {
+          "id": "text-8",
+          "channel": "text",
+          "hex": "#4ade80",
+          "alpha": 1.0,
+          "weight": 4000.0,
+          "share": 0.0061,
+          "count": 1,
+          "usage": {
+            "text": 4000.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.8003,
+          "chroma": 0.1821,
+          "hue": 151.71,
+          "css_variables": [
+            "--color-success"
+          ],
+          "members": [
+            "#4ade80"
+          ],
+          "samples": [
+            "p.hero-note"
+          ]
+        },
+        {
+          "id": "border-1",
+          "channel": "border",
+          "hex": "#1e293b",
+          "alpha": 1.0,
+          "weight": 7012.0,
+          "share": 0.9013,
+          "count": 18,
+          "usage": {
+            "text": 0.0,
+            "background": 0.0,
+            "border": 7012.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.2795,
+          "chroma": 0.0368,
+          "hue": 260.03,
+          "css_variables": [
+            "--color-border"
+          ],
+          "members": [
+            "#1e293b"
+          ],
+          "samples": [
+            "header.site-header",
+            "a.btn.btn-outline",
+            "article.card"
+          ]
+        },
+        {
+          "id": "border-2",
+          "channel": "border",
+          "hex": "#334155",
+          "alpha": 1.0,
+          "weight": 768.0,
+          "share": 0.0987,
+          "count": 4,
+          "usage": {
+            "text": 0.0,
+            "background": 0.0,
+            "border": 768.0,
+            "gradient": 0.0
+          },
+          "decorative": false,
+          "lightness": 0.3717,
+          "chroma": 0.0392,
+          "hue": 257.29,
+          "css_variables": [],
+          "members": [
+            "#334155"
+          ],
+          "samples": [
+            "input.input"
+          ]
+        },
+        {
+          "id": "gradient-1",
+          "channel": "gradient",
+          "hex": "#6366f12e",
+          "alpha": 0.18,
+          "weight": 504000.0,
+          "share": 0.5,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 504000.0
+          },
+          "decorative": true,
+          "lightness": 0.5854,
+          "chroma": 0.2041,
+          "hue": 277.12,
+          "css_variables": [],
+          "members": [
+            "#6366f12e"
+          ],
+          "samples": [
+            "section.hero"
+          ]
+        },
+        {
+          "id": "gradient-2",
+          "channel": "gradient",
+          "hex": "#ec48991f",
+          "alpha": 0.122,
+          "weight": 504000.0,
+          "share": 0.5,
+          "count": 1,
+          "usage": {
+            "text": 0.0,
+            "background": 0.0,
+            "border": 0.0,
+            "gradient": 504000.0
+          },
+          "decorative": true,
+          "lightness": 0.6559,
+          "chroma": 0.2118,
+          "hue": 354.31,
+          "css_variables": [],
+          "members": [
+            "#ec48991f"
+          ],
+          "samples": [
+            "section.hero"
+          ]
+        }
+      ],
+      "tokens": [
+        {
+          "name": "primary",
+          "value": "#818cf8",
+          "role": "brand",
+          "cluster_id": "bg-6",
+          "css_variable": "--color-primary",
+          "evidence": "background of button-primary; text of links"
+        },
+        {
+          "name": "on-primary",
+          "value": "#0b1020",
+          "role": "text",
+          "cluster_id": "text-4",
+          "css_variable": null,
+          "evidence": "text on button-primary"
+        },
+        {
+          "name": "canvas",
+          "value": "#0b1020",
+          "role": "background",
+          "cluster_id": "bg-1",
+          "css_variable": null,
+          "evidence": "body background, largest area"
+        },
+        {
+          "name": "surface",
+          "value": "#111827",
+          "role": "surface",
+          "cluster_id": "bg-2",
+          "css_variable": "--color-surface",
+          "evidence": "alternate section background"
+        },
+        {
+          "name": "surface-inverse",
+          "value": "#05070f",
+          "role": "surface",
+          "cluster_id": "bg-3",
+          "css_variable": null,
+          "evidence": "footer background"
+        },
+        {
+          "name": "hairline",
+          "value": "#1e293b",
+          "role": "border",
+          "cluster_id": "border-1",
+          "css_variable": "--color-border",
+          "evidence": "1px borders of cards, header, outline button"
+        },
+        {
+          "name": "ink",
+          "value": "#f8fafc",
+          "role": "text",
+          "cluster_id": "text-1",
+          "css_variable": "--color-ink",
+          "evidence": "headings and body text"
+        },
+        {
+          "name": "muted",
+          "value": "#94a3b8",
+          "role": "text_muted",
+          "cluster_id": "text-2",
+          "css_variable": "--color-muted",
+          "evidence": "secondary paragraphs and nav links"
+        },
+        {
+          "name": "faint",
+          "value": "#64748b",
+          "role": "text_muted",
+          "cluster_id": "text-7",
+          "css_variable": null,
+          "evidence": "captions and footer links"
+        },
+        {
+          "name": "success",
+          "value": "#4ade80",
+          "role": "success",
+          "cluster_id": "text-8",
+          "css_variable": "--color-success",
+          "evidence": "positive inline note"
+        }
+      ],
+      "contrast_pairs": [
+        {
+          "foreground": "#94a3b8",
+          "background": "#0b1020",
+          "foreground_token": "muted",
+          "background_token": "canvas",
+          "ratio": 7.38,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 13,
+          "context": "secondary text"
+        },
+        {
+          "foreground": "#f8fafc",
+          "background": "#0b1020",
+          "foreground_token": "ink",
+          "background_token": "canvas",
+          "ratio": 18.1,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 10,
+          "context": "body text"
+        },
+        {
+          "foreground": "#94a3b8",
+          "background": "#05070f",
+          "foreground_token": "muted",
+          "background_token": "surface-inverse",
+          "ratio": 7.85,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 9,
+          "context": "footer links"
+        },
+        {
+          "foreground": "#ffffff",
+          "background": "#05070f",
+          "foreground_token": null,
+          "background_token": "surface-inverse",
+          "ratio": 20.12,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 4,
+          "context": "footer headings"
+        },
+        {
+          "foreground": "#0b1020",
+          "background": "#818cf8",
+          "foreground_token": "on-primary",
+          "background_token": "primary",
+          "ratio": 6.35,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 2,
+          "context": "button-primary"
+        },
+        {
+          "foreground": "#818cf8",
+          "background": "#0b1020",
+          "foreground_token": "primary",
+          "background_token": "canvas",
+          "ratio": 6.35,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 2,
+          "context": "links"
+        },
+        {
+          "foreground": "#0b1020",
+          "background": "#f8fafc",
+          "foreground_token": "on-primary",
+          "background_token": "ink",
+          "ratio": 18.1,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 1,
+          "context": "button-secondary"
+        },
+        {
+          "foreground": "#4ade80",
+          "background": "#0b1020",
+          "foreground_token": "success",
+          "background_token": "canvas",
+          "ratio": 10.86,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 1,
+          "context": "inline success note"
+        },
+        {
+          "foreground": "#64748b",
+          "background": "#05070f",
+          "foreground_token": "faint",
+          "background_token": "surface-inverse",
+          "ratio": 4.23,
+          "passes_aa": false,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 1,
+          "context": "footer copyright"
+        },
+        {
+          "foreground": "#64748b",
+          "background": "#0b1020",
+          "foreground_token": "faint",
+          "background_token": "canvas",
+          "ratio": 3.98,
+          "passes_aa": false,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 1,
+          "context": "caption"
+        },
+        {
+          "foreground": "#818cf8",
+          "background": "#1d2340",
+          "foreground_token": "primary",
+          "background_token": null,
+          "ratio": 5.15,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 1,
+          "context": "text"
+        },
+        {
+          "foreground": "#94a3b8",
+          "background": "#111827",
+          "foreground_token": "muted",
+          "background_token": "surface",
+          "ratio": 6.92,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": false,
+          "occurrences": 1,
+          "context": "secondary text on surface"
+        },
+        {
+          "foreground": "#e2e8f0",
+          "background": "#020617",
+          "foreground_token": null,
+          "background_token": null,
+          "ratio": 16.36,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 1,
+          "context": "code sample"
+        },
+        {
+          "foreground": "#f8fafc",
+          "background": "#111827",
+          "foreground_token": "ink",
+          "background_token": "surface",
+          "ratio": 16.96,
+          "passes_aa": true,
+          "passes_aa_large": true,
+          "passes_aaa": true,
+          "occurrences": 1,
+          "context": "headings on surface"
+        }
+      ]
+    }
+  },
+  "screenshots": [
+    {
+      "name": "home-1440",
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "color_scheme": "light",
+      "path": "screenshots/home-1440.png",
+      "full_page": true
+    },
+    {
+      "name": "home-768",
+      "viewport_width": 768,
+      "viewport_height": 1024,
+      "color_scheme": "light",
+      "path": "screenshots/home-768.png",
+      "full_page": true
+    },
+    {
+      "name": "home-390",
+      "viewport_width": 390,
+      "viewport_height": 844,
+      "color_scheme": "light",
+      "path": "screenshots/home-390.png",
+      "full_page": true
+    },
+    {
+      "name": "home-dark-1440",
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "color_scheme": "dark",
+      "path": "screenshots/home-dark-1440.png",
+      "full_page": true
+    }
+  ],
+  "stats": {
+    "pages": 1,
+    "elements": 86,
+    "stylesheets": 3,
+    "css_variables": 17,
+    "hover_states": 14,
+    "color_clusters": 20,
+    "components": 11
+  },
+  "warnings": [
+    "[home] Phát hiện banner cookie — các phần tử của nó được đánh dấu in_overlay."
+  ]
+}
