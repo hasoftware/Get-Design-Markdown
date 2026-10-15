@@ -16,3 +16,4 @@ dist/
 
 # Kết quả chạy công cụ
 output/
+e2e-output/
