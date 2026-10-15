@@ -6,19 +6,21 @@ from typing import Any
 
 import pytest
 
-from get_design_markdown.analyzer.common import element_index
+from get_design_markdown.analyzer.common import (
+    decorative_indexes,
+    element_index,
+    is_decorative_root,
+    is_off_canvas,
+    iter_design_elements,
+)
 from get_design_markdown.analyzer.naming import SPACING_STEP_NAMES
 from get_design_markdown.analyzer.spacing import (
     analyze_spacing,
     collect_values,
     common_paddings,
     container_max_width,
-    decorative_indexes,
     detect_base_unit,
-    is_decorative_root,
     is_horizontally_centered,
-    is_off_canvas,
-    iter_design_elements,
     on_grid,
     section_gap,
 )

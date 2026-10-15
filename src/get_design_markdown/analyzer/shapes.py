@@ -32,6 +32,7 @@ from get_design_markdown.analyzer.common import (
     ElementRef,
     has_visible_border,
     is_interactive,
+    iter_design_elements,
     own_background,
     short_selector,
 )
@@ -50,7 +51,6 @@ from get_design_markdown.analyzer.naming import (
     SHADOW_LEVEL_NAMES,
     name_scale,
 )
-from get_design_markdown.analyzer.spacing import iter_design_elements
 from get_design_markdown.models.analysis import ScaleStep, ShadowLevel
 from get_design_markdown.models.raw import ElementSample, PageCapture
 

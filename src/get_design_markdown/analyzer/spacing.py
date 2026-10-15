@@ -6,9 +6,9 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
 
 Rules (pure, deterministic; page weights from analyzer/common.py):
 - Every foundation analyzer (typography, spacing, shapes) reads elements through
-  iter_design_elements() defined here: common.iter_elements() minus decorative subtrees
-  (DOM-built mockups and graphics: role="img" or a graphic/illustration/mockup/artwork class
-  segment) and off-canvas elements (entirely outside the 1440px viewport).
+  common.iter_design_elements(): common.iter_elements() minus decorative subtrees (DOM-built
+  mockups and graphics: role="img" or a graphic/illustration/mockup/artwork class segment) and
+  off-canvas elements (entirely outside the 1440px viewport).
 - Values: padding sides, positive margins and row/column gaps of rendered, non-overlay
   elements, in px rounded to 0.5; values under 2px are ignored, and so are auto-centering
   margins (left ~ right >= 32px on a horizontally centered element, or a side >= 25% of the
@@ -46,7 +46,7 @@ from get_design_markdown.analyzer.common import (
     element_index,
     has_visible_border,
     is_interactive,
-    iter_elements,
+    iter_design_elements,
     own_background,
     short_selector,
 )
@@ -108,55 +108,6 @@ class _Value:
 
 def round_half(value: float) -> float:
     return round(value * 2.0) / 2.0
-
-
-# ─── Decorative subtrees (shared by the analyzer-foundations modules) ────────
-
-#: Class-name segments of DOM-built illustrations: product mockups, animated graphics...
-_DECORATIVE_CLASS_RE = re.compile(
-    r"(?:^|[-_])(?:graphics?|illustrations?|mockups?|artworks?)(?:$|[-_])", re.IGNORECASE
-)
-_DECORATIVE_ROLES = frozenset({"img"})
-
-
-def is_decorative_root(element: ElementSample) -> bool:
-    """An element that starts an illustration: role="img", or a class segment such as
-    "payments-graphic__card" / "GJ9TEa_illustration" / "hero-mockup"."""
-    if (element.role or "").strip().lower() in _DECORATIVE_ROLES:
-        return True
-    return any(_DECORATIVE_CLASS_RE.search(name) for name in element.classes)
-
-
-def decorative_indexes(page: PageCapture) -> frozenset[int]:
-    """Indexes of the elements inside a decorative subtree (the root included).
-
-    Pages often draw product mockups and animated graphics with real DOM text, radii and
-    shadows (tiny 9-12px labels, dashboard cards). They illustrate, they are not the site's
-    own typography, spacing or elevation, so the foundation analyzers skip them.
-    """
-    flagged: set[int] = set()
-    # Document order: a sampled ancestor always comes before its descendants.
-    for element in sorted(page.elements, key=lambda item: item.index):
-        parent = element.parent_index
-        if is_decorative_root(element) or (parent is not None and parent in flagged):
-            flagged.add(element.index)
-    return frozenset(flagged)
-
-
-def is_off_canvas(element: ElementSample) -> bool:
-    """Entirely outside the capture viewport horizontally (a closed drawer parked at
-    x = 1440, a slide-in menu translated to the left)."""
-    box = element.box
-    return box.x >= CAPTURE_VIEWPORT_WIDTH or box.x + box.width <= 0
-
-
-def iter_design_elements(pages: Sequence[PageCapture]) -> Iterator[ElementRef]:
-    """common.iter_elements() without decorative subtrees (see decorative_indexes()) and
-    off-canvas elements."""
-    skipped = {position: decorative_indexes(page) for position, page in enumerate(pages)}
-    for ref in iter_elements(pages):
-        if ref.element.index not in skipped[ref.page_index] and not is_off_canvas(ref.element):
-            yield ref
 
 
 def _parent_box(element: ElementSample, index: dict[int, ElementSample]) -> tuple[float, float]:

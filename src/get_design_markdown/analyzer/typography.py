@@ -7,7 +7,7 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
 How it works (pure, deterministic):
 1. Samples: every rendered, non-overlay element that renders its own text (has_own_text),
    weighted by min(len(text), 50) x page weight. Screen-reader-only boxes, icon/emoji fonts and
-   decorative subtrees (DOM-built mockups and graphics, see spacing.decorative_indexes()) are
+   decorative subtrees (DOM-built mockups and graphics, see common.decorative_indexes()) are
    skipped. A stack that starts with a system alias (system-ui, -apple-system...) is the
    "system-ui" family; otherwise the first non-generic, non-icon family of the stack. Inline
    wrappers take the tag of their heading/link/button/paragraph ancestor (semantic_tag()), so
@@ -48,7 +48,13 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from itertools import combinations
 
-from get_design_markdown.analyzer.common import HEADING_TAGS, ElementRef, ancestors, element_index
+from get_design_markdown.analyzer.common import (
+    HEADING_TAGS,
+    ElementRef,
+    ancestors,
+    element_index,
+    iter_design_elements,
+)
 from get_design_markdown.analyzer.css_values import (
     NORMAL_LINE_HEIGHT,
     is_generic_family,
@@ -68,7 +74,6 @@ from get_design_markdown.analyzer.fonts import (
     lookup_font,
 )
 from get_design_markdown.analyzer.naming import TYPE_LEVEL_ORDER
-from get_design_markdown.analyzer.spacing import iter_design_elements
 from get_design_markdown.models.analysis import (
     FontCategory,
     FontFamilyInfo,
