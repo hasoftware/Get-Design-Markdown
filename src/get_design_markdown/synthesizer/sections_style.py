@@ -9,7 +9,6 @@ from get_design_markdown.models.analysis import (
     ColorToken,
     ContrastPair,
     FontFamilyInfo,
-    ResponsiveChangeKind,
 )
 from get_design_markdown.synthesizer.colornames import is_chromatic
 from get_design_markdown.synthesizer.context import Context
@@ -42,14 +41,6 @@ MAX_DECORATIVE = 6
 BORDER_SUBTLE_RATIO = 1.2
 
 # ─── Overview ────────────────────────────────────────────────────────────────
-
-
-def _hamburger_below(ctx: Context) -> float | None:
-    for change in ctx.facts.analysis.layout.changes:
-        if change.kind == ResponsiveChangeKind.NAV_COLLAPSES_TO_HAMBURGER:
-            below = change.params.get("below_px")
-            return float(below) if below is not None else float(change.from_width)
-    return None
 
 
 def _theme_paragraph(ctx: Context) -> str:
@@ -192,9 +183,9 @@ def _key_characteristics(ctx: Context) -> list[str]:
         items.append(ctx.p("kc.grid", base=base))
     elif container:
         items.append(ctx.p("kc.container", container=fmt_num(container)))
-    below = _hamburger_below(ctx)
-    if below is not None:
-        items.append(ctx.p("kc.hamburger", below=fmt_num(below)))
+    hamburger = ctx.hamburger("kc.hamburger")
+    if hamburger is not None:
+        items.append(hamburger)
     if facts.analysis.dark is not None and facts.has_dark_theme():
         dark_canvas = next(
             (t.value for t in facts.analysis.dark.colors.tokens if t.name == "canvas"), None

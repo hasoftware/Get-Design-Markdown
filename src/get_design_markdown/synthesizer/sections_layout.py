@@ -42,6 +42,9 @@ def change_text(ctx: Context, change: ResponsiveChange) -> str:
     }
     values.update({key: fmt_num(value) for key, value in change.params.items()})
     key = f"responsive.{change.kind.value}"
+    # A desktop-first (max-width) threshold has its own wording when the catalog has one.
+    if "max_px" in change.params and ctx.phrases.has(f"{key}_max"):
+        key = f"{key}_max"
     if placeholders(ctx.phrases.template(key)) <= values.keys():
         return ctx.p(key, **values)
     return ctx.p(f"responsive.fallback.{change.kind.value}", **values)
@@ -116,6 +119,9 @@ def _responsive(ctx: Context) -> str | None:
                 rows,
             )
         )
+        max_only = sum(1 for bp in breakpoints if bp.min_width_px is None)
+        if max_only * 2 > len(breakpoints):
+            parts.append(ctx.p("layout.breakpoints.desktop_first"))
     elif "breakpoints" not in ctx.facts.skipped_parts():
         parts.append(ctx.p("layout.breakpoints.none"))
     if analysis.layout.changes:

@@ -527,7 +527,7 @@ Chân trang. Số lần xuất hiện: 1.
 - Không nên đặt chữ `{colors.success}` — #16a34a trên nền `{colors.canvas}` — #ffffff: cặp này chỉ đạt 3.30:1 (inline success note), dưới mức WCAG AA 4.5:1. Chỉ dùng cho biểu tượng, viền hoặc chữ lớn, hoặc chỉnh độ sáng đến khi đạt 4.5:1.
 - Không nên dùng `faint` #64748b trên `surface-inverse` #05070f ở giao diện tối: cặp này chỉ đạt 4.23:1 (footer copyright), dưới mức WCAG AA 4.5:1. Chỉ chấp nhận được cho chữ lớn (≥ 24px, hoặc ≥ 18.66px khi in đậm).
 - Không nên dùng lại các màu chữ lẻ đo được dưới mức WCAG AA 4.5:1 (chúng không phải token của bảng màu): #64748b trên `{colors.surface-inverse}` — #0b1020 (3.98:1, footer copyright).
-- Không nên thêm màu, cỡ chữ, độ đậm hay bán kính bo góc không phải token trong file này.
+- Không nên thêm màu, cỡ chữ, độ đậm hay bán kính bo góc ngoài các token và các giá trị, trạng thái component đã đo được liệt kê ở đây.
 - Không nên dùng độ đậm ngoài 400, 500, 600 và 700.
 - Không nên thêm đổ bóng mạnh hơn mức md.
 - Không nên thêm màu nhấn thứ hai cho hành động — hệ thống đo được chỉ có một màu nhấn.

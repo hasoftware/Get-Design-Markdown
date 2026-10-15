@@ -141,6 +141,8 @@ kc:
   grid: "Spacing: {base}px base unit"
   container: "Layout: container up to {container}px"
   hamburger: "Responsive: the top nav collapses to a hamburger below {below}px"
+  hamburger_max: "Responsive: the top nav collapses to a hamburger at {max}px and below"
+  hamburger_between: "Responsive: the top nav collapses to a hamburger between {from_width}px and {to_width}px"
   dark_canvas: "Dark theme: captured (dark canvas {canvas})"
   dark: "Dark theme: captured"
   scale: "Type scale: ratio ≈ {ratio}"
@@ -263,6 +265,7 @@ layout:
   breakpoints:
     intro: "Width breakpoints measured in the @media rules of the captured stylesheets (count: {count}):"
     none: "No width breakpoints were found in the captured stylesheets."
+    desktop_first: "Most of these breakpoints are max-width queries: the styles are written desktop-first and adjusted for narrower screens."
     col:
       name: "Name"
       range: "Range"
@@ -286,6 +289,7 @@ layout:
 
 responsive:
   nav_collapses_to_hamburger: "The top nav collapses to a hamburger below {below_px}px (seen at {to_width}px)."
+  nav_collapses_to_hamburger_max: "The top nav collapses to a hamburger at {max_px}px and below (seen at {to_width}px)."
   nav_hidden: "Navigation links are hidden at {to_width}px and no hamburger was detected."
   sidebar_hidden: "The sidebar is hidden at {to_width}px."
   columns_reduce: "The main grid drops from {from} columns to {to} between {from_width}px and {to_width}px."
@@ -420,6 +424,7 @@ components:
       nav: "Navigation link."
       default: "Link."
     input:
+      multiline: "Multi-line text field."
       default: "Text input field."
     card:
       elevated: "Elevated content card."
@@ -447,6 +452,8 @@ dos:
   shadow_item: "{name} on {used_on}"
   shadows: "Do limit elevation to the measured shadow levels: {levels}."
   hamburger: "Do collapse the top nav into a hamburger menu below {below}px."
+  hamburger_max: "Do collapse the top nav into a hamburger menu at {max}px and below."
+  hamburger_between: "Do collapse the top nav into a hamburger menu between {from_width}px and {to_width}px (the exact breakpoint was not measured)."
 
 caveat:
   primary_text: "As text it falls below WCAG AA on one surface — {pair}."
@@ -456,7 +463,7 @@ donts:
   contrast_dark: "Don't use {fg} on {bg} in the dark theme: it measures only {ratio} ({context}), below WCAG AA 4.5:1. {remedy}"
   contrast_item: "{fg} on {bg} ({ratio}, {context})"
   contrast_group: "Don't reuse these one-off text colors measured below WCAG AA 4.5:1 (they are not palette tokens): {items}."
-  invent: "Don't introduce colors, font sizes, weights or radii that are not tokens in this file."
+  invent: "Don't introduce colors, font sizes, weights or radii beyond the tokens and the measured component values and states listed here."
   regular_weight: "Don't fall back to regular 400 — the site uses heavy weights only ({weights})."
   weights: "Don't use font weights outside {weights}."
   shadows_stronger: "Don't add shadows stronger than the {name} level."
@@ -481,10 +488,13 @@ guide:
     spacing: "Spacing: {base}px base unit"
     container: "Container: max {container}px"
     breakpoints: "Breakpoints (min-width): {items}px"
+    breakpoints_max: "Breakpoints (max-width, desktop-first): {items}px"
   prompt:
     hero: "“Build a hero section: {details}.”"
     cards: "“Create a {columns}-column feature grid: {details}.”"
     form: "“Design a sign-up block: {details}.”"
+    form_field: "“Design a form row: {details}.”"
+    form_message: "“Design a contact form: {details}.”"
     nav: "“Build the top navigation: {details}.”"
     clause:
       canvas: "background {ref}"
@@ -498,11 +508,15 @@ guide:
       card_title: "card titles in {ref}"
       card_body: "descriptions in {ref}"
       input: "an email field styled as {component} ({details})"
+      input_field: "a text field styled as {component} ({details})"
+      message: "a message field styled as {component} ({details})"
       submit: "a submit button styled as {component} ({details})"
       nav: "a {component} bar ({details})"
       nav_links: "links styled as {component} ({details})"
       nav_cta: "a {component} call to action on the right ({details})"
       hamburger: "collapse the navigation into a hamburger below {below}px"
+      hamburger_max: "collapse the navigation into a hamburger at {max}px and below"
+      hamburger_between: "collapse the navigation into a hamburger between {from_width}px and {to_width}px"
   map:
     intro: "Suggested CSS custom properties, one per front-matter token:"
     col:

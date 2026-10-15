@@ -535,7 +535,9 @@ class DesignFacts:
         """Chromatic button backgrounds grouped into hue families, primary first.
 
         Two colors belong to the same family when they are within ΔE2000 3 or within
-        SAME_FAMILY_HUE_DEG of OKLCH hue (#635bff and #533afd are one indigo accent).
+        SAME_FAMILY_HUE_DEG of OKLCH hue (#635bff and #533afd are one indigo accent), unless
+        they reference two different color tokens: each token keeps its own family, so a
+        {colors.secondary} fill is never listed under {colors.primary}.
         """
         families: list[_Family] = []
         for spec in self.components_of_kind(ComponentKind.BUTTON):
@@ -545,11 +547,18 @@ class DesignFacts:
                 continue
             ref = spec.token_refs.get("backgroundColor")
             parsed = parse_token_ref(ref) if ref is not None and self.has_ref(ref) else None
+            token = parsed[1] if parsed else None
             hue = to_oklch(color).hue
             count = max(spec.count, 1)
-            family = next((f for f in families if f.accepts(color, hue)), None)
+            family = next(
+                (
+                    f
+                    for f in families
+                    if f.accepts(color, hue) and (f.token is None or token in (None, f.token))
+                ),
+                None,
+            )
             if family is None:
-                token = parsed[1] if parsed else None
                 families.append(_Family(color, hex_value, token, hue, [spec.name], count))
                 continue
             family.components.append(spec.name)

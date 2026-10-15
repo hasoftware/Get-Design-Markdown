@@ -559,7 +559,7 @@ Illustrative `ex-*` surfaces (enabled with --examples) built only from the token
 - Don't set `{colors.success}` — #16a34a text on `{colors.canvas}` — #ffffff: it measures only 3.30:1 (inline success note), below WCAG AA 4.5:1. Keep it for icons, borders or large text, or adjust its lightness until it reaches 4.5:1.
 - Don't use `faint` #64748b on `surface-inverse` #05070f in the dark theme: it measures only 4.23:1 (footer copyright), below WCAG AA 4.5:1. Acceptable only for large text (≥ 24px, or ≥ 18.66px bold).
 - Don't reuse these one-off text colors measured below WCAG AA 4.5:1 (they are not palette tokens): #64748b on `{colors.surface-inverse}` — #0b1020 (3.98:1, footer copyright).
-- Don't introduce colors, font sizes, weights or radii that are not tokens in this file.
+- Don't introduce colors, font sizes, weights or radii beyond the tokens and the measured component values and states listed here.
 - Don't use font weights outside 400, 500, 600 and 700.
 - Don't add shadows stronger than the md level.
 - Don't add a second accent color for actions — the measured system has a single accent.

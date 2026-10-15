@@ -142,6 +142,8 @@ kc:
   grid: "Khoảng cách: đơn vị cơ sở {base}px"
   container: "Bố cục: container rộng tối đa {container}px"
   hamburger: "Responsive: thanh điều hướng trên cùng thu gọn thành nút hamburger dưới {below}px"
+  hamburger_max: "Responsive: thanh điều hướng trên cùng thu gọn thành nút hamburger từ {max}px trở xuống"
+  hamburger_between: "Responsive: thanh điều hướng trên cùng thu gọn thành nút hamburger trong khoảng {from_width}px đến {to_width}px"
   dark_canvas: "Giao diện tối: đã thu thập (nền tối {canvas})"
   dark: "Giao diện tối: đã thu thập"
   scale: "Thang chữ: tỉ lệ ≈ {ratio}"
@@ -264,6 +266,7 @@ layout:
   breakpoints:
     intro: "Các breakpoint theo chiều rộng đo từ quy tắc @media trong stylesheet đã thu thập (số lượng: {count}):"
     none: "Không tìm thấy breakpoint theo chiều rộng nào trong các stylesheet đã thu thập."
+    desktop_first: "Phần lớn các breakpoint này là truy vấn max-width: style được viết theo hướng desktop-first rồi điều chỉnh cho màn hình hẹp hơn."
     col:
       name: "Tên"
       range: "Khoảng"
@@ -287,6 +290,7 @@ layout:
 
 responsive:
   nav_collapses_to_hamburger: "Thanh điều hướng trên cùng thu gọn thành nút hamburger dưới {below_px}px (thấy ở {to_width}px)."
+  nav_collapses_to_hamburger_max: "Thanh điều hướng trên cùng thu gọn thành nút hamburger từ {max_px}px trở xuống (thấy ở {to_width}px)."
   nav_hidden: "Các liên kết điều hướng bị ẩn ở {to_width}px và không phát hiện nút hamburger."
   sidebar_hidden: "Sidebar bị ẩn ở {to_width}px."
   columns_reduce: "Lưới chính giảm từ {from} xuống {to} cột trong khoảng {from_width}px đến {to_width}px."
@@ -421,6 +425,7 @@ components:
       nav: "Liên kết điều hướng."
       default: "Liên kết."
     input:
+      multiline: "Ô nhập văn bản nhiều dòng."
       default: "Ô nhập liệu văn bản."
     card:
       elevated: "Thẻ nội dung nổi."
@@ -448,6 +453,8 @@ dos:
   shadow_item: "{name} cho {used_on}"
   shadows: "Nên giới hạn độ nổi trong các mức đổ bóng đo được: {levels}."
   hamburger: "Nên thu gọn thanh điều hướng trên cùng thành menu hamburger dưới {below}px."
+  hamburger_max: "Nên thu gọn thanh điều hướng trên cùng thành menu hamburger từ {max}px trở xuống."
+  hamburger_between: "Nên thu gọn thanh điều hướng trên cùng thành menu hamburger trong khoảng {from_width}px đến {to_width}px (chưa đo được breakpoint chính xác)."
 
 caveat:
   primary_text: "Khi làm màu chữ, màu này không đạt WCAG AA trên một nền — {pair}."
@@ -457,7 +464,7 @@ donts:
   contrast_dark: "Không nên dùng {fg} trên {bg} ở giao diện tối: cặp này chỉ đạt {ratio} ({context}), dưới mức WCAG AA 4.5:1. {remedy}"
   contrast_item: "{fg} trên {bg} ({ratio}, {context})"
   contrast_group: "Không nên dùng lại các màu chữ lẻ đo được dưới mức WCAG AA 4.5:1 (chúng không phải token của bảng màu): {items}."
-  invent: "Không nên thêm màu, cỡ chữ, độ đậm hay bán kính bo góc không phải token trong file này."
+  invent: "Không nên thêm màu, cỡ chữ, độ đậm hay bán kính bo góc ngoài các token và các giá trị, trạng thái component đã đo được liệt kê ở đây."
   regular_weight: "Không nên dùng độ đậm thường 400 — trang chỉ dùng độ đậm cao ({weights})."
   weights: "Không nên dùng độ đậm ngoài {weights}."
   shadows_stronger: "Không nên thêm đổ bóng mạnh hơn mức {name}."
@@ -482,10 +489,13 @@ guide:
     spacing: "Khoảng cách: đơn vị cơ sở {base}px"
     container: "Container: tối đa {container}px"
     breakpoints: "Breakpoint (min-width): {items}px"
+    breakpoints_max: "Breakpoint (max-width, desktop-first): {items}px"
   prompt:
     hero: "“Dựng section hero: {details}.”"
     cards: "“Tạo lưới tính năng {columns} cột: {details}.”"
     form: "“Thiết kế khối đăng ký: {details}.”"
+    form_field: "“Thiết kế một hàng biểu mẫu: {details}.”"
+    form_message: "“Thiết kế biểu mẫu liên hệ: {details}.”"
     nav: "“Dựng thanh điều hướng trên cùng: {details}.”"
     clause:
       canvas: "nền {ref}"
@@ -499,11 +509,15 @@ guide:
       card_title: "tiêu đề thẻ dùng {ref}"
       card_body: "mô tả dùng {ref}"
       input: "ô email theo kiểu {component} ({details})"
+      input_field: "ô nhập văn bản theo kiểu {component} ({details})"
+      message: "ô nhập lời nhắn theo kiểu {component} ({details})"
       submit: "nút gửi theo kiểu {component} ({details})"
       nav: "thanh {component} ({details})"
       nav_links: "liên kết theo kiểu {component} ({details})"
       nav_cta: "nút kêu gọi hành động {component} ở bên phải ({details})"
       hamburger: "thu gọn điều hướng thành nút hamburger dưới {below}px"
+      hamburger_max: "thu gọn điều hướng thành nút hamburger từ {max}px trở xuống"
+      hamburger_between: "thu gọn điều hướng thành nút hamburger trong khoảng {from_width}px đến {to_width}px"
   map:
     intro: "Biến CSS gợi ý, mỗi token trong front matter một biến:"
     col:

@@ -21,7 +21,6 @@ from get_design_markdown.analyzer.naming import (
 from get_design_markdown.models.analysis import (
     ComponentKind,
     ComponentSpec,
-    ResponsiveChangeKind,
     TypeLevel,
 )
 from get_design_markdown.synthesizer.context import Context
@@ -359,13 +358,6 @@ def name_list(ctx: Context, names: list[str], limit: int = 4) -> str:
     return ctx.phrases.join([*names[:limit], rest])
 
 
-def _hamburger_below(ctx: Context) -> str | None:
-    for change in ctx.facts.analysis.layout.changes:
-        if change.kind == ResponsiveChangeKind.NAV_COLLAPSES_TO_HAMBURGER:
-            return fmt_num(change.params.get("below_px", change.from_width))
-    return None
-
-
 def _dos(ctx: Context) -> list[str]:
     facts = ctx.facts
     dos: list[str] = []
@@ -462,9 +454,9 @@ def _dos(ctx: Context) -> list[str]:
             for level in shadows
         ]
         dos.append(ctx.p("dos.shadows", levels="; ".join(levels)))
-    below = _hamburger_below(ctx)
-    if below is not None:
-        dos.append(ctx.p("dos.hamburger", below=below))
+    hamburger = ctx.hamburger("dos.hamburger")
+    if hamburger:
+        dos.append(hamburger)
     return dos
 
 
@@ -595,6 +587,14 @@ def _quick_reference(ctx: Context) -> list[str]:
     ]
     if breakpoints:
         items.append(ctx.p("guide.quick.breakpoints", items=", ".join(unique(breakpoints))))
+    # Desktop-first boundaries (max-width only) are listed on their own line.
+    max_breakpoints = [
+        fmt_num(bp.max_width_px)
+        for bp in width_breakpoints(ctx)
+        if bp.min_width_px is None and bp.max_width_px is not None
+    ]
+    if max_breakpoints:
+        items.append(ctx.p("guide.quick.breakpoints_max", items=", ".join(unique(max_breakpoints))))
     return items
 
 
@@ -681,23 +681,38 @@ def _cards_prompt(ctx: Context) -> str | None:
     return ctx.p("guide.prompt.cards", columns=max(columns, 2), details="; ".join(clauses))
 
 
+#: Samples the components analyzer writes for an email input.
+EMAIL_FIELD_SAMPLE = "input[type=email]"
+
+
 def _form_prompt(ctx: Context) -> str | None:
-    """A sign-up form built from text-input + a button; None without a measured input."""
-    field = _component_brief(ctx, "text-input")
+    """A form built from the measured field (text-input, else text-area) + a button; None
+    without a measured field. The field is called an email field only when an email input was
+    measured; a text-area becomes a message field (its height follows its rows)."""
+    name = next((name for name in ("text-input", "text-area") if name in ctx.components), None)
+    field = _component_brief(ctx, name) if name else None
     button_name = next(
         (name for name in ("button-primary", "button-secondary") if name in ctx.components), None
     )
-    if not field or button_name is None:
+    if name is None or not field or button_name is None:
         return None
+    spec = next((spec for spec in ctx.facts.components if spec.name == name), None)
+    samples = set(spec.samples) if spec is not None else set()
+    if name == "text-area":
+        field_key, form_key = "guide.prompt.clause.message", "guide.prompt.form_message"
+    elif EMAIL_FIELD_SAMPLE in samples:
+        field_key, form_key = "guide.prompt.clause.input", "guide.prompt.form"
+    else:
+        field_key, form_key = "guide.prompt.clause.input_field", "guide.prompt.form_field"
     clauses = [
-        ctx.p("guide.prompt.clause.input", component="text-input", details=field),
+        ctx.p(field_key, component=name, details=field),
         ctx.p(
             "guide.prompt.clause.submit",
             component=button_name,
             details=_component_brief(ctx, button_name) or "",
         ),
     ]
-    return ctx.p("guide.prompt.form", details="; ".join(clauses))
+    return ctx.p(form_key, details="; ".join(clauses))
 
 
 def _nav_prompt(ctx: Context) -> str | None:
@@ -711,9 +726,9 @@ def _nav_prompt(ctx: Context) -> str | None:
         brief = _component_brief(ctx, name)
         if brief:
             clauses.append(ctx.p(key, component=name, details=brief))
-    hamburger = _hamburger_below(ctx)
+    hamburger = ctx.hamburger("guide.prompt.clause.hamburger")
     if hamburger:
-        clauses.append(ctx.p("guide.prompt.clause.hamburger", below=hamburger))
+        clauses.append(hamburger)
     if len(clauses) < 2:
         return None
     return ctx.p("guide.prompt.nav", details="; ".join(clauses))

@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from get_design_markdown.analyzer.naming import COLORS, TYPOGRAPHY
-from get_design_markdown.models.analysis import ColorRole, ColorToken
+from get_design_markdown.models.analysis import ColorRole, ColorToken, ResponsiveChangeKind
 from get_design_markdown.synthesizer.catalog import Phrases
 from get_design_markdown.synthesizer.colornames import color_name
 from get_design_markdown.synthesizer.examples import ExampleSurface
 from get_design_markdown.synthesizer.facts import ContrastIssue, DesignFacts
-from get_design_markdown.synthesizer.formatting import fmt_ratio, md_text
+from get_design_markdown.synthesizer.formatting import fmt_num, fmt_ratio, md_text
 from get_design_markdown.synthesizer.traits import Traits
 
 
@@ -28,6 +28,24 @@ class Context:
 
     def color_ref(self, name: str) -> str:
         return self.facts.ref(COLORS, name)
+
+    def hamburger(self, key: str) -> str | None:
+        """The measured nav collapse in the phrase family `key` (None without one).
+
+        `key` takes {below} for a min-width breakpoint ("below 940px"); `key`_max takes {max}
+        for a max-width one ("at 768px and below"); `key`_between takes {from_width} and
+        {to_width} when no breakpoint matches both captures, so no threshold is invented.
+        """
+        for change in self.facts.analysis.layout.changes:
+            if change.kind != ResponsiveChangeKind.NAV_COLLAPSES_TO_HAMBURGER:
+                continue
+            params = change.params
+            if params.get("max_px") is not None:
+                return self.p(f"{key}_max", max=fmt_num(params["max_px"]))
+            if params.get("below_px") is not None:
+                return self.p(key, below=fmt_num(params["below_px"]))
+            return self.p(f"{key}_between", from_width=change.from_width, to_width=change.to_width)
+        return None
 
     def color_name(self, value: str) -> str:
         return color_name(value, self.phrases)
