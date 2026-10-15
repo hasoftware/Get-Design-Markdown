@@ -374,7 +374,8 @@ Bộ kiểm tra xác nhận:
   cỡ chữ của front matter đều có trong `analysis.json`; trong phần thân (ngoài khối code), giá trị
   viết cạnh tham chiếu token và các dòng bảng bắt đầu bằng token khớp front matter, còn mọi mã
   hex, độ dài `px` và tỉ lệ `N:1` đều có trong `analysis.json` (hoặc là mốc chuẩn như 4.5:1,
-  44px); cặp màu component dưới 4.5:1 được nhắc trong Do's and Don'ts; breakpoint đo được có trong
+  44px, hoặc suy ra trực tiếp từ số đo: màu đặc mà một màu trong suốt đo được hiện ra trên nền
+  canvas, tỉ lệ mà công cụ bỏ qua alpha báo cho màu đó); cặp màu component dưới 4.5:1 được nhắc trong Do's and Don'ts; breakpoint đo được có trong
   mục Layout; trạng thái hover có biến thể `-hover`.
 - Mọi tầng đều đã chạy đủ: `analysis.json` không có phần phân tích bị bỏ qua và `synthesis.json`
   không ghi bước nào "chưa được xây dựng" (với `--partial` đây chỉ là ghi chú).

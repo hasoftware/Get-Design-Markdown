@@ -1063,3 +1063,19 @@ def test_unreferenced_screenshots_are_named(valid_folder: Path) -> None:
         if finding.check == "raw.screenshots"
     ]
     assert len(messages) == 1 and "screenshots/personalize-1440.png" in messages[0]
+
+
+def test_derived_translucent_readings_are_accepted(valid_folder: Path) -> None:
+    # The synthesizer writes the opaque color a measured translucent fill shows over the canvas
+    # and what alpha-blind checkers report for it; both derive from measured values.
+    _add_to_guide(
+        "Fill #6366f12e (≈ #e3e3fc over the canvas): `{colors.ink}` text measures 14.16:1, "
+        "while checkers that ignore alpha report 4.00:1."
+    )(valid_folder)
+    assert run_verify(valid_folder) == []
+
+
+def test_flattening_does_not_hide_invented_colors(valid_folder: Path) -> None:
+    _add_to_guide("Fill #6366f12e (≈ #e3e3fd over the canvas) reads 4.37:1.")(valid_folder)
+    errors = checks(run_verify(valid_folder), "error")
+    assert errors == {"design.invented-color", "design.invented-ratio"}

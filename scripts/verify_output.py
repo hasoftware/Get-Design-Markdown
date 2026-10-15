@@ -2112,7 +2112,11 @@ def _ratio_matches(written: str, ratio: float) -> bool:
 
 
 def _block_ratios(block_colors: Sequence[RGBA], others: Sequence[RGBA], base: RGBA) -> list[float]:
-    """Contrast of every color of a block against itself and the reference colors."""
+    """Contrast of every color of a block against itself and the reference colors.
+
+    When a translucent color is involved, the alpha-blind reading (both colors made opaque) is
+    computed too: the prose may quote what checkers that ignore alpha report for it.
+    """
     ratios: list[float] = []
     for first in block_colors:
         for second in [*block_colors, *others]:
@@ -2120,7 +2124,30 @@ def _block_ratios(block_colors: Sequence[RGBA], others: Sequence[RGBA], base: RG
                 continue
             ratios.append(css_values.contrast_ratio(first, second, base=base))
             ratios.append(css_values.contrast_ratio(second, first, base=base))
+            if not (first.is_opaque and second.is_opaque):
+                ratios.append(
+                    css_values.contrast_ratio(first.with_alpha(1.0), second.with_alpha(1.0))
+                )
     return ratios
+
+
+def _flattened_colors(analysis: DesignAnalysis, measured: set[str]) -> set[str]:
+    """Opaque colors the measured translucent colors show over their theme's canvas token: the
+    prose may write "#ffffff0d (≈ #151616 over the canvas)"."""
+    themes = [analysis.colors] + ([analysis.dark.colors] if analysis.dark else [])
+    canvases = [
+        color
+        for palette in themes
+        for token in palette.tokens
+        if token.name == "canvas" and (color := css_values.parse_color(token.value)) is not None
+    ] or [css_values.WHITE]
+    values: set[str] = set()
+    for value in measured:
+        color = css_values.parse_color(value)
+        if color is None or color.is_opaque or color.is_transparent:
+            continue
+        values.update(css_values.flatten(color, canvas).css_hex for canvas in canvases)
+    return values
 
 
 def _same_px(written: Any, expected: Any) -> bool | None:
@@ -2355,6 +2382,7 @@ def _check_body_measurements(
     strings = _site_strings(analysis)
     site_pattern = re.compile("|".join(map(re.escape, strings))) if strings else None
     measured_colors = _measured_colors(analysis)
+    measured_colors |= _flattened_colors(analysis, measured_colors)
     measured_px = _measured_px(analysis)
     measured_ratios = _measured_ratios(analysis)
     reference_colors = [
