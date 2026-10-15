@@ -239,6 +239,20 @@ def test_match_color_token_prefers_roles_and_alpha() -> None:
     assert match_color_token("nope", tokens) is None
 
 
+def test_match_color_token_exact_match_beats_role_preference() -> None:
+    tokens = [
+        ColorToken(name="surface-inverse", value="#0b1020", role=ColorRole.SURFACE),
+        ColorToken(name="ink", value="#0f172a", role=ColorRole.TEXT),
+        ColorToken(name="on-primary", value="#ffffff", role=ColorRole.TEXT),
+        ColorToken(name="canvas", value="#ffffff", role=ColorRole.BACKGROUND),
+    ]
+    background_roles = {ColorRole.BACKGROUND, ColorRole.SURFACE}
+    assert match_color_token("#0f172a", tokens, prefer_roles=background_roles) == tokens[1]
+    assert match_color_token("#0c1121", tokens, prefer_roles=background_roles) == tokens[0]
+    assert match_color_token("#ffffff", tokens, prefer_roles=background_roles) == tokens[3]
+    assert match_color_token("#ffffff", tokens, prefer_roles={ColorRole.TEXT}) == tokens[2]
+
+
 def test_match_scale_step() -> None:
     steps = [
         ScaleStep(name="sm", value_px=6),

@@ -168,28 +168,36 @@ def match_color_token(
     max_delta_e: float = 3.0,
     max_alpha_diff: float = 0.05,
     prefer_roles: Collection[ColorRole] = (),
+    tie_delta_e: float = 1.0,
 ) -> ColorToken | None:
     """Palette token matching a color (ΔE2000 <= max_delta_e and similar alpha).
 
-    Tokens whose role is in prefer_roles win over closer tokens of other roles
-    (e.g. prefer TEXT roles for a textColor that equals both canvas and on-primary).
+    The closest token wins. Among near-ties (within tie_delta_e of the closest distance),
+    tokens whose role is in prefer_roles win, then the closer one, then token order — e.g.
+    #ffffff text prefers "on-primary" (TEXT) over "canvas", while a #0f172a background still
+    maps to the exact "ink" rather than a 2.6-ΔE-away "surface-inverse".
     """
     color = value if isinstance(value, RGBA) else parse_color(value)
     if color is None:
         return None
-    best: tuple[int, float, int] | None = None
-    best_token: ColorToken | None = None
+    candidates: list[tuple[float, int, ColorToken]] = []
     for position, token in enumerate(tokens):
         candidate = parse_color(token.value)
         if candidate is None or abs(candidate.alpha - color.alpha) > max_alpha_diff:
             continue
         distance = delta_e_2000(candidate, color)
-        if distance > max_delta_e:
-            continue
-        key = (0 if token.role in prefer_roles else 1, distance, position)
-        if best is None or key < best:
-            best, best_token = key, token
-    return best_token
+        if distance <= max_delta_e:
+            candidates.append((distance, position, token))
+    if not candidates:
+        return None
+    closest = min(distance for distance, _, _ in candidates)
+    near = [item for item in candidates if item[0] <= closest + tie_delta_e]
+
+    def rank(item: tuple[float, int, ColorToken]) -> tuple[int, float, int]:
+        distance, position, token = item
+        return (0 if token.role in prefer_roles else 1, distance, position)
+
+    return min(near, key=rank)[2]
 
 
 def match_scale_step(

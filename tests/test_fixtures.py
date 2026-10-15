@@ -108,3 +108,18 @@ def test_site_contract_matches_analysis_sample() -> None:
         int(point.min_width_px or 0) for point in analysis.breakpoints
     ]
     assert "index.html" in contract.pages
+
+
+def test_analysis_sample_component_property_rules() -> None:
+    """Property-inclusion rules the components stream must follow (see its brief)."""
+    font_keys = {"fontFamily", "fontSize", "fontWeight", "lineHeight"}
+    for component in load_analysis_sample().components:
+        keys = set(component.properties)
+        if component.kind in {"button", "link", "input", "badge"}:
+            assert {"textColor", *font_keys} <= keys, component.name
+        else:
+            assert not keys & font_keys, component.name
+        if component.kind in {"button", "input", "card", "badge", "navigation", "footer"}:
+            assert "backgroundColor" in keys, component.name
+        if component.kind == "link":
+            assert "textDecoration" in keys, component.name

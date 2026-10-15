@@ -1533,8 +1533,10 @@ def build_components() -> list[ComponentSpec]:
             count=1,
             properties={
                 "textColor": "#4f46e5",
+                "fontFamily": "Inter",
                 "fontSize": "16px",
                 "fontWeight": "500",
+                "lineHeight": "25.6px",
                 "textDecoration": "none",
             },
             token_refs={"textColor": "{colors.primary}"},
@@ -1554,6 +1556,7 @@ def build_components() -> list[ComponentSpec]:
                 "padding": "8px 12px",
                 "height": "36px",
                 **UI_TEXT,
+                "textDecoration": "none",
             },
             token_refs={
                 "textColor": "{colors.muted}",
@@ -1627,6 +1630,7 @@ def build_components() -> list[ComponentSpec]:
                 "rounded": "9999px",
                 "padding": "4px 12px",
                 "height": "28px",
+                "fontFamily": "Inter",
                 "fontSize": "13px",
                 "fontWeight": "600",
                 "lineHeight": "20px",
@@ -1661,7 +1665,6 @@ def build_components() -> list[ComponentSpec]:
                 "backgroundColor": "#0b1020",
                 "textColor": "#94a3b8",
                 "padding": "64px 0px 48px",
-                "fontSize": "14px",
             },
             token_refs={
                 "backgroundColor": "{colors.surface-inverse}",
