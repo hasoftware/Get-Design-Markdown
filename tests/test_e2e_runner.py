@@ -71,15 +71,24 @@ def build_broken(out: Path, name: str) -> None:
     shutil.rmtree(folder / "screenshots")
 
 
-def run_main(site: Path, out: Path) -> int:
-    return run_e2e.main(["--site", str(site), "--out", str(out)])
+def run_main(site: Path, out: Path, *extra: str) -> int:
+    return run_e2e.main(["--site", str(site), "--out", str(out), *extra])
 
 
-def test_without_fixture_site_it_is_a_notice(
+def test_without_fixture_site_it_fails(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = fake_pipeline(monkeypatch)
-    assert run_main(tmp_path / "missing", tmp_path / "out") == 0
+    assert run_main(tmp_path / "missing", tmp_path / "out") == 1
+    assert capsys.readouterr().out.startswith("::error::Không có trang fixture")
+    assert calls == []
+
+
+def test_without_fixture_site_allow_partial_is_a_notice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = fake_pipeline(monkeypatch)
+    assert run_main(tmp_path / "missing", tmp_path / "out", "--allow-partial") == 0
     assert capsys.readouterr().out.startswith("::notice::Chưa có trang fixture")
     assert calls == []
 
@@ -113,19 +122,46 @@ def test_broken_output_fails(
     assert "::error::[raw.screenshots]" in capsys.readouterr().out
 
 
-def test_missing_stage_without_output_is_a_notice(
+COLLECTOR_MISSING = (
+    "Lỗi: Phần thu thập bằng trình duyệt chưa được xây dựng (giai đoạn 1–2).\n"
+    "Gợi ý: Hiện mới có bước kiểm tra robots.txt.\n"
+)
+SYNTHESIZER_MISSING = "Lỗi: Dựng DESIGN.md chưa được xây dựng (giai đoạn 6).\n"
+ANALYZER_SKIPPED = (
+    "• Đang phân tích\n"
+    "Cảnh báo: Chưa phân tích (để trống trong analysis.json): Đổ bóng (GĐ4).\n"
+    "✓ Đã ghi DESIGN.md\n"
+)
+EXPORTER_SKIPPED = "Cảnh báo: Xuất preview.html chưa được xây dựng (giai đoạn 8).\n"
+
+
+def test_missing_stage_fails(
     site: Path,
     tmp_path: Path,
     github_output: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stderr = (
-        "Lỗi: Phần thu thập bằng trình duyệt chưa được xây dựng (giai đoạn 1–2).\n"
-        "Gợi ý: Hiện mới có bước kiểm tra robots.txt.\n"
+    # Every stage is merged: a re-stubbed one must turn the CI e2e job red.
+    fake_pipeline(monkeypatch, returncode=1, stderr=SYNTHESIZER_MISSING, build=build_until_analysis)
+    assert run_main(site, tmp_path / "out") == 1
+    output = capsys.readouterr().out
+    assert (
+        "::error::Một tầng chưa được xây dựng: Dựng DESIGN.md chưa được xây dựng (giai đoạn 6)."
+        in output
     )
-    fake_pipeline(monkeypatch, returncode=1, stderr=stderr)
-    assert run_main(site, tmp_path / "out") == 0
+    assert not github_output.exists()
+
+
+def test_missing_stage_without_output_allow_partial_is_a_notice(
+    site: Path,
+    tmp_path: Path,
+    github_output: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_pipeline(monkeypatch, returncode=1, stderr=COLLECTOR_MISSING)
+    assert run_main(site, tmp_path / "out", "--allow-partial") == 0
     output = capsys.readouterr().out
     assert (
         "::notice::Stage chưa xong: Phần thu thập bằng trình duyệt chưa được xây dựng "
@@ -134,12 +170,11 @@ def test_missing_stage_without_output_is_a_notice(
     assert not github_output.exists()
 
 
-def test_missing_stage_still_verifies_existing_files(
+def test_missing_stage_allow_partial_still_verifies_existing_files(
     site: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stderr = "Lỗi: Dựng DESIGN.md chưa được xây dựng (giai đoạn 6).\n"
-    fake_pipeline(monkeypatch, returncode=1, stderr=stderr, build=build_until_analysis)
-    assert run_main(site, tmp_path / "out") == 0
+    fake_pipeline(monkeypatch, returncode=1, stderr=SYNTHESIZER_MISSING, build=build_until_analysis)
+    assert run_main(site, tmp_path / "out", "--allow-partial") == 0
     output = capsys.readouterr().out
     assert "::notice::Stage chưa xong: Dựng DESIGN.md chưa được xây dựng" in output
     assert "Kết quả: 0 lỗi" in output
@@ -153,9 +188,49 @@ def test_missing_stage_with_broken_files_fails(
         build_until_analysis(out, name)
         shutil.rmtree(out / name / "screenshots")
 
-    stderr = "Lỗi: Dựng DESIGN.md chưa được xây dựng (giai đoạn 6).\n"
-    fake_pipeline(monkeypatch, returncode=1, stderr=stderr, build=build)
+    fake_pipeline(monkeypatch, returncode=1, stderr=SYNTHESIZER_MISSING, build=build)
+    assert run_main(site, tmp_path / "out", "--allow-partial") == 1
+    assert run_main(site, tmp_path / "out2") == 1
+
+
+@pytest.mark.parametrize("stdout", [ANALYZER_SKIPPED, EXPORTER_SKIPPED], ids=["analyze", "export"])
+def test_stage_skipped_with_a_warning_fails(
+    site: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    stdout: str,
+) -> None:
+    # gdm exits 0 when it only skips a part (analyze/export downgrade the stage to a warning).
+    fake_pipeline(monkeypatch, stdout=stdout, build=build_complete)
     assert run_main(site, tmp_path / "out") == 1
+    output = capsys.readouterr().out
+    message = stdout.split("Cảnh báo: ", 1)[1].split("\n", 1)[0]
+    assert f"::error::'gdm get' bỏ qua một tầng chưa được xây dựng: {message}" in output
+
+
+def test_stage_skipped_with_a_warning_allow_partial_is_a_notice(
+    site: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_pipeline(monkeypatch, stdout=ANALYZER_SKIPPED, build=build_complete)
+    assert run_main(site, tmp_path / "out", "--allow-partial") == 0
+    output = capsys.readouterr().out
+    assert "::notice::'gdm get' bỏ qua một tầng chưa được xây dựng: Chưa phân tích" in output
+    assert "Kết quả: 0 lỗi" in output
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        (ANALYZER_SKIPPED, ["Chưa phân tích (để trống trong analysis.json): Đổ bóng (GĐ4)."]),
+        (EXPORTER_SKIPPED * 2, ["Xuất preview.html chưa được xây dựng (giai đoạn 8)."]),
+        ("Cảnh báo: Trang có 4000 phần tử hiển thị — chỉ lấy mẫu 3000.\n", []),
+        (SYNTHESIZER_MISSING, []),  # an error, handled by stage_missing_message
+        ("", []),
+    ],
+)
+def test_skipped_stages(output: str, expected: list[str]) -> None:
+    assert run_e2e.skipped_stages(output) == expected
 
 
 def test_other_failure_keeps_the_exit_code(

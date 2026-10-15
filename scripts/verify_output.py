@@ -2,8 +2,9 @@
 
 A second opinion on the whole pipeline: it re-reads every file a run produced and checks the
 schemas, the cross-file consistency, the DESIGN.md contract (front matter, token references,
-section order, reference note, "no invented numbers", documented WCAG failures), the W3C Design
-Tokens file and the preview page. It deliberately never imports the synthesizer or the
+section order, reference note, "no invented numbers" in the front matter and in the body text,
+documented WCAG failures), that every stage was built, the W3C Design Tokens file and the
+preview page. It deliberately never imports the synthesizer or the
 exporters -- only the frozen models, analyzer.css_values and analyzer.naming -- so a bug in a
 stage cannot vouch for itself.
 
@@ -147,6 +148,9 @@ COLOR_MATCH_ALPHA: Final = 0.05
 LINE_HEIGHT_TOLERANCE: Final = 0.011
 MAX_COLOR_TOKENS: Final = 14
 MAX_PROMPT_IMAGE_SIDE: Final = 1568
+#: Words of the NotImplementedYetError messages ("… chưa được xây dựng …"): a stage that is
+#: missing from the build.
+STAGE_MISSING_MARKER: Final = "chưa được xây dựng"
 ROOT_FONT_SIZE_PX: Final = 16.0
 MAX_REF_DEPTH: Final = 10
 EXAMPLES_SHOWN: Final = 5
@@ -1017,7 +1021,15 @@ def _check_analysis(
         return None
     skipped = [warning for warning in analysis.warnings if warning.startswith("Chưa phân tích")]
     for warning in skipped:
-        report.info("analysis.skipped", warning)
+        # Every analyzer exists: a skipped part means a stage went missing (re-stubbed).
+        if partial:
+            report.info("analysis.skipped", warning)
+        else:
+            report.error(
+                "analysis.skipped",
+                f"{warning} — phần phân tích này bị bỏ qua vì chưa được xây dựng; analysis.json "
+                "thiếu dữ liệu.",
+            )
     colors_skipped = any("Màu sắc" in warning for warning in skipped)
     _check_palette(analysis.colors, "Bảng màu chính", report, required=not colors_skipped)
     if analysis.colors.tokens and "primary" not in {t.name for t in analysis.colors.tokens}:
@@ -1841,6 +1853,553 @@ def _check_breakpoints_documented(
                 )
 
 
+# ─── DESIGN.md body values ───────────────────────────────────────────────────
+#
+# A "--prompt-only" rewrite (or a hand edit) only touches the prose, so the body is checked on
+# its own: outside fenced code, every "`{group.name}` — value" pair and every table row keyed by
+# a token must repeat the front-matter value, and every hex color, px length and "N:1" contrast
+# ratio must come from analysis.json (or from the few guideline values the rules quote).
+
+#: Values the rules quote from guidelines rather than from measurements: the WCAG thresholds,
+#: the WCAG large-text sizes (24px, or 18.66px bold), the 44px tap-target guideline, 1px rings.
+GUIDELINE_RATIOS: Final = (3.0, 4.5, 7.0)
+GUIDELINE_PX: Final = (0.0, 1.0, 18.66, 24.0, 44.0)
+BODY_RATIO_TOLERANCE: Final = 0.02
+
+_BLOCK_START_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|\||#{1,6}\s|>)")
+#: Table rows and headings never continue on the next line.
+_SINGLE_LINE_BLOCK_RE = re.compile(r"^\s*(?:\||#{1,6}\s)")
+_BODY_HEX_RE = re.compile(r"(?<![\w&#\\])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\w-])")
+_BODY_PX_RE = re.compile(r"(?<![\w.,#\[/\\-])-?\d+(?:\.\d+)?px(?![\w-])")
+_BODY_RATIO_RE = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?) ?: ?1(?!\d|[.,]\d)")
+_CSS_PX_RE = re.compile(r"(-?\d+(?:\.\d+)?)px")
+_URL_RE = re.compile(r"<?https?://[^\s>)\]]+>?")
+_QUOTED_RE = re.compile(r"“[^”]*”")
+_MD_SPECIAL_RE = re.compile(r"([\\`*_\[\]<>|{}#~])")
+_TABLE_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
+_VALUE_REF_RE = re.compile(r"`\{(colors|typography|rounded|spacing)\.([a-z0-9]+(?:-[a-z0-9]+)*)\}`")
+_DASH_RE = re.compile(r"\s*—\s*")
+_PAREN_RE = re.compile(r"\s*\(\s*([^()]*?)\s*\)")
+_LEADING_HEX_RE = re.compile(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\w-])")
+_LEADING_DIMENSION_RE = re.compile(r"-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em)(?![\w-])")
+#: "Inter 15px / 500 / 1.33" — how a typography token is written next to its reference.
+_TYPE_SUMMARY_RE = re.compile(
+    r"(?P<family>[^\s,;:()|/][^,;:()|/]{0,60}?)\s+(?P<size>\d+(?:\.\d+)?)px\s*/\s*"
+    r"(?P<weight>\d{1,4})(?:\s*/\s*(?P<lh>\d+(?:\.\d+)?)(?P<lh_px>px)?)?"
+)
+#: "700 64px/1.05 Inter, sans-serif" — a CSS font shorthand (custom-properties table).
+_FONT_SHORTHAND_RE = re.compile(
+    r"^(?P<weight>\d{1,4})\s+(?P<size>\d+(?:\.\d+)?)px\s*/\s*(?P<lh>\d+(?:\.\d+)?)(?P<lh_px>px)?"
+    r"\s+(?P<family>.+)$"
+)
+_PURE_PX_CELL_RE = re.compile(r"^-?\d+(?:\.\d+)?px$")
+_PURE_INT_CELL_RE = re.compile(r"^\d{1,4}$")
+_LEADING_NUMBER_RE = re.compile(r"^(\d+(?:\.\d+)?)")
+
+
+@dataclass(frozen=True)
+class BodyBlock:
+    """One paragraph, list item, table row, heading or quote line of the DESIGN.md body
+    (outside fenced code), its lines joined with spaces. `where` is "dòng N" or a label."""
+
+    where: str
+    text: str
+    is_table_row: bool = False
+
+
+def body_offset(text: str) -> int:
+    """0-based index of the first body line of DESIGN.md (the line after the closing '---')."""
+    lines = text.lstrip("﻿").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return 0
+    end = next((index for index in range(1, len(lines)) if lines[index].strip() == "---"), None)
+    return 0 if end is None else end + 1
+
+
+def body_blocks(body: str, *, first_line: int = 1) -> list[BodyBlock]:
+    """Paragraphs, list items, table rows, headings and quote lines outside fenced code.
+
+    `first_line` is the 1-based line number of the body's first line in DESIGN.md."""
+    blocks: list[BodyBlock] = []
+    current: list[str] = []
+    start = 0
+    fence: str | None = None
+
+    def flush() -> None:
+        if current:
+            text = " ".join(current)
+            blocks.append(
+                BodyBlock(f"dòng {first_line + start}", text, text.lstrip().startswith("|"))
+            )
+            current.clear()
+
+    for index, line in enumerate(body.splitlines()):
+        match = _FENCE_RE.match(line)
+        if match is not None:
+            flush()
+            marker = match.group(1)[0]
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        if not line.strip():
+            flush()
+            continue
+        if _BLOCK_START_RE.match(line) is not None:
+            flush()
+        if not current:
+            start = index
+        current.append(line.strip())
+        if _SINGLE_LINE_BLOCK_RE.match(line) is not None:
+            flush()
+    flush()
+    return blocks
+
+
+def _table_cells(row: str) -> list[str]:
+    cells = [cell.strip() for cell in _TABLE_CELL_SPLIT_RE.split(row.strip())]
+    if cells and not cells[0]:
+        cells = cells[1:]
+    if cells and not cells[-1]:
+        cells = cells[:-1]
+    return cells
+
+
+def _md_escape(text: str) -> str:
+    return _MD_SPECIAL_RE.sub(r"\\\1", " ".join(text.split()))
+
+
+def _site_strings(analysis: DesignAnalysis) -> list[str]:
+    """Site-derived texts (page texts, selectors, names) that may contain digits by accident."""
+    texts: list[str] = [
+        analysis.site.name,
+        analysis.site.title or "",
+        analysis.site.description or "",
+        *analysis.site.pages_analyzed,
+    ]
+    for family in analysis.typography.families:
+        texts.extend([family.name, ", ".join(family.stack), *family.stack, *family.substitutes])
+    for level in analysis.typography.levels:
+        texts.extend(level.samples)
+    palettes = [analysis.colors] + ([analysis.dark.colors] if analysis.dark else [])
+    for palette in palettes:
+        for cluster in palette.clusters:
+            texts.extend(cluster.samples)
+            texts.extend(cluster.css_variables)
+        texts.extend(token.css_variable or "" for token in palette.tokens)
+    for step in [*analysis.spacing.steps, *analysis.radii]:
+        texts.extend(step.used_on)
+    for shadow in analysis.shadows:
+        texts.extend(shadow.used_on)
+    for component in analysis.components:
+        texts.extend(component.samples)
+        texts.extend(component.class_hints)
+    variants: set[str] = set()
+    for text in texts:
+        collapsed = " ".join(text.split())
+        if len(collapsed) >= 2 and any(character.isdigit() for character in collapsed):
+            variants.update({collapsed, _md_escape(collapsed)})
+    return sorted(variants, key=len, reverse=True)
+
+
+def _scannable(text: str, site_pattern: re.Pattern[str] | None) -> str:
+    """`text` without URLs, quoted page texts and other site-derived strings."""
+    text = _URL_RE.sub(" ", _QUOTED_RE.sub(" ", text))
+    return site_pattern.sub(" ", text) if site_pattern is not None else text
+
+
+def _measured_px(analysis: DesignAnalysis) -> list[float]:
+    """Every length analysis.json measured (+ the guideline lengths the rules quote)."""
+    values: set[float] = set(GUIDELINE_PX)
+    typography = analysis.typography
+    for level in typography.levels:
+        values.update((level.size_px, level.letter_spacing_px))
+        if level.line_height_px is not None:
+            values.add(level.line_height_px)
+        if level.line_height is not None:
+            values.add(level.line_height * level.size_px)
+    if typography.base_size_px is not None:
+        values.add(typography.base_size_px)
+    values.update(_spacing_values(analysis))
+    values.update(step.value_px for step in analysis.radii)
+    if any(step.value_px >= naming.PILL_RADIUS_PX for step in analysis.radii) or any(
+        step.name == naming.FULL_RADIUS_NAME for step in analysis.radii
+    ):
+        values.add(naming.FULL_RADIUS_PX)
+    for shadow in analysis.shadows:
+        values.update(float(number) for number in _CSS_PX_RE.findall(shadow.css))
+    for breakpoint in analysis.breakpoints:
+        values.update(
+            v for v in (breakpoint.min_width_px, breakpoint.max_width_px) if v is not None
+        )
+    for snapshot in analysis.layout.snapshots:
+        values.update(
+            float(v)
+            for v in (
+                snapshot.viewport_width,
+                snapshot.viewport_height,
+                snapshot.min_tap_target_px,
+                snapshot.container_width_px,
+                snapshot.gutter_px,
+                snapshot.max_heading_px,
+            )
+            if v is not None
+        )
+    for change in analysis.layout.changes:
+        values.update((float(change.from_width), float(change.to_width)))
+        values.update(float(v) for v in change.params.values())
+    for component in analysis.components:
+        for properties in [component.properties, *component.states.values()]:
+            for value in properties.values():
+                values.update(float(number) for number in _CSS_PX_RE.findall(value))
+    for shot in analysis.screenshots:
+        values.update((float(shot.viewport_width), float(shot.viewport_height)))
+    return sorted(values)
+
+
+def _measured_ratios(analysis: DesignAnalysis) -> list[float]:
+    """Contrast ratios analysis.json states (pairs, components, token evidence) + thresholds."""
+    values: set[float] = set(GUIDELINE_RATIOS)
+    palettes = [analysis.colors] + ([analysis.dark.colors] if analysis.dark else [])
+    for palette in palettes:
+        values.update(pair.ratio for pair in palette.contrast_pairs)
+        for token in palette.tokens:
+            for match in _BODY_RATIO_RE.finditer(token.evidence):
+                values.add(float(match.group(1).replace(",", ".")))
+    values.update(c.contrast_ratio for c in analysis.components if c.contrast_ratio is not None)
+    return sorted(values)
+
+
+def _component_colors(analysis: DesignAnalysis) -> list[RGBA]:
+    colors: dict[str, RGBA] = {}
+    for component in analysis.components:
+        for properties in [component.properties, *component.states.values()]:
+            for key in COLOR_PROPERTIES:
+                parsed = css_values.parse_color(properties.get(key))
+                if parsed is not None and not parsed.is_transparent:
+                    colors[parsed.css_hex] = parsed
+    return list(colors.values())
+
+
+def _ratio_matches(written: str, ratio: float) -> bool:
+    decimals = written.replace(",", ".").partition(".")[2]
+    number = float(written.replace(",", "."))
+    tolerance: float = BODY_RATIO_TOLERANCE + 0.5 * 10.0 ** -len(decimals)
+    return abs(number - ratio) <= tolerance
+
+
+def _block_ratios(block_colors: Sequence[RGBA], others: Sequence[RGBA], base: RGBA) -> list[float]:
+    """Contrast of every color of a block against itself and the reference colors."""
+    ratios: list[float] = []
+    for first in block_colors:
+        for second in [*block_colors, *others]:
+            if first is second:
+                continue
+            ratios.append(css_values.contrast_ratio(first, second, base=base))
+            ratios.append(css_values.contrast_ratio(second, first, base=base))
+    return ratios
+
+
+def _same_px(written: Any, expected: Any) -> bool | None:
+    """Equal lengths (pill radii count as equal); None when either side is not a length."""
+    one = dimension_px(written)
+    two = dimension_px(expected) if not _is_number(expected) else float(expected)
+    if one is None or two is None:
+        return None
+    if one >= naming.PILL_RADIUS_PX and two >= naming.PILL_RADIUS_PX:
+        return True
+    return abs(one - two) <= PX_TOLERANCE
+
+
+def _same_family(written: str, expected: Any) -> bool:
+    if not isinstance(expected, str):
+        return True
+    family = css_values.primary_font_family(expected) or expected
+    return _normalize_text(written) == _normalize_text(family)
+
+
+def _line_height_equal(
+    written: float, written_px: bool, expected: Any, size_px: float | None
+) -> bool:
+    """A written line height ("1.6" or "24px") against the front-matter one (unitless or px)."""
+    expected_px = dimension_px(expected)
+    ratio = None
+    if expected_px is None:
+        ratio = float(expected) if _is_number(expected) else css_values.parse_number(str(expected))
+    if written_px:
+        target = expected_px
+        if target is None and ratio is not None and size_px is not None:
+            target = ratio * size_px
+        return target is None or abs(written - target) <= PX_TOLERANCE
+    if ratio is not None:
+        return abs(written - ratio) <= LINE_HEIGHT_TOLERANCE
+    if expected_px is not None and size_px:
+        return abs(written * size_px - expected_px) <= PX_TOLERANCE
+    return True
+
+
+def _typography_mismatches(
+    entry: Mapping[str, Any],
+    tokens: FrontMatterTokens,
+    *,
+    family: str | None,
+    size: str,
+    weight: str | None,
+    line_height: str | None,
+    line_height_px: bool,
+) -> list[str]:
+    """Which parts of a written type summary differ from the front-matter typography entry."""
+    wrong: list[str] = []
+    expected_size = dimension_px(_resolve(tokens, entry.get("fontSize")))
+    if expected_size is not None and abs(float(size) - expected_size) > PX_TOLERANCE:
+        wrong.append(f"cỡ {size}px ≠ {expected_size:g}px")
+    expected_weight = _resolve(tokens, entry.get("fontWeight"))
+    if weight is not None and expected_weight is not None:
+        number = css_values.parse_number(str(expected_weight))
+        if number is not None and abs(float(weight) - number) > 0:
+            wrong.append(f"độ đậm {weight} ≠ {expected_weight}")
+    expected_line_height = _resolve(tokens, entry.get("lineHeight"))
+    if (
+        line_height is not None
+        and expected_line_height is not None
+        and not _line_height_equal(
+            float(line_height), line_height_px, expected_line_height, expected_size
+        )
+    ):
+        wrong.append(f"line-height {line_height} ≠ {expected_line_height}")
+    if family is not None and not _same_family(family, _resolve(tokens, entry.get("fontFamily"))):
+        wrong.append(f"font {family} ≠ {_resolve(tokens, entry.get('fontFamily'))}")
+    return wrong
+
+
+def _pair_mismatch(
+    group: str, name: str, after: str, tokens: FrontMatterTokens
+) -> tuple[str, str] | None:
+    """(written value, front-matter value) when the value written right after a reference
+    ("`{colors.canvas}` — #ffffff" or "`{rounded.md}` (8px)") contradicts the front matter."""
+    expected = _resolve(tokens, tokens.get((group, name)))
+    if expected is None:
+        return None  # broken reference, reported by _check_refs
+    dash = _DASH_RE.match(after)
+    paren = None if dash is not None else _PAREN_RE.match(after)
+    if dash is None and paren is None:
+        return None
+    value = after[dash.end() :] if dash is not None else paren.group(1) if paren else ""
+    if group == naming.COLORS:
+        hex_match = _LEADING_HEX_RE.match(value)
+        if hex_match is None or (paren is not None and hex_match.end() != len(value)):
+            return None
+        written = hex_match.group(0)
+        if _canonical_hex(written) != _canonical_hex(str(expected)):
+            return written, str(expected)
+        return None
+    if group in (naming.ROUNDED, naming.SPACING):
+        dimension = _LEADING_DIMENSION_RE.match(value)
+        if dimension is None or (paren is not None and dimension.end() != len(value)):
+            return None
+        if _same_px(dimension.group(0), expected) is False:
+            return dimension.group(0), str(expected)
+        return None
+    if group == naming.TYPOGRAPHY and dash is not None and isinstance(expected, dict):
+        summary = _TYPE_SUMMARY_RE.match(value)
+        if summary is None:
+            return None
+        wrong = _typography_mismatches(
+            expected,
+            tokens,
+            family=summary.group("family").strip(),
+            size=summary.group("size"),
+            weight=summary.group("weight"),
+            line_height=summary.group("lh"),
+            line_height_px=summary.group("lh_px") is not None,
+        )
+        if wrong:
+            return summary.group(0), "; ".join(wrong)
+    return None
+
+
+def _row_mismatch(cells: Sequence[str], tokens: FrontMatterTokens) -> tuple[str, str] | None:
+    """A table row keyed by a token ("| `{spacing.md}` | 16px | …") that contradicts it."""
+    if not cells:
+        return None
+    key = _VALUE_REF_RE.fullmatch(cells[0])
+    if key is None:
+        return None
+    group, name = key.group(1), key.group(2)
+    expected = _resolve(tokens, tokens.get((group, name)))
+    if expected is None:
+        return None
+    others = cells[1:]
+    if group == naming.COLORS:
+        for cell in others:
+            for match in _BODY_HEX_RE.finditer(cell):
+                if _canonical_hex(match.group(0)) != _canonical_hex(str(expected)):
+                    return match.group(0), str(expected)
+        return None
+    if group in (naming.ROUNDED, naming.SPACING):
+        for cell in others:
+            if _PURE_PX_CELL_RE.match(cell) and _same_px(cell, expected) is False:
+                return cell, str(expected)
+        return None
+    if group != naming.TYPOGRAPHY or not isinstance(expected, dict):
+        return None
+    for cell in others:
+        shorthand = _FONT_SHORTHAND_RE.match(cell.strip("`"))
+        if shorthand is not None:
+            wrong = _typography_mismatches(
+                expected,
+                tokens,
+                family=None,
+                size=shorthand.group("size"),
+                weight=shorthand.group("weight"),
+                line_height=shorthand.group("lh"),
+                line_height_px=shorthand.group("lh_px") is not None,
+            )
+            return (cell, "; ".join(wrong)) if wrong else None
+    px_cells = [cell for cell in others if _PURE_PX_CELL_RE.match(cell)]
+    if not px_cells:
+        return None
+    weight = next((cell for cell in others if _PURE_INT_CELL_RE.match(cell)), None)
+    line_height = next(
+        (
+            number.group(1)
+            for cell in others
+            if not (_PURE_INT_CELL_RE.match(cell) or _PURE_PX_CELL_RE.match(cell))
+            and (number := _LEADING_NUMBER_RE.match(cell)) is not None
+        ),
+        None,
+    )
+    wrong = _typography_mismatches(
+        expected,
+        tokens,
+        family=None,
+        size=px_cells[0][:-2],
+        weight=weight,
+        line_height=line_height,
+        line_height_px=False,
+    )
+    if len(px_cells) > 1:
+        spacing = _resolve(tokens, expected.get("letterSpacing"))
+        written = dimension_px(px_cells[1])
+        expected_spacing = 0.0 if spacing is None else dimension_px(spacing)
+        if spacing in (0, "0"):
+            expected_spacing = 0.0
+        if (
+            written is not None
+            and expected_spacing is not None
+            and abs(written - expected_spacing) > 0.05
+        ):
+            wrong.append(f"letter-spacing {px_cells[1]} ≠ {spacing or 0}")
+    return (" | ".join(others), "; ".join(wrong)) if wrong else None
+
+
+def _check_body_token_values(
+    document: DesignDocument, tokens: FrontMatterTokens, report: _Report
+) -> None:
+    """Values written next to a token reference must be the front-matter values."""
+    mismatches: dict[tuple[str, str, str], list[str]] = {}
+    first_line = body_offset(document.text) + 1
+    for block in body_blocks(document.body, first_line=first_line):
+        if block.is_table_row:
+            cells = _table_cells(block.text)
+            mismatch = _row_mismatch(cells, tokens)
+            if mismatch is not None:
+                mismatches.setdefault((cells[0].strip("`"), *mismatch), []).append(block.where)
+        for match in _VALUE_REF_RE.finditer(block.text):
+            group, name = match.group(1), match.group(2)
+            if (group, name) not in tokens:
+                continue
+            pair = _pair_mismatch(group, name, block.text[match.end() :], tokens)
+            if pair is not None:
+                mismatches.setdefault((f"{{{group}.{name}}}", *pair), []).append(block.where)
+    for (ref, written, expected), places in mismatches.items():
+        report.error(
+            "design.body-value",
+            f"Phần thân ({_examples(list(dict.fromkeys(places)), 3)}): {ref} được ghi là "
+            f"{written} nhưng front matter ghi {expected} — giá trị viết cạnh tham chiếu phải "
+            "đúng giá trị của token.",
+        )
+
+
+def _check_body_measurements(
+    document: DesignDocument,
+    tokens: FrontMatterTokens,
+    analysis: DesignAnalysis,
+    report: _Report,
+) -> None:
+    """Hex colors, px lengths and contrast ratios in the prose must come from analysis.json."""
+    front_matter = document.front_matter or {}
+    strings = _site_strings(analysis)
+    site_pattern = re.compile("|".join(map(re.escape, strings))) if strings else None
+    measured_colors = _measured_colors(analysis)
+    measured_px = _measured_px(analysis)
+    measured_ratios = _measured_ratios(analysis)
+    reference_colors = [
+        color
+        for color in (
+            _resolved_color(tokens, value) for value in _group(front_matter, naming.COLORS).values()
+        )
+        if color is not None
+    ] + _component_colors(analysis)
+    canvas = _resolved_color(tokens, _group(front_matter, naming.COLORS).get("canvas"))
+    base = canvas if canvas is not None and canvas.is_opaque else css_values.WHITE
+
+    blocks = body_blocks(document.body, first_line=body_offset(document.text) + 1)
+    description = front_matter.get("description")
+    if isinstance(description, str):
+        blocks.insert(0, BodyBlock("front matter description", description))
+    colors: dict[str, list[str]] = {}
+    lengths: dict[str, list[str]] = {}
+    ratios: dict[str, list[str]] = {}
+    for block in blocks:
+        text = _scannable(block.text, site_pattern)
+        block_colors: list[RGBA] = []
+        for match in _BODY_HEX_RE.finditer(text):
+            color = css_values.parse_color(match.group(0))
+            if color is not None:
+                block_colors.append(color)
+            if _canonical_hex(match.group(0)) not in measured_colors:
+                colors.setdefault(match.group(0).lower(), []).append(block.where)
+        for match in _BODY_PX_RE.finditer(text):
+            if not _matches_any(float(match.group(0)[:-2]), measured_px):
+                lengths.setdefault(match.group(0), []).append(block.where)
+        written_ratios = [match.group(1) for match in _BODY_RATIO_RE.finditer(text)]
+        if not written_ratios:
+            continue
+        for group, name in naming.find_token_refs(block.text):
+            if group == naming.COLORS:
+                color = _resolved_color(tokens, tokens.get((group, name)))
+                if color is not None:
+                    block_colors.append(color)
+        computed = _block_ratios(block_colors, reference_colors, base)
+        for written in written_ratios:
+            if not any(_ratio_matches(written, ratio) for ratio in [*measured_ratios, *computed]):
+                ratios.setdefault(f"{written}:1", []).append(block.where)
+    for value, places in colors.items():
+        report.error(
+            "design.invented-color",
+            f"Phần thân ({_examples(list(dict.fromkeys(places)), 3)}) ghi màu {value} không có "
+            "trong analysis.json — không được bịa hay đổi màu khi viết lại.",
+        )
+    for value, places in lengths.items():
+        report.error(
+            "design.invented-dimension",
+            f"Phần thân ({_examples(list(dict.fromkeys(places)), 3)}) ghi {value} — không khớp "
+            "số đo nào trong analysis.json (cỡ chữ, spacing, bo góc, đổ bóng, breakpoint, layout, "
+            "component).",
+        )
+    for value, places in ratios.items():
+        report.error(
+            "design.invented-ratio",
+            f"Phần thân ({_examples(list(dict.fromkeys(places)), 3)}) ghi tỉ lệ tương phản "
+            f"{value} — không khớp cặp màu đo được nào trong analysis.json hay cặp màu nhắc "
+            "cùng chỗ.",
+        )
+
+
 def _check_design(
     folder: Path,
     report: _Report,
@@ -1875,9 +2434,12 @@ def _check_design(
     _check_refs(document, tokens, report)
     _check_sections(document, report)
     _check_reference_note(document, analysis, raw, report)
+    if document.front_matter is not None:
+        _check_body_token_values(document, tokens, report)
     if document.front_matter is not None and analysis is not None:
         _check_invented_values(front_matter, tokens, analysis, report)
         _check_components_vs_analysis(front_matter, tokens, analysis, report)
+        _check_body_measurements(document, tokens, analysis, report)
     _check_design_contrast(document, tokens, analysis, report)
     if analysis is not None:
         _check_breakpoints_documented(document, analysis, report)
@@ -1911,6 +2473,13 @@ def _check_synthesis(
             f"synthesis.json ghi {len(errors)} lỗi tự kiểm: "
             f"{_examples([f'[{issue.rule}] {issue.message}' for issue in errors], 3)}",
         )
+    for issue in result.issues:
+        if STAGE_MISSING_MARKER in issue.message.lower():
+            report.add(
+                "info" if partial else "error",
+                "synthesis.stage-missing",
+                f"[{issue.rule}] {issue.message} — DESIGN.md được ghi mà không qua bước này.",
+            )
     for label, relative in (
         ("design_md_path", result.design_md_path),
         ("prompt_path", result.prompt_path),

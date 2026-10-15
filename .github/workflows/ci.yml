@@ -18,6 +18,9 @@ concurrency:
 
 env:
   PYTHONUTF8: "1"
+  # Official DESIGN.md linter, pinned so a new release cannot change CI on its own. Bump it by
+  # hand together with tests/test_synthesizer_linter.py (dependabot does not track npx).
+  DESIGN_MD_LINTER: "@google/design.md@0.4.0"
 
 jobs:
   lint:
@@ -121,7 +124,7 @@ jobs:
           DESIGN_MD: ${{ steps.pipeline.outputs.design_md }}
         # The package's other bin is literally named design.md, which Windows resolves as
         # a Markdown file; designmd works on every OS.
-        run: npx --yes --package @google/design.md designmd lint "$DESIGN_MD"
+        run: npx --yes --package "$DESIGN_MD_LINTER" designmd lint "$DESIGN_MD"
       - name: Upload e2e output
         if: always()
         uses: actions/upload-artifact@v4
@@ -143,20 +146,24 @@ jobs:
       - name: Build wheel and sdist
         run: uv build
       - name: Check wheel contents
+        # Every non-Python file of the package is loaded at runtime (collector/js/*.js,
+        # synthesizer/phrases/*.yaml, templates/*.j2): list them from git, never by hand.
         run: |
           uv run --no-project python -m zipfile -l dist/*.whl | tee wheel-contents.txt
-          for member in \
-            get_design_markdown/collector/js/extract.js \
-            get_design_markdown/synthesizer/phrases/en.yaml \
-            get_design_markdown/synthesizer/phrases/vi.yaml \
-            get_design_markdown/templates/design.md.j2 \
-            get_design_markdown/templates/prompt.md.j2 \
-            get_design_markdown/templates/preview.html.j2; do
-            if ! grep -q "$member" wheel-contents.txt; then
+          git ls-files -- 'src/get_design_markdown/*.js' 'src/get_design_markdown/*.yaml' \
+            'src/get_design_markdown/*.j2' | sed 's|^src/||' > resources.txt
+          if [ ! -s resources.txt ]; then
+            echo "::error::Không tìm thấy file tài nguyên nào trong src/get_design_markdown."
+            exit 1
+          fi
+          missing=0
+          while IFS= read -r member; do
+            if ! grep -qF "$member" wheel-contents.txt; then
               echo "::error::Wheel thiếu $member"
-              exit 1
+              missing=1
             fi
-          done
+          done < resources.txt
+          exit "$missing"
       - name: Twine check
         run: uvx twine check --strict dist/*
       - name: Smoke test the wheel
@@ -164,7 +171,8 @@ jobs:
           uv venv --python 3.12 wheel-env
           uv pip install --python wheel-env/bin/python dist/*.whl
           wheel-env/bin/gdm --version
-          wheel-env/bin/python -c "from get_design_markdown.resources import resource_text; resource_text('collector', 'js', 'extract.js')"
+          # Read every packaged resource through the runtime API of the installed wheel.
+          wheel-env/bin/python -c "from get_design_markdown.resources import resource_text; [resource_text(*line.split('/')[1:]) for line in open('resources.txt').read().split()]"
       - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:

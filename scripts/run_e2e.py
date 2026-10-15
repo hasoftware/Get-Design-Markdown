@@ -1,13 +1,16 @@
 """Run the whole pipeline on the static fixture site and verify the result (CI job "e2e").
 
     python scripts/run_e2e.py [--out e2e-output] [--site tests/fixtures/site] [--timeout 900]
+                              [--allow-partial]
 
-1. No fixture site yet (tests/fixtures/site/index.html) -> "::notice::" and exit 0.
-2. Serve the site on http://127.0.0.1:<free port>/ and run
+1. Serve the site on http://127.0.0.1:<free port>/ and run
    `python -m get_design_markdown get <url> --out <out> --dark --pages 2` (PYTHONUTF8=1).
-3. A stage that is not built yet (Vietnamese "... chưa ... được xây dựng" error) -> notice; the
-   files that do exist are still verified (verify_output --partial) and exit 0 unless they are
-   broken. Any other failure -> exit with gdm's code.
+2. Every stage must be built: a missing fixture site, a stage that stops gdm with a
+   NotImplementedYetError ("… chưa được xây dựng") or one that gdm only skips with a warning
+   ("Chưa phân tích …", "… chưa được xây dựng") fails the run. With --allow-partial (local use
+   while a stage is being rebuilt, never in CI) these become notices and the files that exist
+   are verified with verify_output --partial.
+3. Any other gdm failure -> exit with gdm's code.
 4. verify_output() on <out>/127.0.0.1_<port>; errors -> exit 1.
 5. Print the DESIGN.md path and write design_md=<path> / site_dir=<path> to $GITHUB_OUTPUT.
 """
@@ -46,6 +49,7 @@ E2E_PAGES: Final = 2
 HOST: Final = "127.0.0.1"
 ERROR_PREFIX: Final = "Lỗi:"
 HINT_PREFIX: Final = "Gợi ý:"
+WARNING_PREFIX: Final = "Cảnh báo:"
 MAX_ANNOTATIONS: Final = 20
 
 
@@ -119,6 +123,24 @@ def stage_missing_message(output: str) -> str | None:
     return message if "chưa" in lowered and "được xây dựng" in lowered else None
 
 
+def skipped_stages(output: str) -> list[str]:
+    """Warnings of stages gdm skipped because they are not built, in order, without duplicates.
+
+    `gdm analyze` leaves a part empty with "Cảnh báo: Chưa phân tích (để trống …): …" and
+    `gdm export` skips an exporter with "Cảnh báo: … chưa được xây dựng …".
+    """
+    found: list[str] = []
+    for line in output.splitlines():
+        text = " ".join(line.split())
+        if not text.startswith(WARNING_PREFIX):
+            continue
+        message = text[len(WARNING_PREFIX) :].strip()
+        lowered = message.lower()
+        if lowered.startswith("chưa phân tích") or "chưa được xây dựng" in lowered:
+            found.append(message)
+    return list(dict.fromkeys(found))
+
+
 def annotation(kind: str, message: str) -> str:
     """GitHub Actions workflow command (::notice:: / ::warning:: / ::error::), one line."""
     escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -169,6 +191,14 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_TIMEOUT_S,
         help="Thời gian tối đa cho 'gdm get' (giây).",
     )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help=(
+            "Chỉ dùng khi đang dựng lại một tầng: tầng chưa xây dựng (hoặc thiếu trang fixture) "
+            "chỉ là ghi chú và các file đã có được kiểm ở chế độ --partial. CI không dùng cờ này."
+        ),
+    )
     return parser
 
 
@@ -177,9 +207,14 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     site: Path = args.site
     out: Path = args.out
-    if not (site / "index.html").is_file():
-        print(annotation("notice", f"Chưa có trang fixture {site / 'index.html'} — bỏ qua e2e."))
-        return 0
+    allow_partial: bool = args.allow_partial
+    index = site / "index.html"
+    if not index.is_file():
+        if allow_partial:
+            print(annotation("notice", f"Chưa có trang fixture {index} — bỏ qua e2e."))
+            return 0
+        print(annotation("error", f"Không có trang fixture {index}."))
+        return 1
     out.mkdir(parents=True, exist_ok=True)
     with serve_site(site) as url:
         print(f"Trang fixture: {url}", flush=True)
@@ -192,13 +227,15 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.write(completed.stderr)
     folder = out / f"{HOST}_{urlsplit(url).port}"
 
+    output = completed.stdout + "\n" + completed.stderr
     partial = False
     if completed.returncode != 0:
-        missing = stage_missing_message(completed.stderr) or stage_missing_message(
-            completed.stdout + "\n" + completed.stderr
-        )
+        missing = stage_missing_message(completed.stderr) or stage_missing_message(output)
         if missing is None:
             print(annotation("error", f"'gdm get' thất bại (mã thoát {completed.returncode})."))
+            return completed.returncode or 1
+        if not allow_partial:
+            print(annotation("error", f"Một tầng chưa được xây dựng: {missing}"))
             return completed.returncode or 1
         print(annotation("notice", f"Stage chưa xong: {missing}"))
         if not folder.is_dir():
@@ -207,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
     elif not folder.is_dir():
         print(annotation("error", f"Không tìm thấy thư mục kết quả {folder}."))
         return 1
+    skipped = skipped_stages(output)
+    for message in skipped:
+        kind = "notice" if allow_partial else "error"
+        print(annotation(kind, f"'gdm get' bỏ qua một tầng chưa được xây dựng: {message}"))
+    partial = partial or (allow_partial and bool(skipped))
 
     findings = verify_output(folder, partial=partial)
     print(format_findings(findings, folder))
@@ -220,6 +262,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DESIGN.md: {design}")
         outputs["design_md"] = str(design)
     write_github_output(outputs)
+    if skipped and not allow_partial:
+        return 1
     return exit_code(findings)
 
 

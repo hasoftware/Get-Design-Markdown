@@ -19,6 +19,8 @@ RELEASE_FILE = WORKFLOWS_DIR / "release.yml"
 #: owner/repo[/path]@vN, or a local reusable workflow.
 PINNED_ACTION_RE = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@v\d+$")
 LOCAL_WORKFLOW_RE = re.compile(r"^\./\.github/workflows/[\w.-]+\.ya?ml$")
+#: The official DESIGN.md linter at an exact version.
+LINTER_PACKAGE_RE = re.compile(r"@google/design\.md@\d+\.\d+\.\d+")
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
@@ -116,8 +118,10 @@ def test_e2e_job(ci: dict[str, Any]) -> None:
     commands = runs(job)
     assert "uv run pytest -m e2e -ra" in commands
     assert "uv run python scripts/run_e2e.py --out e2e-output" in commands
-    lint = next(step for step in steps(job) if "@google/design.md" in str(step.get("run", "")))
-    assert "designmd lint" in lint["run"]
+    # Every stage is merged: CI never accepts a stage that is not built.
+    assert not any("--allow-partial" in command for command in commands)
+    lint = next(step for step in steps(job) if "designmd lint" in str(step.get("run", "")))
+    assert '--package "$DESIGN_MD_LINTER"' in lint["run"]
     assert "steps.pipeline.outputs.design_md" in lint["if"]
     # The path comes from a step output: passed through env, never interpolated into the script.
     assert "${{" not in lint["run"]
@@ -125,23 +129,36 @@ def test_e2e_job(ci: dict[str, Any]) -> None:
     assert (ROOT / "scripts" / "run_e2e.py").is_file()
 
 
-def test_build_job_checks_packaged_resources(ci: dict[str, Any]) -> None:
+def test_official_linter_is_pinned(ci: dict[str, Any]) -> None:
+    assert LINTER_PACKAGE_RE.fullmatch(ci["env"]["DESIGN_MD_LINTER"]), ci["env"]
+    for path in sorted(WORKFLOWS_DIR.glob("*.y*ml")):
+        for job in load_workflow(path)["jobs"].values():
+            for command in runs(job):
+                for package in re.findall(r"--package\s+(\S+)", command):
+                    assert package == '"$DESIGN_MD_LINTER"' or LINTER_PACKAGE_RE.fullmatch(
+                        package
+                    ), (path.name, command)
+
+
+def test_build_job_checks_every_packaged_resource(ci: dict[str, Any]) -> None:
     job = ci["jobs"]["build"]
     script = "\n".join(runs(job))
     assert "uv build" in script
     assert "uvx twine check" in script
-    members = re.findall(r"get_design_markdown/[\w./-]+", script)
-    required = {
-        "get_design_markdown/collector/js/extract.js",
-        "get_design_markdown/synthesizer/phrases/en.yaml",
-        "get_design_markdown/synthesizer/phrases/vi.yaml",
-        "get_design_markdown/templates/design.md.j2",
-        "get_design_markdown/templates/prompt.md.j2",
-        "get_design_markdown/templates/preview.html.j2",
-    }
-    assert required <= set(members)
-    for member in required:
-        assert (ROOT / "src" / member).is_file(), member
+    patterns = re.findall(r"'src/get_design_markdown/\*(\.[\w.]+)'", script)
+    # Every non-Python file shipped in the package (e.g. the collector's in-page scripts) must
+    # be covered by the wheel check, which lists the files from git instead of by hand.
+    resources = [
+        path
+        for path in (ROOT / "src" / "get_design_markdown").rglob("*")
+        if path.is_file() and path.suffix not in (".py", ".pyc", ".typed")
+    ]
+    assert {path.suffix for path in resources} >= {".js", ".yaml", ".j2"}
+    for path in resources:
+        assert path.suffix in patterns, path
+    assert "resources.txt" in script and "Wheel thiếu" in script
+    smoke = next(step for step in steps(job) if "wheel-env" in str(step.get("run", "")))
+    assert "resource_text" in smoke["run"] and "resources.txt" in smoke["run"]
 
 
 def test_release_workflow(release: dict[str, Any]) -> None:

@@ -158,6 +158,18 @@ def _add_error_issue(data: Any) -> None:
     data["issues"].append({"rule": "broken-ref", "severity": "error", "message": "Hỏng."})
 
 
+SKIPPED_ANALYSIS = "Chưa phân tích (để trống trong analysis.json): Đổ bóng (GĐ4)."
+SKIPPED_SELF_CHECK = "Bước tự kiểm DESIGN.md chưa được xây dựng (giai đoạn 6)."
+
+
+def _skip_analysis_part(data: Any) -> None:
+    data["warnings"].append(SKIPPED_ANALYSIS)
+
+
+def _skip_self_check(data: Any) -> None:
+    data["issues"].append({"rule": "self-check", "severity": "info", "message": SKIPPED_SELF_CHECK})
+
+
 def _add_breakpoint(data: Any) -> None:
     data["breakpoints"].append({"name": "xxl", "min_width_px": 1536.0, "occurrences": 1})
 
@@ -545,6 +557,18 @@ CORRUPTIONS: list[Any] = [
     # missing stages
     pytest.param(_unlink("analysis.json"), "analysis.missing", "error", id="analysis-missing"),
     pytest.param(_unlink("DESIGN.md"), "design.missing", "error", id="design-missing"),
+    pytest.param(
+        _json("analysis.json", _skip_analysis_part),
+        "analysis.skipped",
+        "error",
+        id="analysis-part-not-built",
+    ),
+    pytest.param(
+        _json("synthesis.json", _skip_self_check),
+        "synthesis.stage-missing",
+        "error",
+        id="self-check-not-built",
+    ),
 ]
 
 
@@ -559,6 +583,180 @@ def test_corruption_is_reported(
     if severity == "error":
         assert verify_output.exit_code(findings) == 1
     assert verify_output.exit_code(findings, strict=True) == 1
+
+
+# ─── Body values: a rewrite of the prose must keep every number ──────────────
+
+
+def _add_to_guide(text: str) -> Callable[[Path], None]:
+    end = "keep radii on the `rounded` scale.\n"
+    return _text("DESIGN.md", end, f"{end}\n{text}\n")
+
+
+BODY_TAMPERS: list[Any] = [
+    pytest.param(
+        _text("DESIGN.md", "(`{colors.canvas}` — #ffffff)", "(`{colors.canvas}` — #0f172a)"),
+        {"design.body-value"},
+        id="pair-color",
+    ),
+    pytest.param(
+        _text("DESIGN.md", "—\n#0f172a)", "—\n#0f172b)"),
+        {"design.body-value", "design.invented-color"},
+        id="pair-across-lines",
+    ),
+    pytest.param(
+        _text("DESIGN.md", "`{spacing.md}` — 16px", "`{spacing.md}` — 20px"),
+        {"design.body-value"},
+        id="pair-spacing",
+    ),
+    pytest.param(
+        _text("DESIGN.md", "`{rounded.md}` (8px)", "`{rounded.md}` (12px)"),
+        {"design.body-value"},
+        id="pair-rounded-in-parentheses",
+    ),
+    pytest.param(
+        _add_to_guide("Headlines: `{typography.display}` — Space Grotesk 40px / 700 / 1.05."),
+        {"design.body-value"},
+        id="pair-typography-size",
+    ),
+    pytest.param(
+        _add_to_guide("Body: `{typography.body}` — Inter 16px / 400 / 1.33."),
+        {"design.body-value"},
+        id="pair-typography-line-height",
+    ),
+    pytest.param(
+        _add_to_guide("| `{spacing.md}` | 20px | card |"),
+        {"design.body-value"},
+        id="table-row-spacing",
+    ),
+    pytest.param(
+        _add_to_guide("| `{typography.body}` | Inter | 16px | 700 | 1.6 (25.6px) | 0 | p |"),
+        {"design.body-value"},
+        id="table-row-weight",
+    ),
+    pytest.param(
+        _add_to_guide("| `{colors.primary}` | `--color-primary` | #4338ca |"),
+        {"design.body-value"},
+        id="table-row-color",
+    ),
+    pytest.param(
+        _add_to_guide("| `{typography.ui}` | `--font-ui` | `500 16px/1.33 Inter, sans-serif` |"),
+        {"design.body-value"},
+        id="table-row-font-shorthand",
+    ),
+    pytest.param(
+        _add_to_guide("Use a 13px gap, radius 37px and #abcdef accents."),
+        {"design.invented-dimension", "design.invented-color"},
+        id="invented-sentence",
+    ),
+    pytest.param(
+        _text("DESIGN.md", "it measures 2.56:1, below", "it measures 4.80:1, below"),
+        {"design.invented-ratio"},
+        id="changed-page-ratio",
+    ),
+    pytest.param(
+        _add_to_guide("Text `{colors.ink}` on `{colors.canvas}` measures 18.00:1."),
+        {"design.invented-ratio"},
+        id="changed-token-ratio",
+    ),
+    pytest.param(
+        _text("DESIGN.md", "soft 8px controls.", "soft 37px controls (#abcdef)."),
+        {"design.invented-dimension", "design.invented-color"},
+        id="front-matter-description",
+    ),
+]
+
+
+@pytest.mark.parametrize(("corrupt", "expected"), BODY_TAMPERS)
+def test_body_rewrite_changes_are_reported(
+    valid_folder: Path, corrupt: Callable[[Path], None], expected: set[str]
+) -> None:
+    corrupt(valid_folder)
+    findings = run_verify(valid_folder)
+    assert checks(findings, "error") == expected, findings
+    assert verify_output.exit_code(findings) == 1
+
+
+def test_every_changed_occurrence_is_listed_once(valid_folder: Path) -> None:
+    edit_text(
+        valid_folder, "DESIGN.md", "`{colors.canvas}` — #ffffff", "`{colors.canvas}` — #000000"
+    )
+    edit_text(
+        valid_folder,
+        "DESIGN.md",
+        "Agent Prompt Guide\n",
+        "Agent Prompt Guide\n\n- `{colors.canvas}` — #000000\n",
+    )
+    findings = [f for f in run_verify(valid_folder) if f.check == "design.body-value"]
+    assert len(findings) == 1, findings
+    assert "#000000" in findings[0].message and "#ffffff" in findings[0].message
+    assert findings[0].message.count("dòng") == 2
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("Text `{colors.ink}` on `{colors.canvas}` measures 17.85:1.", id="computed"),
+        pytest.param(
+            "Large text is ≥ 24px, or ≥ 18.66px bold; tap targets need 44px; AA needs 4.5:1 and "
+            "AAA 7:1; shadows may be 1px rings.",
+            id="guidelines",
+        ),
+        pytest.param("```css\n.x { color: #abcdef; width: 37px; }\n```", id="fenced-code"),
+        pytest.param("Its label reads “Save 37px on plan #abcdef”.", id="quoted-page-text"),
+        pytest.param("Measured with a decimal comma: 2,56:1.", id="decimal-comma"),
+        pytest.param(
+            "| `{typography.body}` | Inter | 16px | 400 | 1.6 (25.6px) | 0 | p |\n"
+            "| `{typography.display}` | Space Grotesk | 64px | 700 | 1.05 (67.2px) | -1.5px | h |\n"
+            "| `{typography.ui}` | `--font-ui` | `500 15px/1.33 Inter, sans-serif` |\n"
+            "| `{rounded.full}` | `--radius-full` | 9999px |\n"
+            "| `{colors.surface}` | `--color-surface` | #f8fafc |",
+            id="table-rows",
+        ),
+        pytest.param(
+            "`{typography.display}` — Space Grotesk 64px / 700 / 1.05; `{rounded.full}` — "
+            "9999px; `{spacing.4xl}` (64px); `{colors.success}` (#16a34a).",
+            id="pairs",
+        ),
+        pytest.param("Selectors keep their digits: `div.w-[37px]`, `section.mt-37px`.", id="css"),
+        pytest.param("See <https://acme.example/#abcdef-37px> for details.", id="url"),
+    ],
+)
+def test_body_values_that_are_accepted(valid_folder: Path, text: str) -> None:
+    _add_to_guide(text)(valid_folder)
+    assert run_verify(valid_folder) == []
+
+
+def test_site_texts_with_digits_are_not_measurements(valid_folder: Path) -> None:
+    def add_sample(data: Any) -> None:
+        data["components"][0]["samples"].append("Plan #123456 for 37px teams")
+
+    edit_json(valid_folder, "analysis.json", add_sample)
+    _add_to_guide("Instances, e.g. Plan \\#123456 for 37px teams.")(valid_folder)
+    assert run_verify(valid_folder) == []
+    _add_to_guide("A 37px gap.")(valid_folder)
+    assert checks(run_verify(valid_folder), "error") == {"design.invented-dimension"}
+
+
+def test_body_blocks_join_wrapped_lines_outside_code() -> None:
+    body = (
+        "# Title\n\nA paragraph that wraps (`{colors.ink}` —\n#0f172a) here.\n"
+        "- item one\n  continues\n- item two\n| a | b |\n| c | d |\n"
+        "```\n#abcdef\n```\n> quote\n"
+    )
+    blocks = verify_output.body_blocks(body, first_line=10)
+    assert [(block.where, block.text) for block in blocks] == [
+        ("dòng 10", "# Title"),
+        ("dòng 12", "A paragraph that wraps (`{colors.ink}` — #0f172a) here."),
+        ("dòng 14", "- item one continues"),
+        ("dòng 16", "- item two"),
+        ("dòng 17", "| a | b |"),
+        ("dòng 18", "| c | d |"),
+        ("dòng 22", "> quote"),
+    ]
+    assert [block.is_table_row for block in blocks] == [False] * 4 + [True, True, False]
+    assert verify_output.body_offset("---\nname: x\n---\n# T\n") == 3
+    assert verify_output.body_offset("# no front matter") == 0
 
 
 def test_failing_page_pair_may_be_documented_in_colors(valid_folder: Path) -> None:
@@ -590,6 +788,17 @@ def test_partial_mode_turns_missing_stages_into_notes(valid_folder: Path) -> Non
     assert checks(partial, "error") == set()
     assert checks(partial, "warning") == set()
     assert {"analysis.missing", "design.missing", "tokens.missing"} <= checks(partial, "info")
+
+
+def test_partial_mode_turns_unbuilt_stages_into_notes(valid_folder: Path) -> None:
+    edit_json(valid_folder, "analysis.json", _skip_analysis_part)
+    edit_json(valid_folder, "synthesis.json", _skip_self_check)
+    assert {"analysis.skipped", "synthesis.stage-missing"} <= checks(
+        run_verify(valid_folder), "error"
+    )
+    partial = run_verify(valid_folder, partial=True)
+    assert checks(partial, "error") == set()
+    assert checks(partial, "info") == {"analysis.skipped", "synthesis.stage-missing"}
 
 
 def test_partial_mode_still_checks_existing_files(valid_folder: Path) -> None:

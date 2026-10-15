@@ -299,7 +299,7 @@ section `##` theo đúng thứ tự (được phép thiếu, không được tr�
 | 9 | `## Agent Prompt Guide` | Hướng dẫn ngắn cho AI agent (luôn là section cuối) |
 
 Phần thân nhắc token kèm giá trị, ví dụ "`{colors.canvas}` — #ffffff", để agent hiểu cả tên lẫn
-giá trị. Spec đầy đủ: `npx --yes --package @google/design.md designmd spec`.
+giá trị. Spec đầy đủ: `npx --yes --package @google/design.md@0.4.0 designmd spec`.
 
 ## Dùng với Claude Code / claude.ai: `--prompt-only`
 
@@ -320,8 +320,12 @@ desktop và mobile đã thu nhỏ (cạnh dài tối đa 1568px).
 - **claude.ai**: dán nội dung `prompt.md` vào cuộc trò chuyện và đính kèm hai ảnh trong
   `prompt-images/`, rồi lưu kết quả thành `DESIGN.md`.
 
-Sau khi AI viết lại, nên chạy `scripts/verify_output.py` (xem bên dưới) để chắc chắn không có con
-số hay tham chiếu nào bị đổi.
+Sau khi AI viết lại, nên chạy `scripts/verify_output.py` (xem bên dưới). Bộ kiểm tra đọc cả phần
+thân chứ không chỉ front matter: giá trị viết cạnh tham chiếu (`` `{colors.canvas}` — #ffffff ``,
+`` `{rounded.md}` (8px) ``, dòng bảng bắt đầu bằng một token) phải đúng giá trị trong front matter,
+và mọi mã màu hex, độ dài `px`, tỉ lệ tương phản `N:1` trong văn bản phải có trong `analysis.json`.
+Nó không phát hiện được trường hợp một con số trong câu văn tự do bị đổi thành một số đo **khác
+cũng có thật** (ví dụ 16px thành 24px khi cả hai đều đo được), nên vẫn nên đọc lại bản viết lại.
 
 ## tokens.json và preview.html
 
@@ -367,22 +371,28 @@ Bộ kiểm tra xác nhận:
   breakpoint đều đo được từ `@media`.
 - `DESIGN.md`: front matter hợp lệ (`version: alpha`, có `name`), mọi `{nhóm.tên}` trỏ tới token có
   thật, thứ tự section đúng, có ghi chú nguồn; **không có con số bịa**: mọi màu, bo góc, spacing,
-  cỡ chữ đều có trong `analysis.json`; cặp màu component dưới 4.5:1 được nhắc trong
-  Do's and Don'ts; breakpoint đo được có trong mục Layout; trạng thái hover có biến thể `-hover`.
+  cỡ chữ của front matter đều có trong `analysis.json`; trong phần thân (ngoài khối code), giá trị
+  viết cạnh tham chiếu token và các dòng bảng bắt đầu bằng token khớp front matter, còn mọi mã
+  hex, độ dài `px` và tỉ lệ `N:1` đều có trong `analysis.json` (hoặc là mốc chuẩn như 4.5:1,
+  44px); cặp màu component dưới 4.5:1 được nhắc trong Do's and Don'ts; breakpoint đo được có trong
+  mục Layout; trạng thái hover có biến thể `-hover`.
+- Mọi tầng đều đã chạy đủ: `analysis.json` không có phần phân tích bị bỏ qua và `synthesis.json`
+  không ghi bước nào "chưa được xây dựng" (với `--partial` đây chỉ là ghi chú).
 - `tokens.json` (mọi token có `$type`, alias trỏ đúng, giá trị màu/kích thước hợp lệ) và
   `preview.html` (đủ mã màu của token, không nạp script ngoài).
 
 Mã thoát: `0` khi không có lỗi, `1` khi có lỗi (hoặc có cảnh báo với `--strict`).
 
-Có thể đối chiếu thêm với linter chính thức của spec (cần Node.js):
+Có thể đối chiếu thêm với linter chính thức của spec (cần Node.js và quyền tải gói từ npm):
 
 ```bash
-npx --yes --package @google/design.md designmd lint output/stripe.com/DESIGN.md
+npx --yes --package @google/design.md@0.4.0 designmd lint output/stripe.com/DESIGN.md
 ```
 
 Linter in kết quả dạng JSON và trả mã thoát `1` khi có lỗi. Trên Windows hãy dùng đúng tên
 lệnh `designmd` như trên: lệnh còn lại của gói tên là `design.md`, Windows sẽ coi đó là một
-file Markdown nên không chạy linter.
+file Markdown nên không chạy linter. Dự án ghim phiên bản `0.4.0` (spec còn ở bản alpha, bản mới
+có thể đổi luật); CI dùng cùng phiên bản đó.
 
 ## Xử lý lỗi thường gặp
 
@@ -398,7 +408,6 @@ Lỗi được in bằng tiếng Việt kèm gợi ý; thêm `--debug` (`gdm --d
 | **Không tìm thấy thư mục dữ liệu** | `analyze`/`synthesize`/`export` cần thư mục đã có `raw.json` / `analysis.json`; chạy các tầng trước, hoặc kiểm tra `GDM_OUTPUT_DIR` khi truyền tên miền. |
 | **File không đúng định dạng** (`raw.json`, `analysis.json`) | File do phiên bản cũ tạo ra: chạy lại bước tạo ra file đó. |
 | **DESIGN.md không qua bước tự kiểm** | Không có file nào bị ghi; nếu `analysis.json` đã cũ, chạy lại `gdm analyze`. |
-| Thông báo **"… chưa được xây dựng"** | Bạn đang dùng bản phát triển mà tầng đó chưa hoàn thiện; hãy dùng bản phát hành. |
 | Chữ tiếng Việt bị lỗi trên terminal Windows | Dùng Windows Terminal hoặc đặt `PYTHONUTF8=1`. |
 
 ## Đạo đức và robots.txt
@@ -429,7 +438,7 @@ uv run ruff check .                 # lint
 uv run ruff format --check .        # định dạng (bỏ --check để tự sửa)
 uv run mypy src tests               # kiểu (strict)
 uv run mypy scripts
-uv run pytest                       # toàn bộ test (không cần mạng)
+uv run pytest                       # toàn bộ test (xem ghi chú về mạng bên dưới)
 ```
 
 Marker của pytest:
@@ -437,14 +446,23 @@ Marker của pytest:
 | Marker | Ý nghĩa | Chạy |
 |---|---|---|
 | `browser` | Cần Chromium, chạy trên trang fixture cục bộ `tests/fixtures/site/` | Có trong `uv run pytest`; tự bỏ qua nếu thiếu Chromium, trừ khi đặt `GDM_REQUIRE_BROWSER=1` (CI đặt sẵn) |
-| `e2e` | Trọn pipeline trên trang fixture | `uv run pytest -m e2e`; bỏ qua (kèm lý do) khi một tầng chưa xong |
+| `e2e` | Trọn pipeline trên trang fixture | `uv run pytest -m e2e`; thất bại khi một tầng chưa được xây dựng, bị bỏ qua hoặc không ghi file |
 | `network` | Cần Internet | Không chạy mặc định; `uv run pytest -m network` |
+
+Mạng: các test không cần Internet, trừ `tests/test_synthesizer_linter.py`. Test này chạy linter
+chính thức qua `npx`, nên cần Node.js và lần đầu phải tải gói `@google/design.md` từ npm (sau đó
+dùng bộ nhớ đệm của npm). Khi không có `npx` hoặc không tải được gói, test tự bỏ qua kèm lý do
+thay vì thất bại.
 
 Chạy trọn pipeline trên trang fixture và kiểm tra kết quả giống job e2e của CI:
 
 ```bash
 uv run python scripts/run_e2e.py --out e2e-output
 ```
+
+Lệnh thất bại nếu thiếu trang fixture hoặc có tầng chưa được xây dựng (kể cả tầng mà `gdm get`
+chỉ bỏ qua kèm cảnh báo). Khi đang dựng lại một tầng trên máy cá nhân, thêm `--allow-partial` để
+chỉ ghi chú các tầng đó và kiểm phần đã có ở chế độ `--partial`; CI không bao giờ dùng cờ này.
 
 ### Kiến trúc mã nguồn
 
@@ -475,10 +493,12 @@ viết tiếng Việt có dấu.
   - `lint`: ruff, ruff format, mypy (`src tests` và `scripts`);
   - `test`: pytest trên Ubuntu và Windows × Python 3.11, 3.12, 3.13, có Chromium
     (`GDM_REQUIRE_BROWSER=1`), lưu báo cáo JUnit;
-  - `e2e`: `pytest -m e2e`, `scripts/run_e2e.py` (pipeline trên trang fixture + `verify_output.py`)
-    và linter chính thức `@google/design.md` khi đã có DESIGN.md;
-  - `build`: `uv build`, kiểm tra wheel có đủ `extract.js`, `phrases/*.yaml`, `templates/*.j2`,
-    `twine check`, cài thử wheel.
+  - `e2e`: `pytest -m e2e`, `scripts/run_e2e.py` (pipeline trên trang fixture + `verify_output.py`;
+    thất bại khi có tầng chưa được xây dựng) và linter chính thức `@google/design.md@0.4.0` (phiên
+    bản ghim trong biến `DESIGN_MD_LINTER`, nâng bằng tay) khi đã có DESIGN.md;
+  - `build`: `uv build`, kiểm tra wheel có đủ mọi file tài nguyên của gói (`collector/js/*.js`,
+    `synthesizer/phrases/*.yaml`, `templates/*.j2`, liệt kê từ git), `twine check`, cài thử wheel
+    và đọc lại từng file tài nguyên từ bản cài.
 - **`.github/workflows/release.yml`** (CD): khi push tag `v*`, chạy lại toàn bộ CI, kiểm tra tag
   khớp version trong `pyproject.toml` và `__version__`, build rồi tạo GitHub Release kèm wheel và
   sdist. Không publish lên PyPI.
