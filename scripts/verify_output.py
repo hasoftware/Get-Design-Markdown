@@ -130,6 +130,7 @@ COMPONENT_PROPERTY_KEYS: Final = (
     "backdropFilter",
     "placeholderColor",
     "position",
+    "opacity",
 )
 DIMENSION_PROPERTIES: Final = ("rounded", "padding", "size", "height", "width", "gap")
 

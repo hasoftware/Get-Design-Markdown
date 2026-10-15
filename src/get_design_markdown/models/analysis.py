@@ -259,8 +259,10 @@ class ComponentSpec(GdmModel):
     `properties` keys (camelCase, raw measured values): backgroundColor, textColor, borderColor,
     borderWidth, rounded, padding, height, width, gap, fontFamily, fontSize, fontWeight,
     lineHeight, letterSpacing, textTransform, textDecoration, shadow, backdropFilter,
-    placeholderColor, position. Colors are canonical hex (#rrggbb / #rrggbbaa) or "transparent";
-    lengths use px ("8px", padding as a CSS shorthand "12px 20px").
+    placeholderColor, position, opacity. Colors are canonical hex (#rrggbb / #rrggbbaa) or
+    "transparent"; lengths use px ("8px", padding as a CSS shorthand "12px 20px"); opacity is a
+    unitless number ("0.8", mostly seen in hover states). DESIGN.md front matter keeps only the
+    spec's component keys; tokens.json exports the rest.
     """
 
     #: Front-matter name, e.g. "button-primary"; hover becomes "button-primary-hover".

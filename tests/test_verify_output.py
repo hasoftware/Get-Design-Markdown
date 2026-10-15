@@ -653,10 +653,10 @@ def _rename_primary(data: Any) -> None:
             id="hover-unchanged",  # stripe.com nav-link
         ),
         pytest.param(
-            _set(["components", BUTTON_PRIMARY, "states", "hover", "opacity"], "0.6"),
+            _set(["components", BUTTON_PRIMARY, "states", "hover", "zIndex"], "10"),
             "analysis.components",
-            "khóa opacity",
-            id="undocumented-key",  # stripe.com button-primary hover
+            "khóa zIndex",
+            id="undocumented-key",
         ),
         pytest.param(
             _set(
