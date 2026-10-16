@@ -44,7 +44,7 @@
 
 <div id="app" class="app" hidden>
   <header class="topbar">
-    <button type="button" class="btn btn-ghost history-toggle" id="history-toggle" aria-expanded="false" aria-controls="sidebar">
+    <button type="button" class="btn btn-ghost history-toggle" id="history-toggle" aria-expanded="false" aria-controls="sidebar" title="Lịch sử">
       <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-menu"/></svg>
       <span>Lịch sử</span>
     </button>
@@ -57,7 +57,7 @@
         <span class="dot" aria-hidden="true"></span>
         <span id="browser-pill-text">Đang kiểm tra trình duyệt…</span>
       </button>
-      <button type="button" class="btn btn-ghost" id="help-button">
+      <button type="button" class="btn btn-ghost" id="help-button" title="Hướng dẫn">
         <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-help"/></svg>
         <span>Hướng dẫn</span>
       </button>
@@ -176,7 +176,7 @@
               <button type="submit" class="btn btn-primary btn-lg" id="analyze-button">Phân tích</button>
             </div>
             <p class="help" id="url-help">Gõ tên miền như <span class="nowrap">stripe.com</span> hoặc dán cả liên kết của một trang cụ thể.</p>
-            <div class="field-error" id="url-error" hidden></div>
+            <div class="field-error" id="url-error" role="alert" hidden></div>
           </form>
 
           <section class="options" aria-labelledby="options-title" id="options">
@@ -353,6 +353,7 @@
             </ol>
           </div>
           <p class="job-progress" id="job-progress"></p>
+          <p class="sr-only" id="job-progress-live" role="status" aria-live="polite" aria-atomic="true"></p>
 
           <div class="callout callout-warn callout-strong" id="job-robots" hidden>
             <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>

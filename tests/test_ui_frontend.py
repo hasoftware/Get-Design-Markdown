@@ -8,13 +8,16 @@ FILES_HTML_CSP permits it inside the sandboxed preview).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 from playwright.sync_api import (
     Browser,
@@ -28,7 +31,11 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-from get_design_markdown.ui.jobs import JobError, JobRequest, JobSnapshot
+from get_design_markdown.collector.robots import check_robots, evaluate_robots, robots_url_for
+from get_design_markdown.console import ConsoleEvent, use_sink
+from get_design_markdown.models.raw import RobotsCheck
+from get_design_markdown.pipeline import report_robots
+from get_design_markdown.ui.jobs import JobError, JobEvent, JobRequest, JobSnapshot
 from tests.ui_fake_api import ACME_SITE, BETA_SITE, FAKE_TOKEN, FakeApi
 
 pytestmark = pytest.mark.browser
@@ -297,6 +304,19 @@ def active_id(page: Page) -> str:
     return str(page.evaluate("document.activeElement ? document.activeElement.id : ''"))
 
 
+def show_no_history(page: Page) -> None:
+    """Answer GET /api/history with an empty list: a first launch, nothing analysed yet."""
+
+    def empty(route: Route) -> None:
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"output_root": "C:/empty", "entries": []}',
+        )
+
+    page.route("**/api/history", empty)
+
+
 # ─── Session token, heartbeat, expiry ────────────────────────────────────────
 
 
@@ -371,8 +391,10 @@ def test_lost_connection_banner_and_reconnect(ui: OpenUi) -> None:
 
 
 def test_first_run_guide_is_dismissed_and_reopened(ui: OpenUi) -> None:
-    session = ui().open()
+    session = ui()
     page = session.page
+    show_no_history(page)
+    session.open()
     guide = page.locator("#guide")
     expect(guide).to_be_visible()
     expect(guide.locator(".guide-steps > li")).to_have_count(3)
@@ -385,12 +407,55 @@ def test_first_run_guide_is_dismissed_and_reopened(ui: OpenUi) -> None:
     page.click("#guide-close")
     expect(guide).to_be_hidden()
     assert active_id(page) == "url-input"
+    assert "gdm.guideDone=1" in page.evaluate("document.cookie")
     page.reload()
     session.wait_ready()
     expect(guide).to_be_hidden()
     page.click("#help-button")
     expect(guide).to_be_visible()
     assert active_id(page) == "guide"
+
+
+def test_guide_and_theme_are_kept_when_the_server_port_changes(ui: OpenUi) -> None:
+    """Every launch serves the UI on a new port, a new origin with an empty localStorage: the
+    dismissed guide and a manual theme are still remembered there."""
+    session = ui()
+    page = session.page
+    show_no_history(page)
+    session.open()
+    expect(page.locator("#guide")).to_be_visible()
+    page.click("#guide-close")
+    page.locator(".theme-option", has=page.locator("input[value='dark']")).click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+
+    second = FakeApi(session.api.output_root).start()
+    try:
+        assert second.port != session.api.port
+        page.route(f"{second.url}**", lambda route: route.continue_())
+        page.goto(second.launch_url)
+        session.wait_ready()
+        assert page.evaluate("localStorage.getItem('gdm.guideDone')") is None
+        page.wait_for_timeout(300)
+        expect(page.locator("#guide")).to_be_hidden()
+        expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+        assert page.is_checked("input[name='theme'][value='dark']")
+        page.click("#help-button")
+        expect(page.locator("#guide")).to_be_visible()
+    finally:
+        second.stop()
+
+
+def test_guide_stays_closed_once_sites_were_analysed(ui: OpenUi) -> None:
+    """The exe's window keeps no browser data between launches; a history with analysed sites
+    already says this is not the first run. The help button still opens the guide."""
+    session = ui().open()
+    page = session.page
+    expect(page.locator(".history-item")).to_have_count(2)
+    page.wait_for_timeout(300)
+    expect(page.locator("#guide")).to_be_hidden()
+    assert "gdm.guideDone" not in page.evaluate("document.cookie")
+    page.click("#help-button")
+    expect(page.locator("#guide")).to_be_visible()
 
 
 # ─── Settings ────────────────────────────────────────────────────────────────
@@ -618,6 +683,143 @@ def test_progress_stays_when_open_after_is_off_and_robots_warning_shows(ui: Open
     expect(page.locator(".history-item[data-site='robots.example']")).to_be_visible()
 
 
+ROBOTS_PAGE = "https://scripted.example/"
+
+
+def _robots_report(check: RobotsCheck) -> ConsoleEvent:
+    """The message the pipeline shows for a robots.txt check (its real wording)."""
+    events: list[ConsoleEvent] = []
+    with use_sink(events.append):
+        report_robots(check)
+    assert len(events) == 1
+    return events[0]
+
+
+def _fetched_robots(handler: Callable[[httpx.Request], httpx.Response]) -> RobotsCheck:
+    """check_robots() through a fake transport, in a thread of its own: the sync Playwright
+    API owns the event loop of this one."""
+
+    async def run() -> RobotsCheck:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await check_robots(ROBOTS_PAGE, client=client, timeout_s=15.0)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(run())).result()
+
+
+def _refuse_connection(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("[Errno 11001] getaddrinfo failed", request=request)
+
+
+def _time_out(request: httpx.Request) -> httpx.Response:
+    raise httpx.ReadTimeout("timed out", request=request)
+
+
+ROBOTS_CHECKS: dict[str, Callable[[], RobotsCheck]] = {
+    "disallowed": lambda: evaluate_robots(
+        robots_url_for(ROBOTS_PAGE), 200, "User-agent: *\nDisallow: /\n", ROBOTS_PAGE
+    ),
+    "server-error": lambda: evaluate_robots(robots_url_for(ROBOTS_PAGE), 503, "", ROBOTS_PAGE),
+    "unreachable": lambda: _fetched_robots(_refuse_connection),
+    "timeout": lambda: _fetched_robots(_time_out),
+    "allowed": lambda: evaluate_robots(
+        robots_url_for(ROBOTS_PAGE), 200, "User-agent: *\nAllow: /\n", ROBOTS_PAGE
+    ),
+}
+
+
+def _scripted_job(api: FakeApi, events: list[ConsoleEvent], error: JobError) -> str:
+    """GET /api/jobs/{id} body of a finished, failed job that sent `events`."""
+    now = datetime.now(UTC)
+    snapshot = JobSnapshot(
+        id="abcdefabcdef",
+        url="scripted.example",
+        status="failed",
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        step=1,
+        total=4,
+        step_message="Thu thập dữ liệu trang (Tầng 1)",
+        events=[JobEvent.from_console(event, seq=i, at=now) for i, event in enumerate(events, 1)],
+        last_seq=len(events),
+        settings=api.state.settings,
+        site="scripted.example",
+        error=error,
+    )
+    return '{"job": ' + snapshot.model_dump_json() + "}"
+
+
+def _serve_scripted_job(page: Page, body: str) -> None:
+    def scripted(route: Route) -> None:
+        if route.request.method == "POST" and urlpath(route.request.url) == "/api/jobs":
+            route.fulfill(status=202, content_type="application/json", body=body)
+        elif urlpath(route.request.url) == "/api/jobs/abcdefabcdef":
+            route.fulfill(status=200, content_type="application/json", body=body)
+        else:
+            route.fallback()
+
+    page.route("**/api/jobs**", scripted)
+
+
+@pytest.mark.parametrize(
+    ("case", "verdict"),
+    [
+        ("disallowed", "disallow"),
+        ("server-error", "disallow"),
+        ("unreachable", "unchecked"),
+        ("timeout", "unchecked"),
+        ("allowed", None),
+    ],
+)
+def test_robots_callout_only_for_a_real_refusal(ui: OpenUi, case: str, verdict: str | None) -> None:
+    """The callout says the site does not want automated readers: only when robots.txt says
+    so. A robots.txt that could not be read (mistyped or unreachable domain, slow server) is a
+    neutral log line without network jargon."""
+    session = ui().open()
+    page = session.page
+    robots = _robots_report(ROBOTS_CHECKS[case]())
+    error = JobError(
+        code="navigation",
+        message="Không mở được https://scripted.example/ (net::ERR_NAME_NOT_RESOLVED).",
+        hint="Kiểm tra lại địa chỉ và kết nối mạng.",
+    )
+    events = [
+        ConsoleEvent(kind="step", message="Thu thập dữ liệu trang (Tầng 1)", step=1, total=4),
+        robots,
+        ConsoleEvent(kind="error", message=error.message, hint=error.hint),
+    ]
+    _serve_scripted_job(page, _scripted_job(session.api, events, error))
+    session.start_job("scripted.example")
+    expect(page.locator("#job-outcome [data-code='navigation']")).to_be_visible()
+    log = page.locator("#job-log")
+    expect(log.locator(".log-line")).to_have_count(3)
+    callout = page.locator("#job-robots")
+    if verdict == "disallow":
+        assert robots.kind == "warning"
+        expect(callout).to_be_visible()
+        expect(callout).to_contain_text("Trang này không muốn bị công cụ tự động đọc")
+        expect(page.locator("#job-robots-text")).to_have_text(robots.message)
+        expect(log.locator(".log-line[data-kind='warning']")).to_have_text(re.compile("robots"))
+        return
+    expect(callout).to_be_hidden()
+    expect(log.locator(".log-line[data-kind='warning']")).to_have_count(0)
+    if verdict == "unchecked":
+        assert robots.kind == "warning"
+        line = log.locator(".log-line[data-kind='info']")
+        expect(line).to_have_count(1)
+        reason = "tải tệp này quá lâu" if case == "timeout" else "không tải được tệp này"
+        expect(line).to_contain_text(
+            f"Không kiểm tra được robots.txt của trang ({reason}). Công cụ vẫn tiếp tục."
+        )
+        text = log.inner_text()
+        assert robots.message not in text
+        assert "ConnectError" not in text and "Timeout" not in text
+    else:
+        assert robots.kind == "success"
+        expect(log.locator(".log-line[data-kind='success']")).to_have_text(re.compile("robots"))
+
+
 def test_failing_job_shows_message_hint_and_retry(ui: OpenUi) -> None:
     session = ui().open()
     page = session.page
@@ -686,6 +888,73 @@ def test_missing_browser_flow_downloads_chromium(ui: OpenUi) -> None:
     assert api.state.chromium_installed
     expect(page.locator("#browser-pill-text")).to_have_text("Trình duyệt: Chromium (Playwright)")
     expect(page.locator("#browser-banner")).to_be_hidden()
+
+
+def test_missing_chosen_browser_offers_the_automatic_choice(ui: OpenUi) -> None:
+    """Chromium is chosen in the options but missing, Edge is installed: the help names the
+    choice and switches to "Tự động" instead of saying the machine has no browser."""
+    session = ui()
+    api = session.api
+    api.state.settings = api.state.settings.model_copy(update={"browser": "chromium"})
+    session.open()
+    page = session.page
+    session.start_job("no-browser.example")
+    outcome = page.locator("#job-outcome [data-code='browser_missing']")
+    expect(outcome).to_be_visible()
+    expect(outcome.locator("[data-browser-help]")).to_have_attribute("data-browser-help", "switch")
+    expect(outcome).to_contain_text(
+        "Bạn đang chọn Chromium (Playwright) trong Tùy chọn nâng cao, nhưng máy chưa có trình "
+        "duyệt này."
+    )
+    expect(outcome).to_contain_text("lúc này là Microsoft Edge")
+    expect(outcome).not_to_contain_text("Máy chưa có trình duyệt mà công cụ dùng được")
+    expect(outcome).not_to_contain_text("Cài Microsoft Edge hoặc Google Chrome")
+    switch = outcome.get_by_role("button", name="Chuyển sang Tự động và thử lại")
+    expect(switch).to_have_class(re.compile(r"btn-primary"))
+    expect(outcome.get_by_role("button", name="Thử lại", exact=True)).to_have_class(
+        re.compile(r"btn-secondary")
+    )
+    # Downloading Chromium stays possible, as the second choice.
+    expect(outcome.get_by_role("button", name="Tải Chromium")).to_have_class(
+        re.compile(r"btn-secondary")
+    )
+
+    switch.click()
+    wait_until(page, lambda: api.state.settings.browser == "auto" and len(api.state.jobs) == 2)
+    expect(page.locator("#opt-browser")).to_have_value("auto")
+    # The scripted job fails again although Edge is there now: the help says so plainly.
+    retried = page.locator("#job-outcome [data-browser-help='ready']")
+    expect(retried).to_be_visible()
+    expect(retried).to_have_text("Lúc này máy đã có Microsoft Edge. Bấm Thử lại để phân tích tiếp.")
+    expect(
+        page.locator("#job-outcome").get_by_role("button", name="Thử lại", exact=True)
+    ).to_have_class(re.compile(r"btn-primary"))
+
+
+def test_missing_chosen_browser_with_nothing_installed(ui: OpenUi) -> None:
+    """Edge is chosen and nothing is installed: install Edge, or go back to "Tự động", which
+    then offers the Chromium download."""
+    session = ui()
+    api = session.api
+    api.state.browsers_available = False
+    api.state.settings = api.state.settings.model_copy(update={"browser": "msedge"})
+    session.open()
+    page = session.page
+    session.start_job("no-browser.example")
+    outcome = page.locator("#job-outcome [data-code='browser_missing']")
+    help_block = outcome.locator("[data-browser-help]")
+    expect(help_block).to_have_attribute("data-browser-help", "pinned")
+    expect(outcome).to_contain_text("Bạn đang chọn Microsoft Edge")
+    expect(outcome).to_contain_text("Cài Microsoft Edge, rồi bấm Thử lại.")
+    expect(outcome.get_by_role("button", name="Tải Chromium")).to_have_count(0)
+    outcome.get_by_role("button", name="Chuyển sang Tự động", exact=True).click()
+    expect(help_block).to_have_attribute("data-browser-help", "none")
+    wait_until(page, lambda: api.state.settings.browser == "auto")
+    expect(outcome).to_contain_text("Máy chưa có trình duyệt mà công cụ dùng được")
+    expect(outcome.get_by_role("button", name="Tải Chromium")).to_have_class(
+        re.compile(r"btn-primary")
+    )
+    expect(outcome.locator(".browser-help-lead")).to_be_focused()
 
 
 def test_install_from_the_start_banner(ui: OpenUi) -> None:
@@ -866,15 +1135,7 @@ def test_history_lists_sites_and_opens_results(ui: OpenUi) -> None:
 def test_empty_history_invites_a_first_analysis(ui: OpenUi) -> None:
     session = ui()
     page = session.page
-
-    def empty(route: Route) -> None:
-        route.fulfill(
-            status=200,
-            content_type="application/json",
-            body='{"output_root": "C:/empty", "entries": []}',
-        )
-
-    page.route("**/api/history", empty)
+    show_no_history(page)
     session.open()
     expect(page.locator("#history-empty")).to_be_visible()
     expect(page.locator("#history-empty")).to_contain_text("Chưa có trang nào.")
@@ -985,8 +1246,10 @@ def test_missing_site_returns_to_the_start_view(ui: OpenUi) -> None:
 
 
 def test_keyboard_only_flow(ui: OpenUi) -> None:
-    session = ui().open()
+    session = ui()
     page = session.page
+    show_no_history(page)
+    session.open()
     page.keyboard.press("Tab")
     assert page.evaluate("document.activeElement.className") == "skip-link"
     page.keyboard.press("Enter")
@@ -1024,6 +1287,85 @@ def test_keyboard_only_flow(ui: OpenUi) -> None:
     assert active_id(page) == "tab-files"
     expect(page.locator("#tab-files")).to_have_attribute("tabindex", "0")
     expect(page.locator("#tab-preview")).to_have_attribute("tabindex", "-1")
+
+
+def test_url_error_is_announced_also_when_repeated(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    error = page.locator("#url-error")
+    assert error.get_attribute("role") == "alert"
+    page.evaluate(
+        """() => {
+          const box = document.getElementById('url-error');
+          window.__urlErrorStates = [];
+          new MutationObserver(() => window.__urlErrorStates.push(box.hidden))
+            .observe(box, { attributes: true, attributeFilter: ['hidden'] });
+        }"""
+    )
+    page.focus("#url-input")
+    page.keyboard.press("Enter")
+    expect(error).to_have_text("Nhập địa chỉ trang web, ví dụ stripe.com.")
+    # Pressing Enter again with the same mistake hides the alert for a moment and shows it
+    # again, so that a screen reader reads it a second time; focus stays in the field.
+    page.keyboard.press("Enter")
+    wait_until(page, lambda: page.evaluate("window.__urlErrorStates.length") >= 3)
+    assert page.evaluate("window.__urlErrorStates") == [False, True, False]
+    expect(error).to_be_visible()
+    assert active_id(page) == "url-input"
+
+
+def test_progress_of_a_long_step_is_announced_politely(ui: OpenUi) -> None:
+    session = ui()
+    session.api.event_delay_s = 0.05
+    session.open()
+    page = session.page
+    live = page.locator("#job-progress-live")
+    assert live.get_attribute("role") == "status"
+    assert live.get_attribute("aria-live") == "polite"
+    session.start_job("slow.example")
+    # The first progress text of the step is read at once...
+    expect(live).to_have_text("Đang thu thập — chờ trang… 0s")
+    # ...the next ones (5 a second here) at most every 10 s, while the page shows them all.
+    # (one event per 0.2 s: 5 s to 39 s of the fake clock lie well inside the first 10 s)
+    expect(page.locator("#job-progress")).to_have_text(re.compile(r"chờ trang… ([5-9]|[1-3]\d)s$"))
+    expect(live).to_have_text("Đang thu thập — chờ trang… 0s")
+    page.click("#cancel-button")
+    expect(live).to_have_text(re.compile(r"^Đang hủy… Công cụ dừng ở bước kế tiếp"))
+    expect(page.locator("#job-outcome [data-outcome='info']")).to_be_visible()
+    expect(live).to_have_text("")
+
+
+def test_throttled_announcer_keeps_the_latest_text(ui: OpenUi) -> None:
+    session = ui().open()
+    seen = session.page.evaluate(
+        """async () => {
+          const { ThrottledAnnouncer } = await import('/static/dom.js');
+          const region = document.createElement('p');
+          const said = [];
+          new MutationObserver(() => said.push(region.textContent))
+            .observe(region, { childList: true, characterData: true, subtree: true });
+          const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const announcer = new ThrottledAnnouncer(region, 300);
+          announcer.say('A');
+          announcer.say('B');
+          announcer.say('C');
+          await pause(450);
+          announcer.say('C');
+          announcer.say('D');
+          announcer.restart();
+          announcer.say('E');
+          await pause(400);
+          announcer.say('F');
+          announcer.announce('G');
+          await pause(400);
+          announcer.reset();
+          await pause(20);
+          return said;
+        }"""
+    )
+    # A at once, B dropped for the newer C (after 300 ms), C again skipped, D dropped by
+    # restart(), E at once, F replaced by the immediate G, then the region is cleared.
+    assert seen == ["A", "C", "E", "G", ""]
 
 
 def test_tab_pattern_roles(ui: OpenUi) -> None:
@@ -1097,6 +1439,7 @@ def test_dark_theme_follows_the_system_and_the_toggle(ui: OpenUi) -> None:
     page.locator(".theme-option", has=page.locator("input[value='light']")).click()
     assert page.evaluate(background) == "rgb(243, 245, 247)"
     assert "color-scheme: light" in (frame.get_attribute("srcdoc") or "")
+    assert "gdm.theme=light" in page.evaluate("document.cookie")
     page.reload()
     session.wait_ready()
     assert page.evaluate(background) == "rgb(243, 245, 247)"
@@ -1104,6 +1447,7 @@ def test_dark_theme_follows_the_system_and_the_toggle(ui: OpenUi) -> None:
     page.locator(".theme-option", has=page.locator("input[value='auto']")).click()
     assert page.evaluate(background) == "rgb(15, 18, 22)"
     assert page.evaluate("localStorage.getItem('gdm.theme')") is None
+    assert "gdm.theme" not in page.evaluate("document.cookie")
 
 
 def _no_horizontal_scroll(page: Page) -> bool:
@@ -1139,6 +1483,43 @@ def test_layout_has_no_horizontal_scroll(ui: OpenUi, width: int) -> None:
         assert _no_horizontal_scroll(page), tab
     expect(page.locator("#sidebar")).to_be_visible()
     expect(page.locator("#history-toggle")).to_be_hidden()
+
+
+#: Topbar elements whose right edge passes the viewport.
+TOPBAR_OVERFLOW = """
+() => Array.from(document.querySelectorAll('.topbar *'))
+  .filter((element) => {
+    const box = element.getBoundingClientRect();
+    return box.width > 0 && box.right > window.innerWidth + 0.5;
+  })
+  .map((element) => `${element.tagName}#${element.id}.${element.getAttribute('class') || ''}`)
+"""
+
+
+@pytest.mark.parametrize("width", [320, 400, 560, 720, 760, 800, 860, 900])
+def test_topbar_fits_narrow_windows(ui: OpenUi, width: int) -> None:
+    """`gdm ui` runs in browser tabs of any width: the topbar shrinks its browser pill and
+    hides button labels instead of scrolling sideways; every control keeps its name."""
+    session = ui(width=width, height=700)
+    session.api.state.chromium_installed = True  # the longest label: "Chromium (Playwright)"
+    session.open()
+    page = session.page
+    pill = page.locator("#browser-pill")
+    expect(pill).to_have_attribute("data-state", "ok")
+    expect(page.locator("#browser-pill-text")).to_have_text("Trình duyệt: Chromium (Playwright)")
+    assert page.evaluate(TOPBAR_OVERFLOW) == []
+    assert _no_horizontal_scroll(page)
+    expect(
+        page.get_by_role("button", name="Trình duyệt: Chromium (Playwright)", exact=True)
+    ).to_be_visible()
+    expect(page.get_by_role("button", name="Hướng dẫn", exact=True)).to_be_visible()
+    expect(page.get_by_role("radio", name="Tối", exact=True)).to_be_attached()
+    if width < 900:
+        expect(page.get_by_role("button", name="Lịch sử", exact=True)).to_be_visible()
+    for scheme in ("dark", "light"):
+        page.emulate_media(color_scheme=scheme)
+        assert page.evaluate(TOPBAR_OVERFLOW) == []
+        assert _no_horizontal_scroll(page)
 
 
 def test_narrow_window_uses_a_history_drawer(ui: OpenUi) -> None:

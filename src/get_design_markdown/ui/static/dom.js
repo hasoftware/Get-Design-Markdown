@@ -100,6 +100,120 @@ export const storage = {
   },
 };
 
+// ─── Preferences kept between launches ───────────────────────────────────────
+// localStorage belongs to one origin (scheme + host + port), and the UI server picks a new
+// port on every launch, so a choice kept only there is forgotten next time. Cookies are shared
+// by every port of 127.0.0.1, so each preference is also written to a small cookie (short ASCII
+// values, never sent anywhere but this machine; the server ignores them).
+
+const PREF_MAX_AGE_S = 400 * 24 * 60 * 60;
+
+function readCookie(key) {
+  try {
+    const prefix = `${encodeURIComponent(key)}=`;
+    for (const part of document.cookie.split(";")) {
+      const item = part.trim();
+      if (item.startsWith(prefix)) return decodeURIComponent(item.slice(prefix.length));
+    }
+  } catch {
+    // Cookies blocked: fall back to localStorage alone.
+  }
+  return null;
+}
+
+function writeCookie(key, value, maxAge) {
+  try {
+    document.cookie =
+      `${encodeURIComponent(key)}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; ` +
+      "SameSite=Strict";
+  } catch {
+    // Same as above.
+  }
+}
+
+export const prefs = {
+  get(key) {
+    const shared = readCookie(key);
+    return shared !== null ? shared : storage.get("local", key);
+  },
+  set(key, value) {
+    writeCookie(key, value, PREF_MAX_AGE_S);
+    storage.set("local", key, value);
+  },
+  remove(key) {
+    writeCookie(key, "", 0);
+    storage.remove("local", key);
+  },
+};
+
+// ─── Throttled announcements ─────────────────────────────────────────────────
+
+/**
+ * Feeds a polite live region (role=status) with texts that may change many times a second,
+ * e.g. the progress of a long step: a new text is announced at once when the previous
+ * announcement is at least `intervalMs` old; otherwise only the latest text is kept and
+ * announced when the interval is over. A text equal to the last announced one is skipped.
+ */
+export class ThrottledAnnouncer {
+  constructor(element, intervalMs) {
+    this.element = element;
+    this.intervalMs = intervalMs;
+    this.timer = 0;
+    this.pending = null;
+    this.last = "";
+    this.lastAt = -Infinity;
+  }
+
+  say(text) {
+    if (!text) return;
+    if (text === this.last) {
+      this.cancel();
+      return;
+    }
+    const wait = this.lastAt + this.intervalMs - Date.now();
+    if (wait <= 0) {
+      this.announce(text);
+      return;
+    }
+    this.pending = text;
+    if (!this.timer) {
+      this.timer = window.setTimeout(() => {
+        this.timer = 0;
+        const next = this.pending;
+        this.pending = null;
+        if (next) this.announce(next);
+      }, wait);
+    }
+  }
+
+  /** Announce now, whatever the interval (an answer to something the user just did). */
+  announce(text) {
+    this.cancel();
+    if (!text || text === this.last) return;
+    this.last = text;
+    this.lastAt = Date.now();
+    this.element.textContent = text;
+  }
+
+  /** Drop a waiting text and let the next one through at once (a new stage started). */
+  restart() {
+    this.cancel();
+    this.lastAt = -Infinity;
+  }
+
+  cancel() {
+    window.clearTimeout(this.timer);
+    this.timer = 0;
+    this.pending = null;
+  }
+
+  reset() {
+    this.restart();
+    this.last = "";
+    this.element.textContent = "";
+  }
+}
+
 // ─── Formatting (Vietnamese) ─────────────────────────────────────────────────
 
 const numberFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });

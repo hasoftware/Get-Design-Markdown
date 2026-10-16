@@ -8,6 +8,8 @@ export class HistoryList {
   constructor({ onOpen }) {
     this.onOpen = onOpen;
     this.entries = [];
+    /** True once the list has been read at least once. */
+    this.loaded = false;
     this.active = null;
     this.list = byId("history-list");
     this.empty = byId("history-empty");
@@ -28,6 +30,7 @@ export class HistoryList {
     try {
       const data = await api.get("/api/history");
       this.entries = data.entries || [];
+      this.loaded = true;
       this.render();
     } catch (error) {
       if (error.code === "forbidden") return;

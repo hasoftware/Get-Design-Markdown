@@ -1,6 +1,7 @@
-// Light / dark theme: follows the system by default, with a manual choice remembered locally.
+// Light / dark theme: follows the system by default, with a manual choice remembered on this
+// machine (prefs: kept between launches although the server port changes).
 
-import { storage } from "./dom.js";
+import { prefs } from "./dom.js";
 
 const THEME_KEY = "gdm.theme";
 const MODES = ["auto", "light", "dark"];
@@ -8,7 +9,7 @@ const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set();
 
 export function themeMode() {
-  const saved = storage.get("local", THEME_KEY);
+  const saved = prefs.get(THEME_KEY);
   return MODES.includes(saved) ? saved : "auto";
 }
 
@@ -36,9 +37,9 @@ export function onThemeChange(handler) {
 export function setThemeMode(mode) {
   const value = MODES.includes(mode) ? mode : "auto";
   if (value === "auto") {
-    storage.remove("local", THEME_KEY);
+    prefs.remove(THEME_KEY);
   } else {
-    storage.set("local", THEME_KEY, value);
+    prefs.set(THEME_KEY, value);
   }
   apply(value);
 }

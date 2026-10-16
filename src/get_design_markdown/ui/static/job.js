@@ -2,8 +2,9 @@
 // robots.txt warnings, cancellation and the outcome (with help that depends on the error).
 
 import { api } from "./api.js";
-import { mountInstallWidget } from "./browsers.js";
+import { BROWSER_LABELS, mountInstallWidget } from "./browsers.js";
 import {
+  ThrottledAnnouncer,
   byId,
   clear,
   formatClock,
@@ -13,6 +14,7 @@ import {
   icon,
   parseDate,
   storage,
+  toast,
 } from "./dom.js";
 
 const POLL_MS = 500;
@@ -26,6 +28,35 @@ const FINISHED = new Set(["succeeded", "failed", "cancelled"]);
 const LOGGED = new Set(["step", "info", "success", "warning", "error"]);
 const LOG_ICONS = { step: "chevron", info: "info", success: "ok", warning: "alert", error: "error" };
 const ROBOTS_RE = /robots\.txt/i;
+// The robots.txt check reports a refusal (also a server error, "coi như không cho phép") with
+// "không cho phép"; a robots.txt it could not read ("không kiểm tra được") is not a refusal.
+const ROBOTS_DISALLOW_RE = /không cho phép/i;
+const ROBOTS_UNCHECKED_RE = /không kiểm tra được|không tải được|hết thời gian/i;
+const ROBOTS_TIMEOUT_RE = /hết thời gian/i;
+/** Screen readers hear the progress of a long step at most this often (the log says more). */
+const PROGRESS_ANNOUNCE_MS = 10000;
+const CANCELLING_TEXT =
+  "Đang hủy… Công cụ dừng ở bước kế tiếp, có thể mất vài giây nếu trang đang tải.";
+
+/**
+ * What a warning says about robots.txt: "disallow" (the site refuses automated access),
+ * "unchecked" (robots.txt could not be read: nothing is known) or null (not about robots.txt).
+ */
+export function robotsVerdict(message) {
+  const text = String(message || "").normalize("NFC");
+  if (!ROBOTS_RE.test(text)) return null;
+  if (ROBOTS_DISALLOW_RE.test(text)) return "disallow";
+  if (ROBOTS_UNCHECKED_RE.test(text)) return "unchecked";
+  return null;
+}
+
+/** A plain log line for a robots.txt that could not be read (no network jargon). */
+function robotsUncheckedText(message) {
+  const reason = ROBOTS_TIMEOUT_RE.test(String(message).normalize("NFC"))
+    ? "tải tệp này quá lâu"
+    : "không tải được tệp này";
+  return `Không kiểm tra được robots.txt của trang (${reason}). Công cụ vẫn tiếp tục.`;
+}
 
 export function isFinished(job) {
   return Boolean(job && FINISHED.has(job.status));
@@ -54,6 +85,7 @@ export class JobController {
     this.rulerFill = byId("ruler-fill");
     this.steps = Array.from(byId("job-steps").children);
     this.progress = byId("job-progress");
+    this.announcer = new ThrottledAnnouncer(byId("job-progress-live"), PROGRESS_ANNOUNCE_MS);
     this.robots = byId("job-robots");
     this.robotsText = byId("job-robots-text");
     this.outcome = byId("job-outcome");
@@ -137,6 +169,7 @@ export class JobController {
     this.timer = 0;
     window.clearInterval(this.clock);
     this.clock = 0;
+    this.announcer.reset();
   }
 
   async poll() {
@@ -182,14 +215,25 @@ export class JobController {
   }
 
   handleEvent(event) {
-    if (event.kind === "progress" || event.kind === "step") {
+    if (event.kind === "step") {
       this.progress.textContent = event.message;
+      // The step is read out from the log; its first progress text may follow at once.
+      this.announcer.restart();
+    } else if (event.kind === "progress") {
+      this.progress.textContent = event.message;
+      if (!(this.job && this.job.cancel_requested)) this.announcer.say(event.message);
     }
-    if (event.kind === "warning" && ROBOTS_RE.test(event.message)) {
-      this.robotsText.textContent = event.message;
-      this.robots.hidden = false;
+    let line = event;
+    if (event.kind === "warning") {
+      const robots = robotsVerdict(event.message);
+      if (robots === "disallow") {
+        this.robotsText.textContent = event.message;
+        this.robots.hidden = false;
+      } else if (robots === "unchecked") {
+        line = { ...event, kind: "info", message: robotsUncheckedText(event.message), hint: null };
+      }
     }
-    if (LOGGED.has(event.kind)) this.addLogLine(event);
+    if (LOGGED.has(line.kind)) this.addLogLine(line);
   }
 
   addLogLine(event) {
@@ -259,8 +303,8 @@ export class JobController {
     this.cancelButton.setAttribute("aria-busy", job.cancel_requested ? "true" : "false");
     this.cancelLabel.textContent = job.cancel_requested ? "Đang hủy…" : "Hủy phân tích";
     if (job.cancel_requested && running) {
-      this.progress.textContent =
-        "Đang hủy… Công cụ dừng ở bước kế tiếp, có thể mất vài giây nếu trang đang tải.";
+      this.progress.textContent = CANCELLING_TEXT;
+      this.announcer.announce(CANCELLING_TEXT);
     }
   }
 
@@ -335,7 +379,7 @@ export class JobController {
     }
   }
 
-  finish() {
+  async finish() {
     this.stopPolling();
     const job = this.job;
     this.render();
@@ -376,20 +420,26 @@ export class JobController {
       return;
     }
     const error = job.error || { code: "unexpected", message: "Đã xảy ra lỗi.", hint: null };
-    // For a missing browser the panel's own help (Edge/Chrome or "Tải Chromium") replaces the
-    // command-line hint, and downloading Chromium is the main action.
+    // For a missing browser the panel's own help replaces the command-line hint. It depends on
+    // what the machine has now and on the browser chosen in the options, so the browser list
+    // is read again first. "Thử lại" is the main action only once a browser is usable.
     const browserMissing = error.code === "browser_missing";
+    let retryFirst = !browserMissing;
+    if (browserMissing) {
+      await this.app.browsers.refresh();
+      if (this.job !== job) return;
+      retryFirst = this.browserSituation().mode === "ready";
+    }
     this.showOutcome({
       kind: "danger",
       title: error.message,
       hint: browserMissing ? null : error.hint,
       code: error.code,
       actions: [
-        { label: "Thử lại", primary: !browserMissing, run: () => this.app.startJob(job.url) },
+        { label: "Thử lại", primary: retryFirst, run: () => this.app.startJob(job.url) },
         { label: "Sửa địa chỉ", run: () => this.app.showStart({ url: job.url, focusUrl: true }) },
       ],
     });
-    if (browserMissing) this.app.browsers.refresh();
   }
 
   showOutcome({ kind, title, hint = null, code = null, actions = [] }) {
@@ -429,17 +479,103 @@ export class JobController {
     );
     this.outcome.replaceChildren(panel);
     this.outcome.hidden = false;
-    const slot = panel.querySelector("[data-install-slot]");
-    if (slot) mountInstallWidget(slot, this.app.browsers);
+    this.mountInstall(panel);
   }
 
-  /** Extra, plain-language help for a JobError code (null when there is nothing to add). */
-  errorHelp(code) {
-    const extra = (...children) => h("div", { class: "extra" }, ...children);
-    switch (code) {
-      case "browser_missing":
-        return extra(
-          h("p", { text: "Máy chưa có trình duyệt mà công cụ dùng được. Chọn một trong hai cách:" }),
+  mountInstall(container) {
+    const slot = container.querySelector("[data-install-slot]");
+    if (slot) {
+      mountInstallWidget(slot, this.app.browsers, { quiet: slot.dataset.installSlot === "quiet" });
+    }
+  }
+
+  // ─── Missing browser ───────────────────────────────────────────────────────
+
+  /**
+   * mode: "ready" (a usable browser is there now), "switch" (the browser chosen in the options
+   * is missing but another one is installed), "pinned" (the chosen browser is missing and so
+   * is every other one) or "none" (automatic choice, nothing installed).
+   */
+  browserSituation() {
+    const browsers = this.app.browsers;
+    const settings = this.app.settings.settings;
+    const choice = settings && settings.browser ? settings.browser : "auto";
+    const fallback = browsers.autoChoice;
+    if (choice === "auto") return { mode: fallback ? "ready" : "none", choice, name: fallback };
+    if (browsers.isAvailable(choice)) return { mode: "ready", choice, name: choice };
+    return { mode: fallback ? "switch" : "pinned", choice, name: fallback };
+  }
+
+  /** The help for code browser_missing, written for the situation above. */
+  browserHelp() {
+    const { mode, choice, name } = this.browserSituation();
+    const chosen = BROWSER_LABELS[choice] || choice;
+    const found = name ? BROWSER_LABELS[name] || name : "";
+    const block = (...children) =>
+      h("div", { class: "extra", dataset: { browserHelp: mode } }, ...children);
+    const lead = (text) => h("p", { class: "browser-help-lead", text, attrs: { tabindex: "-1" } });
+    const slot = (quiet) =>
+      h("div", { class: "install-slot", attrs: { "data-install-slot": quiet ? "quiet" : "" } });
+    const button = (label, primary, retry) =>
+      h(
+        "div",
+        { class: "outcome-actions" },
+        h(
+          "button",
+          {
+            class: primary ? "btn btn-primary" : "btn btn-secondary",
+            attrs: { type: "button" },
+            on: { click: (event) => this.useAutomaticBrowser(event.currentTarget, { retry }) },
+          },
+          label,
+        ),
+      );
+    const pinned = `Bạn đang chọn ${chosen} trong Tùy chọn nâng cao, nhưng máy chưa có trình duyệt này.`;
+
+    switch (mode) {
+      case "ready":
+        return block(lead(`Lúc này máy đã có ${found}. Bấm Thử lại để phân tích tiếp.`));
+      case "switch":
+        return block(
+          lead(pinned),
+          h("p", {
+            text: `Chọn “Tự động” để công cụ dùng trình duyệt có sẵn trên máy (lúc này là ${found}).`,
+          }),
+          button("Chuyển sang Tự động và thử lại", true, true),
+          choice === "chromium"
+            ? [h("p", { text: "Hoặc tải Chromium cho công cụ, rồi bấm Thử lại." }), slot(true)]
+            : h("p", { text: `Hoặc cài ${chosen}, rồi bấm Thử lại.` }),
+        );
+      case "pinned":
+        if (choice === "chromium") {
+          return block(
+            lead(pinned),
+            h(
+              "ul",
+              {},
+              h("li", { text: "Tải Chromium ngay tại đây (khoảng 150 MB, vài phút), rồi bấm Thử lại." }),
+              h("li", {
+                text: "Hoặc cài Microsoft Edge hoặc Google Chrome, rồi chọn “Tự động” trong Tùy chọn nâng cao.",
+              }),
+            ),
+            slot(false),
+          );
+        }
+        return block(
+          lead(pinned),
+          h(
+            "ul",
+            {},
+            h("li", { text: `Cài ${chosen}, rồi bấm Thử lại.` }),
+            h("li", {
+              text: "Hoặc chuyển sang “Tự động” để công cụ dùng trình duyệt nào có sẵn, kể cả Chromium tải ngay tại đây.",
+            }),
+          ),
+          button("Chuyển sang Tự động", false, false),
+        );
+      default:
+        return block(
+          lead("Máy chưa có trình duyệt mà công cụ dùng được. Chọn một trong hai cách:"),
           h(
             "ul",
             {},
@@ -448,8 +584,39 @@ export class JobController {
             }),
             h("li", { text: "Hoặc tải Chromium ngay tại đây (khoảng 150 MB, vài phút), rồi bấm Thử lại." }),
           ),
-          h("div", { class: "install-slot", attrs: { "data-install-slot": "" } }),
+          slot(false),
         );
+    }
+  }
+
+  /** Save browser = "auto", then retry the job, or redraw the help for the new choice. */
+  async useAutomaticBrowser(button, { retry }) {
+    button.disabled = true;
+    const ok = await this.app.settings.saveNow({ browser: "auto" });
+    if (!ok) {
+      button.disabled = false;
+      toast("Chưa lưu được lựa chọn trình duyệt. Xem Tùy chọn nâng cao rồi thử lại.", "error", 6000);
+      return;
+    }
+    if (retry) {
+      if (this.job) this.app.startJob(this.job.url);
+      return;
+    }
+    const current = this.outcome.querySelector("[data-browser-help]");
+    if (!current) return;
+    const next = this.browserHelp();
+    current.replaceWith(next);
+    this.mountInstall(next);
+    const lead = next.querySelector(".browser-help-lead");
+    if (lead) lead.focus();
+  }
+
+  /** Extra, plain-language help for a JobError code (null when there is nothing to add). */
+  errorHelp(code) {
+    const extra = (...children) => h("div", { class: "extra" }, ...children);
+    switch (code) {
+      case "browser_missing":
+        return this.browserHelp();
       case "bot_blocked":
         return extra(
           h("p", {

@@ -431,10 +431,13 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
+/* The topbar never overflows: the browser pill gives up width first (ellipsis), then the
+   brand name; buttons and the theme switch keep their size. */
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   font-family: var(--font-display);
   font-weight: 650;
   font-size: var(--fs-md);
@@ -442,7 +445,14 @@ textarea {
   white-space: nowrap;
 }
 
+.brand-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .brand-mark {
+  flex: none;
   width: 26px;
   height: 26px;
   color: var(--accent);
@@ -454,16 +464,25 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--s2);
+  min-width: 0;
+  flex-shrink: 8;
 }
 
 .history-toggle {
   display: none;
 }
 
+.history-toggle,
+#help-button,
+.theme-switch {
+  flex: none;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
+  min-width: 0;
   max-width: 300px;
   min-height: 30px;
   padding: 0 var(--s3);
@@ -1671,6 +1690,11 @@ details[open] > summary .chevron {
   border-top-color: color-mix(in srgb, currentColor 25%, transparent);
 }
 
+/* Focused by script after the browser choice changes (read out, like a page title). */
+.outcome .browser-help-lead {
+  outline: none;
+}
+
 .outcome ul {
   padding-left: 1.2em;
   display: grid;
@@ -2616,6 +2640,17 @@ details[open] > summary .chevron {
     display: inline-flex;
   }
 
+  /* Icon only; the label stays for screen readers (and as the button's tooltip). */
+  #help-button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
   .sidebar {
     position: fixed;
     top: var(--topbar-h);
@@ -2670,10 +2705,18 @@ details[open] > summary .chevron {
 }
 
 @media (max-width: 720px) {
-  .brand-name,
-  #help-button span,
-  .history-toggle span {
+  .brand-name {
     display: none;
+  }
+
+  .history-toggle span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .pill {
@@ -2694,6 +2737,23 @@ details[open] > summary .chevron {
 
   .job-head {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 440px) {
+  /* The browser pill becomes its status dot; the text stays its accessible name. */
+  .pill {
+    padding: 0 10px;
+  }
+
+  .pill span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }
 

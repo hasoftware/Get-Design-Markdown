@@ -163,9 +163,12 @@ def test_network_and_storage_go_through_guarded_helpers() -> None:
             assert re.search(r"(?<![\w.])fetch\(", text) is None, path.name
         if path.name != "dom.js":
             assert "localStorage" not in text and "sessionStorage" not in text, path.name
+            assert "document.cookie" not in text, path.name
     dom = _read("dom.js")
-    # Every access to the storage areas sits inside try/catch.
-    assert dom.count("try {") >= 4
+    # Every access to the storage areas and to the preference cookies sits inside try/catch.
+    assert dom.count("try {") >= 6
+    # Preference cookies: whole site path, never sent along with requests from other sites.
+    assert "path=/" in dom and "SameSite=Strict" in dom
     api = _read("api.js")
     assert "X-GDM-Token" in api
     assert "history.replaceState" in api

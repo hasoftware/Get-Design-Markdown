@@ -6,7 +6,7 @@
 
 import { api, bootToken, forgetToken, onApi } from "./api.js";
 import { BROWSER_LABELS, BrowserService, mountInstallWidget } from "./browsers.js";
-import { byId, clear, h, storage, toast } from "./dom.js";
+import { byId, clear, h, prefs, toast } from "./dom.js";
 import { HistoryList } from "./history.js";
 import { JobController } from "./job.js";
 import { ResultsView } from "./results.js";
@@ -16,6 +16,7 @@ import { initTheme, onThemeChange } from "./theme.js";
 const APP_TITLE = "Get Design Markdown";
 const HEARTBEAT_MS = 30000;
 const GUIDE_KEY = "gdm.guideDone";
+const URL_ERROR_REPEAT_MS = 150;
 const VIEWS = ["start", "job", "results", "loading"];
 
 function showExpired() {
@@ -32,7 +33,9 @@ class App {
     this.view = "start";
     this.expired = false;
     this.starting = false;
+    this.guideDecided = false;
     this.heartbeatTimer = 0;
+    this.urlErrorTimer = 0;
     this.urlInput = byId("url-input");
     this.analyzeButton = byId("analyze-button");
     this.browsers = new BrowserService();
@@ -54,9 +57,9 @@ class App {
     mountInstallWidget(document.querySelector("[data-install-quiet]"), this.browsers, { quiet: true });
     this.startHeartbeat();
     this.showVersion();
-    if (storage.get("local", GUIDE_KEY) !== "1") byId("guide").hidden = false;
+    const history = this.history.load().then(() => this.initGuide());
 
-    await Promise.allSettled([this.settings.load(), this.browsers.refresh(), this.history.load()]);
+    await Promise.allSettled([this.settings.load(), this.browsers.refresh(), history]);
     if (this.expired) return;
     const resumed = await this.jobs.resume();
     if (this.expired || resumed) return;
@@ -152,7 +155,20 @@ class App {
     target.focus();
   }
 
+  /**
+   * The first-run guide shows until it is dismissed, and never once sites have been analysed:
+   * the exe's window keeps no browser data between launches, the history does.
+   */
+  initGuide() {
+    if (this.expired || this.guideDecided) return;
+    this.guideDecided = true;
+    const dismissed = prefs.get(GUIDE_KEY) === "1";
+    const experienced = this.history.loaded && this.history.entries.length > 0;
+    if (!dismissed && !experienced) byId("guide").hidden = false;
+  }
+
   showGuide() {
+    this.guideDecided = true;
     this.showStart();
     const guide = byId("guide");
     guide.hidden = false;
@@ -161,8 +177,9 @@ class App {
   }
 
   hideGuide() {
+    this.guideDecided = true;
     byId("guide").hidden = true;
-    storage.set("local", GUIDE_KEY, "1");
+    prefs.set(GUIDE_KEY, "1");
     this.urlInput.focus();
   }
 
@@ -185,12 +202,12 @@ class App {
 
   async submitUrl() {
     const url = this.urlInput.value.trim();
-    this.clearUrlError();
     if (!url) {
       this.showUrlError("Nhập địa chỉ trang web, ví dụ stripe.com.");
       this.urlInput.focus();
       return;
     }
+    this.clearUrlError();
     if (this.jobs.active) {
       this.jobs.show();
       toast("Đang có một lượt phân tích chạy. Chờ nó xong hoặc bấm Hủy.", "info", 4500);
@@ -244,19 +261,34 @@ class App {
     if (show) byId("busy-text").textContent = `Đang phân tích ${job.site || job.url}.`;
   }
 
+  /** The error under the URL field (role=alert: read out as soon as it shows). */
   showUrlError(message, hint = null) {
     const box = byId("url-error");
-    clear(box);
-    box.appendChild(h("span", { text: message }));
-    if (hint) box.appendChild(h("span", { class: "hint", text: hint }));
-    box.hidden = false;
+    const key = JSON.stringify([message, hint || ""]);
+    const fill = () => {
+      clear(box);
+      box.appendChild(h("span", { text: message }));
+      if (hint) box.appendChild(h("span", { class: "hint", text: hint }));
+      box.dataset.text = key;
+      box.hidden = false;
+    };
+    window.clearTimeout(this.urlErrorTimer);
     this.urlInput.setAttribute("aria-invalid", "true");
+    if (!box.hidden && box.dataset.text === key) {
+      // The same error again: hide it for a moment so that screen readers announce it again.
+      box.hidden = true;
+      this.urlErrorTimer = window.setTimeout(fill, URL_ERROR_REPEAT_MS);
+      return;
+    }
+    fill();
   }
 
   clearUrlError() {
     const box = byId("url-error");
+    window.clearTimeout(this.urlErrorTimer);
     box.hidden = true;
     clear(box);
+    delete box.dataset.text;
     this.urlInput.removeAttribute("aria-invalid");
   }
 
