@@ -1,0 +1,1155 @@
+"""The local UI frontend (ui/static) in a real Chromium, against the fake API (ui_fake_api).
+
+Every page opened through the `ui` fixture is checked when the test ends: no console errors,
+no uncaught exceptions, no Content-Security-Policy violations and no request leaving
+127.0.0.1 (preview.html's own Google Fonts stylesheet is answered locally and allowed, the
+FILES_HTML_CSP permits it inside the sandboxed preview).
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import time
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+import pytest
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    ConsoleMessage,
+    Dialog,
+    Page,
+    Request,
+    Route,
+    expect,
+    sync_playwright,
+)
+
+from get_design_markdown.ui.jobs import JobError, JobRequest, JobSnapshot
+from tests.ui_fake_api import ACME_SITE, BETA_SITE, FAKE_TOKEN, FakeApi
+
+pytestmark = pytest.mark.browser
+
+expect.set_options(timeout=10_000)
+
+#: Optional browser channel for a manual run, e.g. GDM_UI_TEST_CHANNEL=msedge (the engine of
+#: the Windows window, WebView2). Unset: Playwright's Chromium, as in CI.
+CHANNEL_ENV = "GDM_UI_TEST_CHANNEL"
+
+#: Collects CSP violations in every frame the page opens.
+CSP_PROBE = """
+window.__gdmViolations = [];
+document.addEventListener("securitypolicyviolation", (event) => {
+  window.__gdmViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+});
+"""
+
+#: WCAG contrast of every visible text node against its composed background.
+CONTRAST_CHECK = """
+() => {
+  const parse = (value) => {
+    const match = /rgba?\\(([^)]+)\\)/.exec(value);
+    if (!match) return null;
+    const parts = match[1].split(/[\\s,/]+/).filter(Boolean).map(Number);
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+  };
+  const blend = (top, bottom) => ({
+    r: top.r * top.a + bottom.r * (1 - top.a),
+    g: top.g * top.a + bottom.g * (1 - top.a),
+    b: top.b * top.a + bottom.b * (1 - top.a),
+    a: 1,
+  });
+  const channel = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminance = (c) => 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+  const background = (element) => {
+    const layers = [];
+    for (let node = element; node; node = node.parentElement) {
+      const colour = parse(getComputedStyle(node).backgroundColor);
+      if (colour && colour.a > 0) {
+        layers.push(colour);
+        if (colour.a >= 1) break;
+      }
+    }
+    let base = { r: 255, g: 255, b: 255, a: 1 };
+    for (let i = layers.length - 1; i >= 0; i -= 1) base = blend(layers[i], base);
+    return base;
+  };
+  const failures = [];
+  for (const element of document.querySelectorAll("body *")) {
+    if (["SCRIPT", "STYLE", "OPTION", "svg", "use"].includes(element.tagName)) continue;
+    const skipped = ".sr-only, #toasts, [disabled], [aria-disabled='true'], noscript";
+    if (element.closest(skipped)) continue;
+    const ownText = Array.from(element.childNodes).some(
+      (node) => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim(),
+    );
+    if (!ownText || element.getClientRects().length === 0) continue;
+    const style = getComputedStyle(element);
+    if (style.visibility === "hidden") continue;
+    const back = background(element);
+    let fore = parse(style.color);
+    if (fore.a < 1) fore = blend(fore, back);
+    const [l1, l2] = [luminance(fore), luminance(back)].sort((a, b) => b - a);
+    const ratio = (l1 + 0.05) / (l2 + 0.05);
+    const size = parseFloat(style.fontSize);
+    const bold = parseInt(style.fontWeight, 10) >= 700;
+    const minimum = size >= 24 || (bold && size >= 18.66) ? 3 : 4.5;
+    if (ratio < minimum) {
+      const text = element.textContent.trim().slice(0, 40);
+      failures.push(`${element.tagName}.${element.className} "${text}" ${ratio.toFixed(2)}`);
+    }
+  }
+  return failures;
+}
+"""
+
+#: Interactive elements without an accessible name.
+UNNAMED_CONTROLS = """
+() => {
+  const missing = [];
+  const selector = "button, a[href], input:not([type=hidden]), select, textarea, [role=tab]";
+  for (const element of document.querySelectorAll(selector)) {
+    if (element.getClientRects().length === 0 && element.type !== "radio") continue;
+    if (element.closest("[hidden]")) continue;
+    const labelled = element.getAttribute("aria-labelledby");
+    const name =
+      element.getAttribute("aria-label") ||
+      (labelled &&
+        labelled
+          .split(" ")
+          .map((id) => document.getElementById(id)?.textContent || "")
+          .join(" ")) ||
+      (element.labels && Array.from(element.labels).map((label) => label.textContent).join(" ")) ||
+      element.textContent ||
+      element.getAttribute("title") ||
+      "";
+    if (!name.trim()) missing.push(element.outerHTML.slice(0, 80));
+  }
+  return missing;
+}
+"""
+
+
+# ─── Session plumbing ────────────────────────────────────────────────────────
+
+
+@dataclass
+class UiSession:
+    """One browser context showing the UI, plus what it did on the wire and in the console."""
+
+    api: FakeApi
+    context: BrowserContext
+    page: Page
+    console_errors: list[str] = field(default_factory=list)
+    page_errors: list[str] = field(default_factory=list)
+    external: list[str] = field(default_factory=list)
+    preview_external: list[str] = field(default_factory=list)
+    api_requests: list[tuple[str, str, str | None]] = field(default_factory=list)
+    allowed_console: list[re.Pattern[str]] = field(default_factory=list)
+    allowed_csp: list[re.Pattern[str]] = field(default_factory=list)
+
+    def open(self, *, token: bool = True, wait: bool = True) -> UiSession:
+        self.page.goto(self.api.launch_url if token else self.api.url)
+        if wait:
+            self.wait_ready()
+        return self
+
+    def wait_ready(self) -> None:
+        # Locator assertions only: a string page.wait_for_function() would poll with eval(),
+        # which the page's CSP (script-src 'self') rightly refuses.
+        try:
+            self.page.wait_for_selector("#app:not([hidden])")
+        except Exception as error:
+            raise AssertionError(f"the UI did not start: {self.page_errors}") from error
+        expect(self.page.locator("#opt-pages")).not_to_have_value("")
+        self.page.wait_for_selector("#history-loading", state="hidden")
+
+    def allow_console(self, pattern: str) -> None:
+        self.allowed_console.append(re.compile(pattern))
+
+    def allow_csp(self, pattern: str) -> None:
+        """Expect the page CSP to block something matching `pattern` (console line and
+        securitypolicyviolation event)."""
+        self.allowed_csp.append(re.compile(pattern))
+        self.allowed_console.append(re.compile(pattern))
+
+    def start_job(self, url: str) -> None:
+        if not self.page.is_visible("#view-start"):
+            self.page.click("#new-analysis")
+        self.page.fill("#url-input", url)
+        self.page.press("#url-input", "Enter")
+
+    def wait_results(self) -> None:
+        self.page.wait_for_selector("#view-results:not([hidden])", timeout=15_000)
+
+    def problems(self) -> list[str]:
+        found: list[str] = []
+        for message in self.console_errors:
+            if not any(pattern.search(message) for pattern in self.allowed_console):
+                found.append(f"console: {message}")
+        found += [f"pageerror: {error}" for error in self.page_errors]
+        found += [f"external request: {url}" for url in self.external]
+        if not self.page.is_closed():
+            for frame in self.page.frames:
+                try:
+                    violations = frame.evaluate("window.__gdmViolations || []")
+                except Exception:
+                    continue
+                found += [
+                    f"csp ({frame.url[:60]}): {item}"
+                    for item in violations
+                    if not any(pattern.search(item) for pattern in self.allowed_csp)
+                ]
+        return found
+
+
+def _is_preview_frame(url: str) -> bool:
+    return "/files/" in url and url.split("?")[0].endswith("/preview.html")
+
+
+@pytest.fixture(scope="module")
+def browser() -> Iterator[Browser]:
+    with sync_playwright() as playwright:
+        instance = playwright.chromium.launch(channel=os.environ.get(CHANNEL_ENV) or None)
+        try:
+            yield instance
+        finally:
+            instance.close()
+
+
+OpenUi = Callable[..., UiSession]
+
+
+@pytest.fixture
+def ui(browser: Browser, ui_fake_api: FakeApi) -> Iterator[OpenUi]:
+    """Factory: ui(width=1280, height=860, color_scheme="light") -> UiSession (not opened)."""
+    sessions: list[UiSession] = []
+    ui_fake_api.event_delay_s = 0.01
+
+    def factory(width: int = 1280, height: int = 860, color_scheme: str = "light") -> UiSession:
+        context = browser.new_context(
+            viewport={"width": width, "height": height},
+            color_scheme=color_scheme,  # type: ignore[arg-type]
+        )
+        context.add_init_script(CSP_PROBE)
+        context.set_default_timeout(10_000)
+        page = context.new_page()
+        session = UiSession(api=ui_fake_api, context=context, page=page)
+
+        def guard(route: Route) -> None:
+            url = route.request.url
+            if url.startswith((ui_fake_api.url, "data:", "blob:", "about:")):
+                route.continue_()
+                return
+            try:
+                frame_url = route.request.frame.url
+            except Exception:
+                frame_url = ""
+            if _is_preview_frame(frame_url):
+                session.preview_external.append(url)
+                route.fulfill(status=200, content_type="text/css", body="")
+            else:
+                session.external.append(url)
+                route.abort()
+
+        def on_console(message: ConsoleMessage) -> None:
+            if message.type == "error":
+                location = message.location.get("url", "") if message.location else ""
+                session.console_errors.append(f"{message.text} @ {location}")
+
+        def on_request(request: Request) -> None:
+            if "/api/" in request.url:
+                session.api_requests.append(
+                    (request.method, request.url, request.headers.get("x-gdm-token"))
+                )
+
+        context.route("**/*", guard)
+        page.on("console", on_console)
+        page.on("pageerror", lambda error: session.page_errors.append(str(error)))
+        page.on("request", on_request)
+        sessions.append(session)
+        return session
+
+    yield factory
+    problems = [problem for session in sessions for problem in session.problems()]
+    for session in sessions:
+        session.context.close()
+    assert problems == []
+
+
+def wait_until(page: Page, check: Callable[[], bool], timeout: float = 10.0) -> None:
+    """Poll `check` while letting Playwright work: the context routes every request through
+    this process, so a plain time.sleep() would stall the page's requests."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if check():
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError("condition not reached in time")
+
+
+def active_id(page: Page) -> str:
+    return str(page.evaluate("document.activeElement ? document.activeElement.id : ''"))
+
+
+# ─── Session token, heartbeat, expiry ────────────────────────────────────────
+
+
+def test_token_is_removed_from_the_address_bar_and_sent_on_every_call(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    assert "token" not in page.url
+    assert page.evaluate("sessionStorage.getItem('gdm.token')") == FAKE_TOKEN
+    wait_until(page, lambda: session.api.state.heartbeats >= 1)
+    paths = {urlpath(url) for _method, url, _token in session.api_requests}
+    assert {"/api/settings", "/api/history", "/api/browser/status", "/api/heartbeat"} <= paths
+    assert all(token == FAKE_TOKEN for _m, _u, token in session.api_requests)
+
+    # A reload (no fragment any more) keeps working with the token kept for this tab.
+    page.reload()
+    session.wait_ready()
+    assert all(token == FAKE_TOKEN for _m, _u, token in session.api_requests)
+
+    # The page sends a heartbeat when it becomes visible again.
+    before = session.api.state.heartbeats
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    wait_until(page, lambda: session.api.state.heartbeats > before)
+
+
+def urlpath(url: str) -> str:
+    return re.sub(r"^https?://[^/]+", "", url).split("?")[0]
+
+
+def test_missing_token_shows_the_expired_page(ui: OpenUi) -> None:
+    session = ui().open(token=False, wait=False)
+    page = session.page
+    expect(page.locator("#expired")).to_be_visible()
+    expect(page.locator("#expired-title")).to_have_text("Phiên làm việc đã hết hạn")
+    expect(page.locator("#expired")).to_contain_text("gdm ui")
+    expect(page.locator("#app")).to_be_hidden()
+    assert session.api_requests == []
+
+
+def test_wrong_token_shows_the_expired_page(ui: OpenUi) -> None:
+    session = ui()
+    session.allow_console(r"status of 403")
+    session.page.goto(f"{session.api.url}#token=not-the-token")
+    expect(session.page.locator("#expired")).to_be_visible()
+    assert session.page.evaluate("sessionStorage.getItem('gdm.token')") is None
+
+
+def test_session_rotated_mid_session(ui: OpenUi) -> None:
+    session = ui().open()
+    session.allow_console(r"status of 403")
+    try:
+        session.api.token = "rotated"
+        session.page.click(f".history-item[data-site='{BETA_SITE}']")
+        expect(session.page.locator("#expired")).to_be_visible()
+    finally:
+        session.api.token = FAKE_TOKEN
+
+
+def test_lost_connection_banner_and_reconnect(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.allow_console(r"ERR_FAILED|net::")
+    page.route("**/api/**", lambda route: route.abort())
+    page.click(f".history-item[data-site='{BETA_SITE}']")
+    expect(page.locator("#connection-banner")).to_be_visible()
+    expect(page.locator("#connection-banner")).to_contain_text("Mất kết nối")
+    page.unroute("**/api/**")
+    page.click("#connection-retry")
+    expect(page.locator("#connection-banner")).to_be_hidden()
+
+
+# ─── First run ───────────────────────────────────────────────────────────────
+
+
+def test_first_run_guide_is_dismissed_and_reopened(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    guide = page.locator("#guide")
+    expect(guide).to_be_visible()
+    expect(guide.locator(".guide-steps > li")).to_have_count(3)
+    expect(guide).to_contain_text("Dán địa chỉ trang web")
+    expect(guide).to_contain_text("Xem và sao chép DESIGN.md cho AI")
+    expect(guide).to_contain_text(
+        "Công cụ chỉ để tham khảo và học hỏi phong cách; không sao chép logo hay tài sản có "
+        "bản quyền."
+    )
+    page.click("#guide-close")
+    expect(guide).to_be_hidden()
+    assert active_id(page) == "url-input"
+    page.reload()
+    session.wait_ready()
+    expect(guide).to_be_hidden()
+    page.click("#help-button")
+    expect(guide).to_be_visible()
+    assert active_id(page) == "guide"
+
+
+# ─── Settings ────────────────────────────────────────────────────────────────
+
+
+def test_settings_round_trip(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    api = session.api
+    page.click('.stepper [data-step="1"]')
+    page.check("#opt-dark")
+    page.check('input[name="opt-lang"][value="vi"]')
+    page.click("#advanced > summary")
+    page.check("#opt-prompt")
+    page.uncheck("#opt-open")
+    page.fill("#opt-timeout", "90")
+    page.press("#opt-timeout", "Tab")
+    page.fill("#opt-delta-e", "2.5")
+    page.press("#opt-delta-e", "Tab")
+    page.fill("#opt-max-elements", "5000")
+    page.press("#opt-max-elements", "Tab")
+    page.select_option("#opt-browser", "msedge")
+
+    def saved() -> bool:
+        settings = api.state.settings
+        return (
+            settings.pages == 1
+            and settings.dark
+            and settings.lang == "vi"
+            and settings.prompt_only
+            and not settings.open_after
+            and settings.timeout_s == 90
+            and settings.delta_e == 2.5
+            and settings.max_elements == 5000
+            and settings.browser == "msedge"
+        )
+
+    wait_until(page, saved)
+    expect(page.locator("#opt-browser-status")).to_contain_text("Đã tìm thấy Microsoft Edge")
+
+    page.reload()
+    session.wait_ready()
+    assert page.input_value("#opt-pages") == "1"
+    assert page.is_checked("#opt-dark")
+    assert page.is_checked('input[name="opt-lang"][value="vi"]')
+    assert page.is_checked("#opt-prompt")
+    assert not page.is_checked("#opt-open")
+    assert page.input_value("#opt-timeout") == "90"
+    assert page.input_value("#opt-delta-e") == "2.5"
+    assert page.input_value("#opt-max-elements") == "5000"
+    assert page.input_value("#opt-browser") == "msedge"
+
+    # "Đặt lại" restores the defaults, the output folder stays.
+    page.click("#advanced > summary")
+    page.click("#settings-reset")
+    wait_until(
+        page,
+        lambda: (
+            api.state.settings.model_dump(exclude={"output_dir"})
+            == api.state.defaults.model_dump(exclude={"output_dir"})
+        ),
+    )
+    expect(page.locator("#opt-pages")).to_have_value("0")
+    expect(page.locator("#opt-browser")).to_have_value("auto")
+
+
+def test_invalid_setting_is_shown_next_to_its_field(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.allow_console(r"status of 422")
+    page.click("#advanced > summary")
+    page.fill("#opt-timeout", "3")
+    page.press("#opt-timeout", "Tab")
+    error = page.locator("#opt-timeout_s-error")
+    expect(error).to_be_visible()
+    expect(error).to_have_text("Nhập một số từ 5 đến 600.")
+    expect(page.locator("#opt-timeout")).to_have_attribute("aria-invalid", "true")
+    assert session.api.state.settings.timeout_s == 45
+
+    # A job is not started while an option is invalid; focus goes to the field.
+    page.fill("#url-input", "demo.example")
+    page.press("#url-input", "Enter")
+    expect(page.locator("#toasts")).to_contain_text("Một tùy chọn chưa hợp lệ")
+    assert active_id(page) == "opt-timeout"
+    assert session.api.state.jobs == {}
+
+    page.fill("#opt-timeout", "30")
+    page.press("#opt-timeout", "Tab")
+    expect(error).to_be_hidden()
+    wait_until(page, lambda: session.api.state.settings.timeout_s == 30)
+    expect(page.locator("#opt-timeout")).not_to_have_attribute("aria-invalid", "true")
+
+
+def test_locked_output_folder_is_read_only(ui: OpenUi) -> None:
+    """`gdm ui --out X` locks the output folder: shown read-only with an explanation."""
+    session = ui()
+    page = session.page
+
+    def locked(route: Route) -> None:
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        response = route.fetch()
+        data = response.json()
+        data["output_root_locked"] = True
+        data["output_root"] = "D:/Ket-qua-co-dinh"
+        route.fulfill(response=response, json=data)
+
+    page.route("**/api/settings", locked)
+    session.open()
+    page.click("#advanced > summary")
+    output = page.locator("#opt-output")
+    expect(output).to_have_value("D:/Ket-qua-co-dinh")
+    expect(output).to_have_attribute("readonly", "")
+    expect(page.locator("#opt-output-locked")).to_be_visible()
+    expect(page.locator("#opt-output-locked")).to_contain_text("--out")
+    expect(page.locator("#opt-output-help")).to_be_hidden()
+    expect(page.locator("#app-version")).to_have_text(re.compile(r"^Phiên bản \d+\.\d+"))
+
+
+def test_stepper_respects_the_limits(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    minus = page.locator('.stepper [data-step="-1"]')
+    plus = page.locator('.stepper [data-step="1"]')
+    expect(minus).to_be_disabled()
+    for _ in range(12):
+        if plus.is_enabled():
+            plus.click()
+    expect(page.locator("#opt-pages")).to_have_value("10")
+    expect(plus).to_be_disabled()
+    wait_until(page, lambda: session.api.state.settings.pages == 10)
+
+
+# ─── Jobs ────────────────────────────────────────────────────────────────────
+
+
+def test_successful_job_shows_steps_log_and_results(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.start_job("demo.example")
+    session.wait_results()
+
+    job = next(iter(session.api.state.jobs.values()))
+    assert job.request.url == "demo.example"
+    assert job.snapshot.status == "succeeded"
+    steps = page.locator("#job-steps > li")
+    expect(steps).to_have_count(4)
+    assert [steps.nth(i).get_attribute("data-state") for i in range(4)] == ["done"] * 4
+    log = page.locator("#job-log")
+    assert log.get_attribute("role") == "log"
+    assert log.get_attribute("aria-live") == "polite"
+    expect(log.locator(".log-line")).to_have_count(14)
+    expect(log).to_contain_text("Bước 4/4")
+    expect(log).to_contain_text("Hoàn tất: đã tạo DESIGN.md")
+    assert page.evaluate("sessionStorage.getItem('gdm.ackJob')") == job.snapshot.id
+
+    # Results of the new site, also selected in the history.
+    expect(page.locator("#results-title")).to_have_text("Acme Cloud")
+    expect(page.locator("#results-stats li")).to_have_count(5)
+    expect(page.locator("#results-stats li").first).to_have_text("10 màu")
+    expect(page.locator(".history-item[data-site='demo.example']")).to_have_attribute(
+        "aria-current", "true"
+    )
+    assert page.title().startswith("Acme Cloud")
+
+    preview = page.locator("#preview-wrap iframe")
+    assert preview.get_attribute("sandbox") == "allow-scripts"
+    assert preview.get_attribute("src") == "/files/demo.example/preview.html"
+
+    page.click("#tab-design")
+    design = page.locator("#design-wrap iframe")
+    assert design.get_attribute("sandbox") == ""
+    srcdoc = design.get_attribute("srcdoc") or ""
+    assert "Design Reference" in srcdoc
+    assert "<script" not in srcdoc.lower()
+    assert 'href="https://' not in srcdoc
+    assert 'class="sw"' in srcdoc
+    assert '<html lang="en">' in srcdoc
+    page.click("#front-matter > summary")
+    expect(page.locator("#front-matter-code")).to_contain_text("version: alpha")
+    expect(page.locator("#front-matter-code .swatch").first).to_be_visible()
+    assert (
+        page.get_attribute("#download-design", "href") == "/files/demo.example/DESIGN.md?download=1"
+    )
+
+    page.click("#tab-ai")
+    expect(page.locator("#prompt-present")).to_be_visible()
+    expect(page.locator("#prompt-images li")).to_have_count(2)
+    assert page.locator("#prompt-wrap iframe").get_attribute("sandbox") == ""
+
+    page.click("#tab-shots")
+    shots = page.locator("#shots .shot")
+    expect(shots).to_have_count(4)
+    shots.first.click()
+    expect(page.locator("#lightbox")).to_be_visible()
+    expect(page.locator("#lightbox-img")).to_have_attribute(
+        "src", "/files/demo.example/screenshots/home-1440.png"
+    )
+    page.keyboard.press("Escape")
+    expect(page.locator("#lightbox")).to_be_hidden()
+
+    page.click("#tab-files")
+    expect(page.locator("#files-body tr")).to_have_count(13)
+    expect(page.locator("#folder-path")).to_contain_text("demo.example")
+
+
+def test_progress_stays_when_open_after_is_off_and_robots_warning_shows(ui: OpenUi) -> None:
+    session = ui()
+    api = session.api
+    api.state.settings = api.state.settings.model_copy(update={"open_after": False})
+    session.open()
+    page = session.page
+    session.start_job("robots.example")
+    outcome = page.locator("#job-outcome [data-outcome='ok']")
+    expect(outcome).to_be_visible()
+    robots = page.locator("#job-robots")
+    expect(robots).to_be_visible()
+    expect(robots).to_contain_text("robots.txt không cho phép truy cập")
+    expect(page.locator("#job-title")).to_have_text("Đã phân tích xong robots.example")
+    expect(page.locator("#job-ruler")).to_have_attribute("data-state", "succeeded")
+    expect(page.locator("#cancel-button")).to_be_hidden()
+    outcome.get_by_role("button", name="Xem kết quả").click()
+    session.wait_results()
+    expect(page.locator(".history-item[data-site='robots.example']")).to_be_visible()
+
+
+def test_failing_job_shows_message_hint_and_retry(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.start_job("fail.example")
+    outcome = page.locator("#job-outcome [data-outcome='danger']")
+    expect(outcome).to_be_visible()
+    assert outcome.get_attribute("role") == "alert"
+    assert outcome.get_attribute("data-code") == "bot_blocked"
+    expect(outcome).to_contain_text("chặn trình duyệt tự động")
+    expect(outcome).to_contain_text("Công cụ không vượt qua cơ chế chống bot")
+    expect(outcome).to_contain_text("Captcha và trang kiểm tra trình duyệt")
+    expect(page.locator("#job-steps > li").first).to_have_attribute("data-state", "failed")
+    expect(page.locator("#job-ruler")).to_have_attribute("data-state", "failed")
+    expect(page.locator("#job-log .log-line[data-kind='error']")).to_have_count(1)
+
+    outcome.get_by_role("button", name="Thử lại").click()
+    wait_until(page, lambda: len(session.api.state.jobs) == 2)
+    expect(page.locator("#job-outcome [data-outcome='danger']")).to_be_visible()
+
+    page.locator("#job-outcome").get_by_role("button", name="Sửa địa chỉ").click()
+    expect(page.locator("#view-start")).to_be_visible()
+    expect(page.locator("#url-input")).to_have_value("fail.example")
+    assert active_id(page) == "url-input"
+
+
+def test_invalid_url_is_reported_under_the_field(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.allow_console(r"status of 422")
+    page.press("#url-input", "Enter")
+    expect(page.locator("#url-error")).to_have_text("Nhập địa chỉ trang web, ví dụ stripe.com.")
+    page.fill("#url-input", "ftp://example.com")
+    page.press("#url-input", "Enter")
+    expect(page.locator("#url-error")).to_contain_text("Chỉ hỗ trợ URL http/https")
+    expect(page.locator("#url-input")).to_have_attribute("aria-invalid", "true")
+    page.fill("#url-input", "stripe.com")
+    expect(page.locator("#url-error")).to_be_hidden()
+    assert session.api.state.jobs == {}
+
+
+def test_missing_browser_flow_downloads_chromium(ui: OpenUi) -> None:
+    session = ui()
+    api = session.api
+    api.state.browsers_available = False
+    session.open()
+    page = session.page
+    expect(page.locator("#browser-pill-text")).to_have_text("Chưa có trình duyệt")
+    expect(page.locator("#browser-pill")).to_have_attribute("data-state", "missing")
+    expect(page.locator("#browser-banner")).to_be_visible()
+
+    session.start_job("no-browser.example")
+    outcome = page.locator("#job-outcome [data-code='browser_missing']")
+    expect(outcome).to_be_visible()
+    expect(outcome).to_contain_text("Cài Microsoft Edge hoặc Google Chrome")
+    expect(outcome).not_to_contain_text("playwright install")
+    install = outcome.get_by_role("button", name="Tải Chromium")
+    expect(install).to_have_class(re.compile(r"btn-primary"))
+    expect(outcome.get_by_role("button", name="Thử lại")).to_have_class(
+        re.compile(r"btn-secondary")
+    )
+
+    api.event_delay_s = 0.15
+    install.click()
+    expect(outcome.locator("progress")).to_be_visible()
+    expect(outcome).to_contain_text("Đã tải xong Chromium.")
+    assert api.state.chromium_installed
+    expect(page.locator("#browser-pill-text")).to_have_text("Trình duyệt: Chromium (Playwright)")
+    expect(page.locator("#browser-banner")).to_be_hidden()
+
+
+def test_install_from_the_start_banner(ui: OpenUi) -> None:
+    session = ui()
+    session.api.state.browsers_available = False
+    session.api.event_delay_s = 0.15
+    session.open()
+    page = session.page
+    banner = page.locator("#browser-banner")
+    banner.get_by_role("button", name="Tải Chromium").click()
+    expect(banner.locator("progress")).to_be_visible()
+    expect(banner.locator(".install-message")).to_contain_text("Đang tải Chromium")
+    expect(banner).to_be_hidden(timeout=15_000)
+    expect(page.locator("#browser-list")).to_contain_text("Chromium (Playwright): có sẵn")
+
+
+def test_cancel_a_slow_job(ui: OpenUi) -> None:
+    session = ui()
+    session.api.event_delay_s = 0.05
+    session.open()
+    page = session.page
+    session.start_job("slow.example")
+    expect(page.locator("#job-title")).to_have_text("Đang phân tích slow.example")
+    expect(page.locator("#job-progress")).to_contain_text("chờ trang")
+    expect(page.locator("#job-elapsed")).to_contain_text("Đã chạy")
+    page.click("#cancel-button")
+    expect(page.locator("#cancel-label")).to_have_text("Đang hủy…")
+    outcome = page.locator("#job-outcome [data-outcome='info']")
+    expect(outcome).to_be_visible()
+    expect(outcome).to_contain_text("Đã hủy phân tích")
+    expect(page.locator("#job-ruler")).to_have_attribute("data-state", "cancelled")
+    expect(page.locator("#cancel-button")).to_be_hidden()
+    job = next(iter(session.api.state.jobs.values()))
+    assert job.snapshot.status == "cancelled"
+
+
+def test_running_job_is_resumed_after_a_reload(ui: OpenUi) -> None:
+    session = ui()
+    session.api.event_delay_s = 0.05
+    session.open()
+    page = session.page
+    session.start_job("slow.example")
+    expect(page.locator("#job-progress")).to_contain_text("chờ trang")
+    page.reload()
+    session.wait_ready()
+    expect(page.locator("#view-job")).to_be_visible()
+    expect(page.locator("#job-title")).to_have_text("Đang phân tích slow.example")
+    expect(page.locator("#job-log")).to_contain_text("Bước 1/4")
+    # The start view says a job is running and leads back to it.
+    page.click("#new-analysis")
+    expect(page.locator("#busy-banner")).to_contain_text("Đang phân tích slow.example")
+    page.click("#busy-show")
+    expect(page.locator("#view-job")).to_be_visible()
+    page.click("#cancel-button")
+    expect(page.locator("#job-outcome [data-outcome='info']")).to_be_visible()
+
+
+def test_busy_server_attaches_to_the_running_job(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.allow_console(r"status of 409")
+    session.api.event_delay_s = 0.05
+    running = session.api.start_job(JobRequest(url="slow.example"))
+    session.start_job("other.example")
+    expect(page.locator("#job-title")).to_have_text("Đang phân tích slow.example")
+    assert list(session.api.state.jobs) == [running.id]
+    page.click("#cancel-button")
+    expect(page.locator("#job-outcome [data-outcome='info']")).to_be_visible()
+
+
+def _failed_snapshot(api: FakeApi, code: str, message: str, hint: str | None) -> str:
+    now = datetime.now(UTC)
+    snapshot = JobSnapshot(
+        id="abcdefabcdef",
+        url="scripted.example",
+        status="failed",
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        step=1,
+        total=4,
+        step_message="Thu thập dữ liệu trang (Tầng 1)",
+        last_seq=0,
+        settings=api.state.settings,
+        site="scripted.example",
+        error=JobError(code=code, message=message, hint=hint),
+    )
+    return '{"job": ' + snapshot.model_dump_json() + "}"
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("timeout", "Tăng thời gian chờ lên 90 giây rồi thử lại"),
+        ("login_required", "Công cụ chỉ đọc được trang công khai"),
+        ("navigation", "máy có kết nối Internet không"),
+        ("invalid_url", "bắt đầu bằng https://"),
+        ("unexpected", "ui.log"),
+        ("analysis", None),
+    ],
+)
+def test_error_help_depends_on_the_error_code(ui: OpenUi, code: str, expected: str | None) -> None:
+    session = ui().open()
+    page = session.page
+    body = _failed_snapshot(session.api, code, f"Lỗi kiểu {code}.", "Gợi ý của máy chủ.")
+
+    def scripted(route: Route) -> None:
+        if route.request.method == "POST" and urlpath(route.request.url) == "/api/jobs":
+            route.fulfill(status=202, content_type="application/json", body=body)
+        elif urlpath(route.request.url) == "/api/jobs/abcdefabcdef":
+            route.fulfill(status=200, content_type="application/json", body=body)
+        else:
+            route.fallback()
+
+    page.route("**/api/jobs**", scripted)
+    session.start_job("scripted.example")
+    outcome = page.locator(f"#job-outcome [data-code='{code}']")
+    expect(outcome).to_be_visible()
+    expect(outcome).to_contain_text(f"Lỗi kiểu {code}.")
+    expect(outcome).to_contain_text("Gợi ý của máy chủ.")
+    extra = outcome.locator(".extra")
+    if expected is None:
+        expect(extra).to_have_count(0)
+    else:
+        expect(extra).to_contain_text(expected)
+    if code == "timeout":
+        outcome.get_by_role("button", name=re.compile("Tăng thời gian chờ")).click()
+        wait_until(page, lambda: session.api.state.settings.timeout_s == 90)
+
+
+# ─── History and results ─────────────────────────────────────────────────────
+
+
+def test_history_lists_sites_and_opens_results(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    items = page.locator(".history-item")
+    expect(items).to_have_count(2)
+    expect(items.first).to_contain_text("Acme Cloud")
+    expect(items.first.locator("img")).to_have_attribute(
+        "src", f"/files/{ACME_SITE}/screenshots/home-1440.png"
+    )
+    beta = page.locator(f".history-item[data-site='{BETA_SITE}']")
+    expect(beta).to_contain_text("Beta Studio")
+    expect(beta).to_contain_text("beta.example")
+    expect(beta).to_contain_text("13/10/2026")
+    beta.focus()
+    page.keyboard.press("Enter")
+    session.wait_results()
+    expect(page.locator("#results-title")).to_have_text("Beta Studio")
+    expect(beta).to_have_attribute("aria-current", "true")
+    expect(page.locator("#results-warnings")).to_be_visible()
+    expect(page.locator("#results-warnings-title")).to_have_text("Ghi chú khi phân tích (1)")
+
+    page.click("#tab-design")
+    srcdoc = page.locator("#design-wrap iframe").get_attribute("srcdoc") or ""
+    assert '<html lang="vi">' in srcdoc
+    page.click("#tab-ai")
+    expect(page.locator("#prompt-absent")).to_be_visible()
+    expect(page.locator("#prompt-present")).to_be_hidden()
+    page.click("#goto-prompt-option")
+    expect(page.locator("#view-start")).to_be_visible()
+    assert page.evaluate("document.getElementById('advanced').open") is True
+    assert active_id(page) == "opt-prompt"
+
+    # The open site is remembered for a reload of this tab.
+    page.click(f".history-item[data-site='{BETA_SITE}']")
+    session.wait_results()
+    page.click("#tab-shots")
+    expect(page.locator("#shots .empty")).to_contain_text("Không có ảnh chụp")
+    page.reload()
+    session.wait_ready()
+    session.wait_results()
+    expect(page.locator("#results-title")).to_have_text("Beta Studio")
+    expect(page.locator("#tab-shots")).to_have_attribute("aria-selected", "true")
+
+
+def test_empty_history_invites_a_first_analysis(ui: OpenUi) -> None:
+    session = ui()
+    page = session.page
+
+    def empty(route: Route) -> None:
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"output_root": "C:/empty", "entries": []}',
+        )
+
+    page.route("**/api/history", empty)
+    session.open()
+    expect(page.locator("#history-empty")).to_be_visible()
+    expect(page.locator("#history-empty")).to_contain_text("Chưa có trang nào.")
+    expect(page.locator("#history-list")).to_be_hidden()
+
+
+def test_copy_design_and_open_folder(ui: OpenUi) -> None:
+    session = ui()
+    origin = session.api.url.rstrip("/")
+    session.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=origin)
+    session.open()
+    page = session.page
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    page.click("#copy-design-top")
+    expect(page.locator("#toasts")).to_contain_text("Đã sao chép DESIGN.md")
+    expect(page.locator("#copy-design-top")).to_have_attribute("data-copied", "true")
+    copied = str(page.evaluate("navigator.clipboard.readText()"))
+    expected = (session.api.output_root / ACME_SITE / "DESIGN.md").read_text(encoding="utf-8")
+    # The Windows clipboard hands text back with CRLF line breaks.
+    assert copied.replace("\r\n", "\n") == expected
+
+    page.click("#open-site-folder")
+    wait_until(page, lambda: bool(session.api.state.opened_folders))
+    assert session.api.state.opened_folders[-1].endswith(ACME_SITE)
+    page.click("#open-root")
+    wait_until(page, lambda: len(session.api.state.opened_folders) == 2)
+    assert session.api.state.opened_folders[-1] == str(session.api.output_root)
+
+
+HOSTILE = '<img src=x onerror="window.top.__pwned=1">'
+
+
+def test_site_derived_strings_never_become_markup(ui: OpenUi) -> None:
+    """Names, URLs, warnings, front matter and rendered Markdown come from an analysed site:
+    they are shown as text, and the Markdown frame cannot run anything."""
+    session = ui()
+    page = session.page
+    dialogs: list[str] = []
+
+    def on_dialog(dialog: Dialog) -> None:
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+
+    page.on("dialog", on_dialog)
+
+    def hostile(route: Route) -> None:
+        response = route.fetch()
+        data = response.json()
+        data["entry"]["name"] = f"Acme {HOSTILE}"
+        data["entry"]["url"] = "javascript:alert(1)"
+        data["entry"]["pages"] = [HOSTILE]
+        data["warnings"] = [f"Cảnh báo {HOSTILE}"]
+        data["design"]["front_matter"] = f"name: {HOSTILE}\ncolors:\n  primary: '#4f46e5'\n"
+        data["design"]["html"] = (
+            f"<h1>Tiêu đề</h1>{HOSTILE}<script>window.top.__pwned=2</script>"
+            '<p><a href="javascript:alert(1)">bấm</a> <a href="https://evil.example/">ra ngoài</a>'
+            ' <span onclick="alert(1)">x</span> #ff0000</p>'
+        )
+        route.fulfill(response=response, json=data)
+
+    page.route(f"**/api/results/{ACME_SITE}", hostile)
+    # Parsing the hostile fragment in an inert DOMParser document makes Chrome check its
+    # inline handlers against the page CSP, which refuses them: blocked, never run.
+    session.allow_csp(r"script-src-attr|Executing inline event handler violates")
+    session.open()
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    expect(page.locator("#results-title")).to_have_text(f"Acme {HOSTILE}")
+    assert page.locator("#results-title img, #results-meta img").count() == 0
+    expect(page.locator("#results-url")).to_have_text("javascript:alert(1)")
+    assert page.locator("#results-url a").count() == 0
+    expect(page.locator("#results-meta")).to_contain_text(HOSTILE)
+    page.click("#results-warnings > summary")
+    expect(page.locator("#results-warnings-list li")).to_have_text(f"Cảnh báo {HOSTILE}")
+    assert page.locator("#results-warnings-list img").count() == 0
+
+    page.click("#tab-design")
+    page.click("#front-matter > summary")
+    expect(page.locator("#front-matter-code")).to_contain_text(HOSTILE)
+    assert page.locator("#front-matter-code img").count() == 0
+    srcdoc = page.locator("#design-wrap iframe").get_attribute("srcdoc") or ""
+    head, body = srcdoc.split("</head>", 1)
+    for forbidden in ("<script", "onerror", "onclick", "javascript:", "<img", "<a "):
+        assert forbidden not in body.lower(), forbidden
+    # The frame title repeats the site name, escaped.
+    assert "&lt;img src=x onerror=" in head
+    assert 'title="https://evil.example/"' in srcdoc
+    assert 'class="sw"' in srcdoc
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.__pwned") is None
+    assert dialogs == []
+
+
+def test_missing_site_returns_to_the_start_view(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    session.allow_console(r"status of 404")
+    page.evaluate("sessionStorage.setItem('gdm.openSite', 'gone.example')")
+    page.reload()
+    session.wait_ready()
+    expect(page.locator("#toasts")).to_contain_text("Không còn kết quả cho gone.example")
+    expect(page.locator("#view-start")).to_be_visible()
+    assert page.evaluate("sessionStorage.getItem('gdm.openSite')") is None
+
+
+# ─── Keyboard, accessibility, theme, layout ──────────────────────────────────
+
+
+def test_keyboard_only_flow(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.className") == "skip-link"
+    page.keyboard.press("Enter")
+    assert active_id(page) == "main"
+    page.keyboard.press("Tab")
+    assert active_id(page) == "guide-close"
+    page.keyboard.press("Enter")
+    assert active_id(page) == "url-input"
+    page.keyboard.type("keys.example")
+    page.keyboard.press("Enter")
+    session.wait_results()
+    expect(page.locator("#results-title")).to_be_focused()
+
+    for _ in range(20):
+        if active_id(page) == "tab-preview":
+            break
+        page.keyboard.press("Tab")
+    assert active_id(page) == "tab-preview"
+    outline = page.evaluate(
+        "(() => { const s = getComputedStyle(document.activeElement);"
+        " return [s.outlineStyle, parseFloat(s.outlineWidth)]; })()"
+    )
+    assert outline[0] == "solid" and outline[1] >= 2
+
+    page.keyboard.press("ArrowRight")
+    assert active_id(page) == "tab-design"
+    expect(page.locator("#tab-design")).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#panel-design")).to_be_visible()
+    expect(page.locator("#panel-preview")).to_be_hidden()
+    page.keyboard.press("End")
+    assert active_id(page) == "tab-files"
+    page.keyboard.press("Home")
+    assert active_id(page) == "tab-preview"
+    page.keyboard.press("ArrowLeft")
+    assert active_id(page) == "tab-files"
+    expect(page.locator("#tab-files")).to_have_attribute("tabindex", "0")
+    expect(page.locator("#tab-preview")).to_have_attribute("tabindex", "-1")
+
+
+def test_tab_pattern_roles(ui: OpenUi) -> None:
+    session = ui().open()
+    page = session.page
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    tabs = page.locator("[role=tablist] [role=tab]")
+    expect(tabs).to_have_count(5)
+    for index in range(5):
+        tab = tabs.nth(index)
+        panel_id = tab.get_attribute("aria-controls")
+        assert panel_id
+        panel = page.locator(f"#{panel_id}")
+        expect(panel).to_have_attribute("role", "tabpanel")
+        expect(panel).to_have_attribute("aria-labelledby", tab.get_attribute("id") or "")
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_text_contrast_and_control_names(ui: OpenUi, scheme: str) -> None:
+    session = ui(color_scheme=scheme).open()
+    page = session.page
+    page.click("#advanced > summary")
+    assert page.evaluate(CONTRAST_CHECK) == []
+    assert page.evaluate(UNNAMED_CONTROLS) == []
+
+    session.start_job("fail.example")
+    expect(page.locator("#job-outcome [data-outcome='danger']")).to_be_visible()
+    assert page.evaluate(CONTRAST_CHECK) == []
+
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    page.click("#results-warnings > summary")
+    for tab in ("preview", "design", "ai", "shots", "files"):
+        page.click(f"#tab-{tab}")
+        assert page.evaluate(CONTRAST_CHECK) == [], tab
+        assert page.evaluate(UNNAMED_CONTROLS) == [], tab
+
+
+def test_contrast_probe_flags_low_contrast(ui: OpenUi) -> None:
+    """The probe used above is not vacuous: a pale grey line on white is reported."""
+    session = ui().open()
+    page = session.page
+    page.evaluate(
+        """() => {
+          const probe = document.createElement('p');
+          probe.id = 'low-contrast-probe';
+          probe.textContent = 'Chữ quá nhạt';
+          probe.style.color = '#c8c8c8';
+          probe.style.background = '#ffffff';
+          document.getElementById('view-start').prepend(probe);
+        }"""
+    )
+    failures = page.evaluate(CONTRAST_CHECK)
+    assert len(failures) == 1
+    assert "Chữ quá nhạt" in failures[0]
+    page.evaluate("document.getElementById('low-contrast-probe').remove()")
+
+
+def test_dark_theme_follows_the_system_and_the_toggle(ui: OpenUi) -> None:
+    session = ui(color_scheme="dark").open()
+    page = session.page
+    background = "getComputedStyle(document.body).backgroundColor"
+    assert page.evaluate(background) == "rgb(15, 18, 22)"
+    page.click(f".history-item[data-site='{BETA_SITE}']")
+    session.wait_results()
+    page.click("#tab-design")
+    frame = page.locator("#design-wrap iframe")
+    assert "color-scheme: dark" in (frame.get_attribute("srcdoc") or "")
+
+    page.locator(".theme-option", has=page.locator("input[value='light']")).click()
+    assert page.evaluate(background) == "rgb(243, 245, 247)"
+    assert "color-scheme: light" in (frame.get_attribute("srcdoc") or "")
+    page.reload()
+    session.wait_ready()
+    assert page.evaluate(background) == "rgb(243, 245, 247)"
+    assert page.is_checked("input[name='theme'][value='light']")
+    page.locator(".theme-option", has=page.locator("input[value='auto']")).click()
+    assert page.evaluate(background) == "rgb(15, 18, 22)"
+    assert page.evaluate("localStorage.getItem('gdm.theme')") is None
+
+
+def _no_horizontal_scroll(page: Page) -> bool:
+    return bool(
+        page.evaluate(
+            "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+        )
+    )
+
+
+@pytest.mark.parametrize("width", [1024, 1280, 1920])
+def test_layout_has_no_horizontal_scroll(ui: OpenUi, width: int) -> None:
+    session = ui(width=width, height=768).open()
+    page = session.page
+    page.click("#advanced > summary")
+    assert _no_horizontal_scroll(page)
+    session.start_job("fail.example")
+    expect(page.locator("#job-outcome [data-outcome='danger']")).to_be_visible()
+    assert _no_horizontal_scroll(page)
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    for tab in ("preview", "design", "ai", "shots", "files"):
+        page.click(f"#tab-{tab}")
+        assert _no_horizontal_scroll(page), tab
+    expect(page.locator("#sidebar")).to_be_visible()
+    expect(page.locator("#history-toggle")).to_be_hidden()
+
+
+def test_narrow_window_uses_a_history_drawer(ui: OpenUi) -> None:
+    session = ui(width=800, height=700).open()
+    page = session.page
+    assert _no_horizontal_scroll(page)
+    toggle = page.locator("#history-toggle")
+    expect(toggle).to_be_visible()
+    expect(page.locator("#sidebar")).to_be_hidden()
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-expanded", "true")
+    expect(page.locator("#sidebar")).to_be_visible()
+    expect(page.locator(".history-item").first).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(page.locator("#sidebar")).to_be_hidden()
+    expect(toggle).to_be_focused()
+    toggle.click()
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    expect(page.locator("#sidebar")).to_be_hidden()
+    for tab in ("preview", "design", "ai", "shots", "files"):
+        page.click(f"#tab-{tab}")
+        assert _no_horizontal_scroll(page), tab

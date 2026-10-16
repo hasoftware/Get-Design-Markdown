@@ -4,12 +4,607 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
 <title>Get Design Markdown</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="/static/app.js"></script>
 </head>
 <body>
-<main>
-<h1>Get Design Markdown</h1>
-<p>Giao diện đang được xây dựng. Trong lúc chờ, hãy dùng lệnh <code>gdm get &lt;url&gt;</code>.</p>
-</main>
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-logo" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M3.5 8h3M3.5 12h2M3.5 16h3M8 3.5v3M12 3.5v2M16 3.5v3"/><rect x="10" y="10" width="7" height="7" rx="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.6a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 9.5v4.5M12 17v.2"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
+  <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.7"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h3.8l2.2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 14v4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5 18V8.5A1.5 1.5 0 0 1 6.5 7H10"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.9.7c0 1.8-2.5 2.1-2.5 3.7M12 17v.2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4.5 5.5h15v10h-8.2l-4.3 3.5v-3.5H4.5z"/><path d="M8.5 9.5h7M8.5 12h4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5S9.7 5.9 12 3.5z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.8 12S6.2 5.8 12 5.8 21.2 12 21.2 12 17.8 18.2 12 18.2 2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6.5 15V9l2.5 3 2.5-3v6M15.5 9v5.5M13.3 12.8l2.2 2.2 2.2-2.2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.6 4.6v3.9h-3.9"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+</svg>
+
+<a class="skip-link" href="#main">Bỏ qua, đến nội dung chính</a>
+
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <button type="button" class="btn btn-ghost history-toggle" id="history-toggle" aria-expanded="false" aria-controls="sidebar">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-menu"/></svg>
+      <span>Lịch sử</span>
+    </button>
+    <div class="brand">
+      <svg class="icon brand-mark" aria-hidden="true" focusable="false"><use href="#i-logo"/></svg>
+      <span class="brand-name">Get Design Markdown</span>
+    </div>
+    <div class="topbar-tools">
+      <button type="button" class="pill" id="browser-pill" data-state="unknown">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="browser-pill-text">Đang kiểm tra trình duyệt…</span>
+      </button>
+      <button type="button" class="btn btn-ghost" id="help-button">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-help"/></svg>
+        <span>Hướng dẫn</span>
+      </button>
+      <div class="theme-switch" role="radiogroup" aria-label="Màu giao diện">
+        <label class="theme-option" title="Theo hệ thống">
+          <input type="radio" name="theme" value="auto" checked>
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"/></svg>
+          <span class="sr-only">Theo hệ thống</span>
+        </label>
+        <label class="theme-option" title="Sáng">
+          <input type="radio" name="theme" value="light">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg>
+          <span class="sr-only">Sáng</span>
+        </label>
+        <label class="theme-option" title="Tối">
+          <input type="radio" name="theme" value="dark">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg>
+          <span class="sr-only">Tối</span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <div class="connection-banner" id="connection-banner" role="alert" hidden>
+    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>
+    <div>
+      <strong>Mất kết nối với Get Design Markdown.</strong>
+      <span id="connection-detail">Có thể ứng dụng đã tắt. Khi mở bằng trình duyệt, nó tự tắt sau 2 phút không có trang nào mở.</span>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" id="connection-retry">Thử kết nối lại</button>
+  </div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Lịch sử phân tích">
+      <div class="sidebar-head">
+        <button type="button" class="btn btn-secondary btn-block" id="new-analysis">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>
+          <span>Phân tích trang mới</span>
+        </button>
+      </div>
+      <h2 class="sidebar-title" id="history-title">Đã phân tích</h2>
+      <div class="history" id="history" aria-labelledby="history-title">
+        <p class="history-loading" id="history-loading">Đang tải lịch sử…</p>
+        <ul class="history-list" id="history-list" hidden></ul>
+        <div class="history-empty" id="history-empty" hidden>
+          <p>Chưa có trang nào.</p>
+          <p class="muted">Kết quả của mỗi lần phân tích sẽ nằm ở đây để bạn mở lại.</p>
+        </div>
+      </div>
+      <div class="sidebar-foot">
+        <button type="button" class="btn btn-ghost btn-sm" id="open-root">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"/></svg>
+          <span>Mở thư mục kết quả</span>
+        </button>
+        <p class="app-version" id="app-version"></p>
+      </div>
+    </nav>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <main class="main" id="main" tabindex="-1">
+      <!-- Start: URL + options -->
+      <section class="view view-start" id="view-start" aria-labelledby="start-title">
+        <div class="start">
+          <h1 class="page-title" id="start-title" tabindex="-1">Lấy phong cách thiết kế của một trang web</h1>
+          <p class="lead">Dán địa chỉ rồi bấm <strong>Phân tích</strong>. Công cụ đo màu sắc, kiểu chữ, khoảng cách và các thành phần của trang, rồi viết thành <strong>DESIGN.md</strong>: một tệp mô tả phong cách để trợ lý AI dựng giao diện tương tự.</p>
+
+          <section class="guide" id="guide" aria-labelledby="guide-title" tabindex="-1" hidden>
+            <div class="guide-head">
+              <h2 id="guide-title">Bắt đầu trong 3 bước</h2>
+              <button type="button" class="btn btn-ghost btn-sm" id="guide-close">Đã hiểu, ẩn hướng dẫn</button>
+            </div>
+            <ol class="guide-steps">
+              <li>
+                <h3>Dán địa chỉ trang web</h3>
+                <p>Ví dụ <span class="nowrap">stripe.com</span>. Chọn trang công khai, không cần đăng nhập.</p>
+              </li>
+              <li>
+                <h3>Bấm “Phân tích”</h3>
+                <p>Công cụ mở trang trong một trình duyệt chạy ngầm và đo phong cách. Thường mất 1 đến 3 phút.</p>
+              </li>
+              <li>
+                <h3>Xem và sao chép DESIGN.md cho AI</h3>
+                <p>Đưa tệp cho Claude Code, Cursor, v0… để dựng giao diện theo phong cách tương tự.</p>
+              </li>
+            </ol>
+            <p class="guide-note">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
+              <span>Công cụ chỉ để tham khảo và học hỏi phong cách; không sao chép logo hay tài sản có bản quyền.</span>
+            </p>
+          </section>
+
+          <div class="callout callout-warn" id="browser-banner" hidden>
+            <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>
+            <div class="callout-body">
+              <h2 class="callout-title">Chưa có trình duyệt để mở trang</h2>
+              <p>Công cụ cần Microsoft Edge, Google Chrome hoặc Chromium. Cài Edge hoặc Chrome (công cụ tự nhận ra), hoặc tải Chromium ngay tại đây (khoảng 150 MB).</p>
+              <div class="install-slot" data-install-slot></div>
+            </div>
+          </div>
+
+          <div class="callout callout-info" id="busy-banner" hidden>
+            <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
+            <div class="callout-body">
+              <p><span id="busy-text">Đang có một lượt phân tích chạy.</span></p>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="busy-show">Xem tiến trình</button>
+          </div>
+
+          <form class="url-form" id="url-form" novalidate>
+            <label class="url-label" for="url-input">Địa chỉ trang web</label>
+            <div class="url-row">
+              <div class="url-field">
+                <svg class="icon url-icon" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg>
+                <input id="url-input" name="url" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="ví dụ: stripe.com" aria-describedby="url-help url-error" maxlength="2048" required>
+              </div>
+              <button type="submit" class="btn btn-primary btn-lg" id="analyze-button">Phân tích</button>
+            </div>
+            <p class="help" id="url-help">Gõ tên miền như <span class="nowrap">stripe.com</span> hoặc dán cả liên kết của một trang cụ thể.</p>
+            <div class="field-error" id="url-error" hidden></div>
+          </form>
+
+          <section class="options" aria-labelledby="options-title" id="options">
+            <div class="options-head">
+              <h2 id="options-title">Tùy chọn</h2>
+              <p class="save-status" id="settings-status" role="status" aria-live="polite">Được lưu tự động cho các lần sau.</p>
+            </div>
+            <div class="settings-load-error callout callout-danger" id="settings-error" hidden>
+              <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-error"/></svg>
+              <div class="callout-body"><p id="settings-error-text">Không tải được tùy chọn.</p></div>
+              <button type="button" class="btn btn-secondary btn-sm" id="settings-retry">Thử lại</button>
+            </div>
+
+            <div class="quick-grid">
+              <div class="option" data-field="pages">
+                <label class="option-label" for="opt-pages">Số trang con</label>
+                <div class="stepper">
+                  <button type="button" class="btn btn-secondary btn-icon" data-step="-1" aria-label="Bớt một trang con" aria-controls="opt-pages">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-minus"/></svg>
+                  </button>
+                  <input id="opt-pages" type="number" inputmode="numeric" min="0" max="10" step="1" data-setting="pages" data-type="int" aria-describedby="opt-pages-help opt-pages-error">
+                  <button type="button" class="btn btn-secondary btn-icon" data-step="1" aria-label="Thêm một trang con" aria-controls="opt-pages">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>
+                  </button>
+                </div>
+                <p class="help" id="opt-pages-help">Ngoài trang chủ, đọc thêm vài trang quan trọng trên thanh menu. Nhiều trang thì đầy đủ hơn nhưng lâu hơn.</p>
+                <p class="field-error" id="opt-pages-error" hidden></p>
+              </div>
+
+              <div class="option" data-field="dark">
+                <div class="switch-row">
+                  <label class="option-label" for="opt-dark">Chụp thêm bản tối</label>
+                  <input id="opt-dark" class="switch" type="checkbox" role="switch" data-setting="dark" aria-describedby="opt-dark-help opt-dark-error">
+                </div>
+                <p class="help" id="opt-dark-help">Nếu trang có giao diện tối, ghi lại cả màu của bản tối.</p>
+                <p class="field-error" id="opt-dark-error" hidden></p>
+              </div>
+
+              <div class="option" data-field="lang">
+                <fieldset class="segmented-field" aria-describedby="opt-lang-help opt-lang-error">
+                  <legend class="option-label">Ngôn ngữ của DESIGN.md</legend>
+                  <div class="segmented">
+                    <label><input type="radio" name="opt-lang" value="en" data-setting="lang"><span>English</span></label>
+                    <label><input type="radio" name="opt-lang" value="vi" data-setting="lang"><span>Tiếng Việt</span></label>
+                  </div>
+                </fieldset>
+                <p class="help" id="opt-lang-help">Ngôn ngữ của phần mô tả. Tên mục và tên token luôn giữ tiếng Anh.</p>
+                <p class="field-error" id="opt-lang-error" hidden></p>
+              </div>
+            </div>
+
+            <details class="advanced" id="advanced">
+              <summary>
+                <svg class="icon chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+                <span>Tùy chọn nâng cao</span>
+                <span class="summary-note">Thường không cần đổi</span>
+              </summary>
+              <div class="advanced-grid">
+                <div class="option" data-field="prompt_only">
+                  <div class="switch-row">
+                    <label class="option-label" for="opt-prompt">Xuất thêm prompt.md</label>
+                    <input id="opt-prompt" class="switch" type="checkbox" role="switch" data-setting="prompt_only" aria-describedby="opt-prompt-help opt-prompt_only-error">
+                  </div>
+                  <p class="help" id="opt-prompt-help">Tạo thêm một lời nhắc kèm ảnh chụp để bạn nhờ Claude hoặc ChatGPT viết lại phần mô tả cho mượt hơn. Số liệu giữ nguyên.</p>
+                  <p class="field-error" id="opt-prompt_only-error" hidden></p>
+                </div>
+
+                <div class="option" data-field="examples">
+                  <div class="switch-row">
+                    <label class="option-label" for="opt-examples">Thêm khối ví dụ (ex-*)</label>
+                    <input id="opt-examples" class="switch" type="checkbox" role="switch" data-setting="examples" aria-describedby="opt-examples-help opt-examples-error">
+                  </div>
+                  <p class="help" id="opt-examples-help">Thêm vài khối giao diện mẫu vào DESIGN.md để AI hình dung cách phối màu. Mặc định tắt.</p>
+                  <p class="field-error" id="opt-examples-error" hidden></p>
+                </div>
+
+                <div class="option" data-field="open_after">
+                  <div class="switch-row">
+                    <label class="option-label" for="opt-open">Tự mở kết quả khi xong</label>
+                    <input id="opt-open" class="switch" type="checkbox" role="switch" data-setting="open_after" aria-describedby="opt-open-help opt-open_after-error">
+                  </div>
+                  <p class="help" id="opt-open-help">Tắt nếu bạn muốn đọc nhật ký trước khi xem kết quả.</p>
+                  <p class="field-error" id="opt-open_after-error" hidden></p>
+                </div>
+
+                <div class="option" data-field="max_elements">
+                  <label class="option-label" for="opt-max-elements">Số phần tử đo trên mỗi trang</label>
+                  <input id="opt-max-elements" class="input input-number" type="number" inputmode="numeric" step="100" data-setting="max_elements" data-type="int" aria-describedby="opt-max-elements-help opt-max_elements-error">
+                  <p class="help" id="opt-max-elements-help">Phần tử là từng khối trên trang: nút, đoạn chữ, ô nhập… Đo nhiều thì kỹ hơn nhưng chậm hơn. Mặc định 3000.</p>
+                  <p class="field-error" id="opt-max_elements-error" hidden></p>
+                </div>
+
+                <div class="option" data-field="timeout_s">
+                  <label class="option-label" for="opt-timeout">Thời gian chờ tải trang (giây)</label>
+                  <input id="opt-timeout" class="input input-number" type="number" inputmode="decimal" step="5" data-setting="timeout_s" data-type="float" aria-describedby="opt-timeout-help opt-timeout_s-error">
+                  <p class="help" id="opt-timeout-help">Tăng lên nếu mạng chậm hoặc trang nặng. Mặc định 45 giây.</p>
+                  <p class="field-error" id="opt-timeout_s-error" hidden></p>
+                </div>
+
+                <div class="option" data-field="delta_e">
+                  <label class="option-label" for="opt-delta-e">Ngưỡng gom màu (ΔE)</label>
+                  <input id="opt-delta-e" class="input input-number" type="number" inputmode="decimal" step="0.5" data-setting="delta_e" data-type="float" aria-describedby="opt-delta-e-help opt-delta_e-error">
+                  <p class="help" id="opt-delta-e-help">ΔE đo độ khác nhau giữa hai màu theo mắt người. Hai màu khác nhau ít hơn ngưỡng này được gộp làm một. Mặc định 3.</p>
+                  <p class="field-error" id="opt-delta_e-error" hidden></p>
+                </div>
+
+                <div class="option option-wide" data-field="browser">
+                  <label class="option-label" for="opt-browser">Trình duyệt dùng để mở trang</label>
+                  <select id="opt-browser" class="input select" data-setting="browser" aria-describedby="opt-browser-help opt-browser-status opt-browser-error">
+                    <option value="auto">Tự động (đề xuất)</option>
+                    <option value="chromium">Chromium (Playwright)</option>
+                    <option value="msedge">Microsoft Edge</option>
+                    <option value="chrome">Google Chrome</option>
+                  </select>
+                  <p class="help" id="opt-browser-help">Tự động dùng trình duyệt có sẵn theo thứ tự: Chromium, Edge, Chrome. Trang không hiện lên màn hình.</p>
+                  <p class="browser-choice" id="opt-browser-status"></p>
+                  <ul class="browser-list" id="browser-list" aria-label="Trình duyệt trên máy"></ul>
+                  <div class="install-slot" data-install-slot data-install-quiet></div>
+                  <p class="field-error" id="opt-browser-error" hidden></p>
+                </div>
+
+                <div class="option option-wide" data-field="output_dir">
+                  <label class="option-label" for="opt-output">Thư mục lưu kết quả</label>
+                  <div class="output-row">
+                    <input id="opt-output" class="input input-path" type="text" spellcheck="false" autocomplete="off" data-setting="output_dir" data-type="path" aria-describedby="opt-output-help opt-output_dir-error">
+                    <button type="button" class="btn btn-secondary" id="open-output">
+                      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"/></svg>
+                      <span>Mở thư mục</span>
+                    </button>
+                  </div>
+                  <p class="help" id="opt-output-help">Mỗi trang được lưu trong một thư mục con mang tên trang, ví dụ <span class="nowrap">stripe.com</span>.</p>
+                  <p class="help help-locked" id="opt-output-locked" hidden>Thư mục này được chọn khi mở giao diện (tham số <code>--out</code>), nên không đổi được ở đây. Muốn đổi, mở lại giao diện không kèm tham số đó.</p>
+                  <p class="field-error" id="opt-output_dir-error" hidden></p>
+                </div>
+              </div>
+              <div class="advanced-foot">
+                <button type="button" class="btn btn-ghost btn-sm" id="settings-reset">
+                  <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg>
+                  <span>Đặt lại tùy chọn về mặc định</span>
+                </button>
+                <span class="help">Thư mục lưu kết quả giữ nguyên.</span>
+              </div>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <!-- Progress of a job -->
+      <section class="view view-job" id="view-job" aria-labelledby="job-title" hidden>
+        <div class="job">
+          <div class="job-head">
+            <div class="job-heading">
+              <h1 class="page-title" id="job-title" tabindex="-1">Đang phân tích</h1>
+              <p class="job-sub">
+                <span class="job-url" id="job-url"></span>
+                <span class="job-elapsed" id="job-elapsed"></span>
+              </p>
+            </div>
+            <div class="job-actions">
+              <button type="button" class="btn btn-secondary" id="cancel-button">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
+                <span id="cancel-label">Hủy phân tích</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="ruler" id="job-ruler" data-state="running">
+            <div class="ruler-track" aria-hidden="true"><div class="ruler-fill" id="ruler-fill"></div></div>
+            <ol class="ruler-steps" id="job-steps" aria-label="Các bước">
+              <li data-step="1"><span class="ruler-name">Thu thập</span><span class="ruler-desc">Mở trang, chụp ảnh, đo style</span></li>
+              <li data-step="2"><span class="ruler-name">Phân tích</span><span class="ruler-desc">Gom màu, chữ, khoảng cách</span></li>
+              <li data-step="3"><span class="ruler-name">DESIGN.md</span><span class="ruler-desc">Viết bản mô tả phong cách</span></li>
+              <li data-step="4"><span class="ruler-name">Xuất file</span><span class="ruler-desc">Trang xem trước, tokens.json</span></li>
+            </ol>
+          </div>
+          <p class="job-progress" id="job-progress"></p>
+
+          <div class="callout callout-warn callout-strong" id="job-robots" hidden>
+            <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>
+            <div class="callout-body">
+              <h2 class="callout-title">Trang này không muốn bị công cụ tự động đọc</h2>
+              <p id="job-robots-text"></p>
+              <p class="muted">robots.txt là tệp mà mỗi trang web dùng để nói công cụ tự động được vào đâu. Hãy chỉ dùng kết quả để tham khảo và tôn trọng điều khoản của trang.</p>
+            </div>
+          </div>
+
+          <div class="outcome" id="job-outcome" tabindex="-1" hidden></div>
+
+          <section class="log-panel" aria-labelledby="log-title">
+            <h2 class="section-title" id="log-title">Nhật ký</h2>
+            <ol class="log" id="job-log" role="log" aria-live="polite" aria-labelledby="log-title"></ol>
+          </section>
+        </div>
+      </section>
+
+      <!-- Results of a site -->
+      <section class="view view-results" id="view-results" aria-labelledby="results-title" hidden>
+        <div class="results">
+          <header class="results-head">
+            <div class="results-thumb" id="results-thumb" aria-hidden="true"></div>
+            <div class="results-id">
+              <h1 class="page-title" id="results-title" tabindex="-1"></h1>
+              <p class="results-url" id="results-url"></p>
+              <p class="results-meta" id="results-meta"></p>
+            </div>
+            <div class="results-actions">
+              <button type="button" class="btn btn-primary" id="copy-design-top">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                <span>Sao chép DESIGN.md</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="open-site-folder">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"/></svg>
+                <span>Mở thư mục</span>
+              </button>
+            </div>
+          </header>
+
+          <ul class="stats" id="results-stats" aria-label="Những gì đã đo được"></ul>
+
+          <details class="notes" id="results-warnings" hidden>
+            <summary>
+              <svg class="icon chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+              <span id="results-warnings-title">Ghi chú khi phân tích</span>
+            </summary>
+            <ul id="results-warnings-list"></ul>
+          </details>
+
+          <div class="tabs">
+            <div class="tablist" role="tablist" aria-label="Kết quả phân tích" id="results-tabs">
+              <button type="button" role="tab" id="tab-preview" aria-controls="panel-preview" aria-selected="true" tabindex="0">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg><span>Xem trước</span>
+              </button>
+              <button type="button" role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-doc"/></svg><span>DESIGN.md</span>
+              </button>
+              <button type="button" role="tab" id="tab-ai" aria-controls="panel-ai" aria-selected="false" tabindex="-1">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg><span>Dùng với AI</span>
+              </button>
+              <button type="button" role="tab" id="tab-shots" aria-controls="panel-shots" aria-selected="false" tabindex="-1">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"/></svg><span>Ảnh chụp</span>
+              </button>
+              <button type="button" role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file"/></svg><span>Tệp</span>
+              </button>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" id="panel-preview" aria-labelledby="tab-preview" tabindex="0">
+              <p class="panel-intro">Bảng màu, kiểu chữ và các thành phần dựng lại từ số liệu đo được. Trang xem trước có nút chuyển sáng/tối riêng khi trang gốc có bản tối.</p>
+              <div class="frame-wrap" id="preview-wrap"></div>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" id="panel-design" aria-labelledby="tab-design" tabindex="0" hidden>
+              <div class="panel-toolbar">
+                <p class="panel-intro">Đây là tệp bạn đưa cho AI. Phần đầu là dữ liệu máy đọc, phần sau là mô tả bằng lời.</p>
+                <div class="toolbar-actions">
+                  <button type="button" class="btn btn-primary" id="copy-design">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                    <span>Sao chép DESIGN.md</span>
+                  </button>
+                  <a class="btn btn-secondary" id="download-design" download="DESIGN.md">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+                    <span>Tải về</span>
+                  </a>
+                </div>
+              </div>
+              <details class="front-matter" id="front-matter" hidden>
+                <summary>
+                  <svg class="icon chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+                  <span>Dữ liệu máy đọc (YAML ở đầu tệp)</span>
+                </summary>
+                <p class="help">Tên và giá trị của từng token: màu, cỡ chữ, bo góc, khoảng cách, thành phần. AI dùng phần này để lấy đúng con số.</p>
+                <pre class="code-block" id="front-matter-code"></pre>
+              </details>
+              <div class="frame-wrap frame-doc" id="design-wrap"></div>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" id="panel-ai" aria-labelledby="tab-ai" tabindex="0" hidden>
+              <div class="ai">
+                <p class="panel-intro">DESIGN.md mô tả phong cách để trợ lý AI đọc được. Đưa nó kèm theo mỗi khi nhờ AI dựng giao diện.</p>
+                <div class="ai-tools">
+                  <section class="ai-tool">
+                    <h3>Claude Code</h3>
+                    <p>Lưu DESIGN.md vào thư mục gốc của dự án. Thêm dòng <code>@DESIGN.md</code> vào tệp CLAUDE.md để lần nào Claude Code cũng đọc nó.</p>
+                  </section>
+                  <section class="ai-tool">
+                    <h3>Cursor</h3>
+                    <p>Lưu DESIGN.md vào thư mục gốc của dự án, rồi gõ <code>@DESIGN.md</code> trong khung chat để đính kèm.</p>
+                  </section>
+                  <section class="ai-tool">
+                    <h3>v0, Lovable, bolt.new</h3>
+                    <p>Dán toàn bộ nội dung DESIGN.md vào tin nhắn đầu tiên. Nếu công cụ có mục hướng dẫn chung cho dự án, dán vào đó để khỏi dán lại.</p>
+                  </section>
+                  <section class="ai-tool">
+                    <h3>ChatGPT, Claude.ai</h3>
+                    <p>Đính kèm tệp DESIGN.md (nút Tải về) hoặc dán nội dung, rồi mô tả trang bạn muốn dựng.</p>
+                  </section>
+                </div>
+                <div class="ai-actions">
+                  <button type="button" class="btn btn-primary" id="copy-design-ai">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                    <span>Sao chép DESIGN.md</span>
+                  </button>
+                  <a class="btn btn-secondary" id="download-design-ai" download="DESIGN.md">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+                    <span>Tải về</span>
+                  </a>
+                </div>
+
+                <section class="sample-prompt" aria-labelledby="sample-title">
+                  <div class="sample-head">
+                    <h3 id="sample-title">Lời nhắc mẫu</h3>
+                    <button type="button" class="btn btn-ghost btn-sm" id="copy-sample">
+                      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                      <span>Sao chép lời nhắc</span>
+                    </button>
+                  </div>
+                  <p class="sample-text" id="sample-text">Hãy dựng [mô tả trang bạn cần, ví dụ: trang chủ cho một ứng dụng đặt lịch hẹn] theo đúng phong cách trong DESIGN.md: dùng các màu, kiểu chữ, khoảng cách, bo góc và thành phần đã mô tả. Không dùng logo, hình ảnh hay nội dung của trang gốc.</p>
+                  <p class="help">Thay phần trong ngoặc vuông bằng trang bạn muốn dựng.</p>
+                </section>
+
+                <section class="prompt-section" id="prompt-section" aria-labelledby="prompt-title">
+                  <h3 id="prompt-title">Muốn phần mô tả hay hơn? Dùng prompt.md</h3>
+                  <div id="prompt-present" hidden>
+                    <p>prompt.md chứa bản DESIGN.md cùng chỉ dẫn “chỉ viết lại câu chữ, giữ nguyên mọi con số”. Dán nó vào Claude.ai hoặc ChatGPT, đính kèm các ảnh bên dưới, rồi lưu bản trả về thành DESIGN.md mới.</p>
+                    <div class="ai-actions">
+                      <button type="button" class="btn btn-secondary" id="copy-prompt">
+                        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                        <span>Sao chép prompt.md</span>
+                      </button>
+                      <a class="btn btn-secondary" id="download-prompt" download="prompt.md">
+                        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+                        <span>Tải prompt.md</span>
+                      </a>
+                    </div>
+                    <ul class="prompt-images" id="prompt-images" aria-label="Ảnh đính kèm cho prompt.md"></ul>
+                    <details class="prompt-render">
+                      <summary>
+                        <svg class="icon chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+                        <span>Xem nội dung prompt.md</span>
+                      </summary>
+                      <div class="frame-wrap frame-doc frame-short" id="prompt-wrap"></div>
+                    </details>
+                  </div>
+                  <div id="prompt-absent" hidden>
+                    <p>Lần phân tích này chưa có prompt.md. Bật <strong>Xuất thêm prompt.md</strong> trong Tùy chọn nâng cao rồi phân tích lại nếu bạn muốn nhờ AI viết lại phần mô tả cho mượt hơn.</p>
+                    <button type="button" class="btn btn-secondary btn-sm" id="goto-prompt-option">Mở Tùy chọn nâng cao</button>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" id="panel-shots" aria-labelledby="tab-shots" tabindex="0" hidden>
+              <p class="panel-intro">Ảnh chụp toàn trang ở ba khổ màn hình. Bấm vào ảnh để xem kích thước đầy đủ.</p>
+              <div id="shots"></div>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" id="panel-files" aria-labelledby="tab-files" tabindex="0" hidden>
+              <div class="folder-box">
+                <div class="folder-text">
+                  <span class="folder-label">Thư mục kết quả</span>
+                  <code class="folder-path" id="folder-path"></code>
+                </div>
+                <div class="toolbar-actions">
+                  <button type="button" class="btn btn-secondary" id="copy-folder">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+                    <span>Sao chép đường dẫn</span>
+                  </button>
+                  <button type="button" class="btn btn-primary" id="open-folder-files">
+                    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"/></svg>
+                    <span>Mở thư mục</span>
+                  </button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="files">
+                  <caption class="sr-only">Các tệp đã tạo</caption>
+                  <thead>
+                    <tr><th scope="col">Tệp</th><th scope="col">Dùng để</th><th scope="col" class="num">Kích thước</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr>
+                  </thead>
+                  <tbody id="files-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view view-loading" id="view-loading" aria-live="polite" hidden>
+        <p class="loading-text"><span class="spinner" aria-hidden="true"></span><span id="loading-text">Đang mở kết quả…</span></p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<section class="fullpage" id="expired" aria-labelledby="expired-title" hidden>
+  <div class="fullpage-card">
+    <svg class="icon fullpage-icon" aria-hidden="true" focusable="false"><use href="#i-logo"/></svg>
+    <h1 id="expired-title" tabindex="-1">Phiên làm việc đã hết hạn</h1>
+    <p>Trang này không còn kết nối được với Get Design Markdown: có thể ứng dụng đã được mở lại, hoặc liên kết thiếu mã phiên.</p>
+    <h2>Cách mở lại</h2>
+    <ul>
+      <li>Dùng ứng dụng: đóng cửa sổ này rồi mở lại <strong>Get-Design-Markdown.exe</strong>.</li>
+      <li>Dùng dòng lệnh: chạy lại <code>gdm ui</code> và mở đúng địa chỉ mà lệnh in ra.</li>
+    </ul>
+  </div>
+</section>
+
+<noscript>
+  <div class="fullpage"><div class="fullpage-card"><h1>Cần bật JavaScript</h1><p>Giao diện của Get Design Markdown cần JavaScript để chạy.</p></div></div>
+</noscript>
+
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
+  <div class="lightbox-head">
+    <h2 id="lightbox-title"></h2>
+    <div class="toolbar-actions">
+      <a class="btn btn-secondary btn-sm" id="lightbox-open" target="_blank" rel="noopener noreferrer">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-external"/></svg>
+        <span>Mở trong thẻ mới</span>
+      </a>
+      <button type="button" class="btn btn-secondary btn-sm" id="lightbox-close">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
+        <span>Đóng</span>
+      </button>
+    </div>
+  </div>
+  <div class="lightbox-body" tabindex="0"><img id="lightbox-img" alt=""></div>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 </body>
 </html>
