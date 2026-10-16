@@ -8,17 +8,17 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "hasoftware", email = "hoanganhuet@hotmail.com" }]
 dependencies = [
-    "coloraide>=4.0",
+    "coloraide>=8.0",
     "httpx>=0.27",
     "jinja2>=3.1",
     "pillow>=10.4",
     "playwright>=1.48",
     "pydantic>=2.8",
     "python-dotenv>=1.0",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.2",
     "rich>=13.7",
     "tinycss2>=1.3",
-    "typer>=0.12",
+    "typer>=0.27.2,<0.28",  # cli.py uses typer._click and typer.TyperException
 ]
 
 [project.urls]
