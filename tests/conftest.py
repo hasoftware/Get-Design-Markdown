@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -41,7 +41,11 @@ from get_design_markdown.models.raw import (
     RobotsCheck,
     Screenshot,
 )
+from get_design_markdown.ui.settings import CONFIG_DIR_ENV, LOG_DIR_ENV
 from tests.fixture_data import SITE_DIR
+
+if TYPE_CHECKING:
+    from tests.ui_fake_api import FakeApi
 
 FIXED_TIME = datetime(2026, 10, 15, 9, 30, tzinfo=UTC)
 
@@ -136,6 +140,48 @@ def site_url() -> Iterator[str]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+# ─── Local UI ────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_ui_folders(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """Point the UI's config and log folders (GDM_UI_CONFIG_DIR, GDM_UI_LOG_DIR) at temporary
+    folders for the whole session: no test ever reads or writes the user's real ones.
+    Yields the config folder."""
+    saved = {name: os.environ.get(name) for name in (CONFIG_DIR_ENV, LOG_DIR_ENV)}
+    config = tmp_path_factory.mktemp("ui-config")
+    os.environ[CONFIG_DIR_ENV] = str(config)
+    os.environ[LOG_DIR_ENV] = str(tmp_path_factory.mktemp("ui-logs"))
+    try:
+        yield config
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+@pytest.fixture(scope="session")
+def ui_fake_api_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[FakeApi]:
+    """The fake UI API (tests/ui_fake_api.py) for the whole session, serving the real
+    ui/static folder and a fake output root built from the shared fixtures."""
+    from tests.ui_fake_api import serve_fake_api
+
+    yield from serve_fake_api(tmp_path_factory.mktemp("ui-fake-output"))
+
+
+@pytest.fixture
+def ui_fake_api(ui_fake_api_server: FakeApi) -> FakeApi:
+    """The session's fake UI API with fresh state (settings, jobs, counters).
+
+    Open `ui_fake_api.launch_url` in a browser; read `ui_fake_api.state` to check what the
+    page did; `ui_fake_api.event_delay_s` sets the pace of scripted jobs.
+    """
+    ui_fake_api_server.reset()
+    return ui_fake_api_server
 
 
 # ─── Small hand-made models ──────────────────────────────────────────────────

@@ -146,11 +146,15 @@ jobs:
         run: uv build
       - name: Check wheel contents
         # Every non-Python file of the package is loaded at runtime (collector/js/*.js,
-        # synthesizer/phrases/*.yaml, templates/*.j2): list them from git, never by hand.
+        # synthesizer/phrases/*.yaml, templates/*.j2, the UI's ui/static/*): list them from
+        # git, never by hand.
         run: |
           uv run --no-project python -m zipfile -l dist/*.whl | tee wheel-contents.txt
           git ls-files -- 'src/get_design_markdown/*.js' 'src/get_design_markdown/*.yaml' \
-            'src/get_design_markdown/*.j2' | sed 's|^src/||' > resources.txt
+            'src/get_design_markdown/*.j2' 'src/get_design_markdown/*.html' \
+            'src/get_design_markdown/*.css' 'src/get_design_markdown/*.svg' \
+            'src/get_design_markdown/*.png' 'src/get_design_markdown/*.ico' \
+            | sed 's|^src/||' > resources.txt
           if [ ! -s resources.txt ]; then
             echo "::error::Không tìm thấy file tài nguyên nào trong src/get_design_markdown."
             exit 1

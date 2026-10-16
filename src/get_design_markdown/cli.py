@@ -9,7 +9,7 @@ import sys
 from collections.abc import Callable, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, ParamSpec, TypeVar
 
 import typer
 from typer import rich_utils
@@ -21,12 +21,15 @@ from get_design_markdown import __version__
 from get_design_markdown.analyzer.analyze import DEFAULT_DELTA_E, run_analyze
 from get_design_markdown.config import Settings, load_settings
 from get_design_markdown.console import console, err_console, print_error
-from get_design_markdown.errors import GdmError
+from get_design_markdown.errors import ConfigError, GdmError
 from get_design_markdown.exporters.export import run_export
 from get_design_markdown.models.raw import CaptureOptions
 from get_design_markdown.pipeline import open_result, run_collect, run_get
 from get_design_markdown.storage import resolve_site_dir
 from get_design_markdown.synthesizer.synthesize import run_synthesize
+
+if TYPE_CHECKING:
+    from get_design_markdown.ui.server import UiMode
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -364,6 +367,58 @@ def get(
         examples=examples,
         open_browser=open_browser,
     )
+
+
+PORT_METAVAR = "CỔNG"
+
+
+@app.command(cls=VietnameseCommand)
+@handle_errors
+def ui(
+    port: Annotated[
+        int,
+        typer.Option(
+            "--port",
+            min=0,
+            max=65535,
+            metavar=PORT_METAVAR,
+            help="Cổng của máy chủ cục bộ 127.0.0.1 (0 = tự chọn một cổng trống).",
+        ),
+    ] = 0,
+    window: Annotated[
+        bool,
+        typer.Option(
+            "--window",
+            help=(
+                "Mở trong cửa sổ riêng thay vì tab trình duyệt "
+                '(cần gói pywebview: pip install "get-design-markdown\\[gui]").'
+            ),
+        ),
+    ] = False,
+    no_open: Annotated[
+        bool,
+        typer.Option("--no-open", help="Không tự mở giao diện, chỉ in địa chỉ để bạn tự mở."),
+    ] = False,
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            "-o",
+            metavar=FOLDER_METAVAR,
+            help="Thư mục gốc chứa kết quả cho phiên này (mặc định: theo cấu hình giao diện).",
+        ),
+    ] = None,
+) -> None:
+    """Mở giao diện đồ họa cục bộ: nhập URL, chỉnh tùy chọn và xem kết quả."""
+    if window and no_open:
+        raise ConfigError(
+            "Không dùng --window cùng với --no-open.",
+            hint="Chọn --window để mở cửa sổ riêng, hoặc --no-open để chỉ in địa chỉ.",
+        )
+    from get_design_markdown.ui import app as ui_app
+
+    mode: UiMode = "window" if window else "none" if no_open else "browser"
+    ui_app.run_ui(port=port, mode=mode, out_root=out)
 
 
 def _ensure_utf8_stdio() -> None:

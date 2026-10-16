@@ -32,6 +32,7 @@ Repository = "https://github.com/hasoftware/Get-Design-Markdown"
 [project.scripts]
 get-design-markdown = "get_design_markdown.cli:main"
 gdm = "get_design_markdown.cli:main"
+gdm-ui = "get_design_markdown.ui.app:main"
 
 [dependency-groups]
 dev = [
