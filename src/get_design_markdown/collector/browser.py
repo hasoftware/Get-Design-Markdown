@@ -7,17 +7,19 @@ tries to solve captchas or evade challenges.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from playwright.async_api import (
     Browser,
     BrowserContext,
     Page,
+    Playwright,
     Response,
     async_playwright,
 )
@@ -28,8 +30,8 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from get_design_markdown.console import print_warning
 from get_design_markdown.errors import (
-    BROWSER_INSTALL_HINT,
     BotBlockedError,
     BrowserNotInstalledError,
     CollectError,
@@ -39,6 +41,8 @@ from get_design_markdown.errors import (
 )
 from get_design_markdown.models.raw import BrowserChoice, CaptureOptions, ColorScheme, LoadState
 from get_design_markdown.resources import resource_text
+
+logger = logging.getLogger(__name__)
 
 INSTALL_HINT = "Chạy: python -m uv run playwright install chromium"
 TIMEOUT_HINT = (
@@ -140,18 +144,148 @@ class BrowserSession:
 
 # ─── Launch & contexts ───────────────────────────────────────────────────────
 
+#: A browser open_browser() can launch: Playwright's Chromium or an installed channel.
+LaunchTarget = Literal["chromium", "msedge", "chrome"]
+#: Order in which open_browser("auto") tries the browsers (ui.browser_install.AUTO_ORDER).
+AUTO_BROWSER_ORDER: tuple[LaunchTarget, ...] = ("chromium", "msedge", "chrome")
+#: Vietnamese names used in messages.
+BROWSER_DISPLAY_NAMES: dict[LaunchTarget, str] = {
+    "chromium": "Chromium",
+    "msedge": "Microsoft Edge",
+    "chrome": "Google Chrome",
+}
+#: Why a launch failed: the browser is not on this machine, or it is there but did not start.
+LaunchFailureKind = Literal["missing", "failed"]
+#: Launches one browser headless; raises Playwright's Error when it cannot.
+BrowserLauncher = Callable[[LaunchTarget], Awaitable[Browser]]
 
-def _launch_error(error: Exception) -> CollectError:
-    text = str(error)
-    if "Executable doesn't exist" in text or "playwright install" in text:
-        return BrowserNotInstalledError(
-            "Chưa cài trình duyệt Chromium cho Playwright.", hint=BROWSER_INSTALL_HINT
+_MISSING_BROWSER_RE = re.compile(
+    r"Executable doesn't exist"
+    r"|Chromium distribution '[\w.-]+' is not (?:found|supported)"
+    r"|\bplaywright install\b",
+    re.IGNORECASE,
+)
+
+_AUTO_HINT = (
+    'Hoặc chọn trình duyệt "auto" (--browser auto hoặc GDM_BROWSER=auto) để công cụ tự dùng '
+    "trình duyệt có sẵn trên máy."
+)
+_MISSING_FORCED: dict[LaunchTarget, tuple[str, str]] = {
+    "chromium": (
+        "Chưa tải Chromium của Playwright (trình duyệt đã chọn: chromium).",
+        'Bấm nút "Tải Chromium" trong giao diện (gdm ui) hoặc chạy: '
+        f"python -m uv run playwright install chromium. {_AUTO_HINT}",
+    ),
+    "msedge": (
+        "Không tìm thấy Microsoft Edge trên máy này (trình duyệt đã chọn: msedge).",
+        f"Cài Microsoft Edge từ https://www.microsoft.com/edge. {_AUTO_HINT}",
+    ),
+    "chrome": (
+        "Không tìm thấy Google Chrome trên máy này (trình duyệt đã chọn: chrome).",
+        f"Cài Google Chrome từ https://www.google.com/chrome. {_AUTO_HINT}",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class LaunchFailure:
+    """One browser open_browser() could not start (see classify_launch_error)."""
+
+    name: LaunchTarget
+    kind: LaunchFailureKind
+    #: First line of Playwright's error message.
+    reason: str
+
+
+def _first_line(error: BaseException) -> str:
+    text = str(error).strip()
+    return text.splitlines()[0].strip() if text else type(error).__name__
+
+
+def classify_launch_error(error: BaseException) -> LaunchFailureKind:
+    """Kind of a launch failure; pure.
+
+    "missing" when Playwright reports the browser is not installed (no Chromium download, no
+    Edge / Chrome at the channel's location), else "failed" (installed but did not start).
+    """
+    return "missing" if _MISSING_BROWSER_RE.search(str(error)) else "failed"
+
+
+def _launch_error(error: Exception, name: LaunchTarget = "chromium") -> CollectError:
+    """The error for a browser the user asked for explicitly (`--browser <name>`)."""
+    if classify_launch_error(error) == "missing":
+        message, hint = _MISSING_FORCED[name]
+        return BrowserNotInstalledError(message, hint=hint)
+    return _failed_launch_error([LaunchFailure(name, "failed", _first_line(error))])
+
+
+def _failed_launch_error(failures: Sequence[LaunchFailure]) -> CollectError:
+    """CollectError for browsers that exist but did not start (at least one failure)."""
+    broken = [failure for failure in failures if failure.kind == "failed"]
+    if len(broken) == 1:
+        failure = broken[0]
+        hint = (
+            f"Thử cài lại trình duyệt. {INSTALL_HINT}"
+            if failure.name == "chromium"
+            else f"Thử khởi động lại máy hoặc cập nhật {BROWSER_DISPLAY_NAMES[failure.name]}."
         )
-    first_line = text.strip().splitlines()[0] if text.strip() else type(error).__name__
-    return CollectError(
-        f"Không khởi động được Chromium: {first_line}",
-        hint=f"Thử cài lại trình duyệt. {INSTALL_HINT}",
+        return CollectError(
+            f"Không khởi động được {BROWSER_DISPLAY_NAMES[failure.name]}: {failure.reason}",
+            hint=hint,
+        )
+    details = "; ".join(
+        f"{BROWSER_DISPLAY_NAMES[failure.name]}: "
+        + ("chưa cài" if failure.kind == "missing" else failure.reason)
+        for failure in failures
     )
+    return CollectError(
+        f"Không khởi động được trình duyệt nào ({details}).",
+        hint=f"Thử khởi động lại máy hoặc cài lại một trình duyệt. {INSTALL_HINT}",
+    )
+
+
+def launch_candidates(choice: BrowserChoice) -> tuple[LaunchTarget, ...]:
+    """Browsers to try for `choice`, in order: the whole AUTO_BROWSER_ORDER for "auto"."""
+    return AUTO_BROWSER_ORDER if choice == "auto" else (choice,)
+
+
+def playwright_launcher(playwright: Playwright) -> BrowserLauncher:
+    """Headless launch through Playwright: its own Chromium, or the msedge / chrome channel
+    (the stable Edge / Chrome installed on the machine)."""
+
+    async def launch(name: LaunchTarget) -> Browser:
+        if name == "chromium":
+            return await playwright.chromium.launch(headless=True)
+        return await playwright.chromium.launch(channel=name, headless=True)
+
+    return launch
+
+
+async def launch_browser(
+    choice: BrowserChoice, launch: BrowserLauncher
+) -> tuple[LaunchTarget, Browser, list[LaunchFailure]]:
+    """Launch the browser for `choice` with `launch`.
+
+    Returns (name launched, browser, earlier failures). "auto" moves on to the next browser
+    of AUTO_BROWSER_ORDER whenever one cannot be started; an explicit choice is tried alone.
+    Raises BrowserNotInstalledError when nothing usable is installed, CollectError when a
+    browser exists but none started.
+    """
+    failures: list[LaunchFailure] = []
+    for name in launch_candidates(choice):
+        try:
+            browser = await launch(name)
+        except PlaywrightError as error:
+            if choice != "auto":
+                raise _launch_error(error, name) from None
+            failure = LaunchFailure(name, classify_launch_error(error), _first_line(error))
+            logger.info("Browser %s not usable (%s): %s", name, failure.kind, failure.reason)
+            failures.append(failure)
+            continue
+        return name, browser, failures
+    if all(failure.kind == "missing" for failure in failures):
+        raise BrowserNotInstalledError()
+    raise _failed_launch_error(failures)
 
 
 def browser_user_agent(default: str) -> str:
@@ -164,6 +298,17 @@ def session_label(name: str, version: str) -> str:
     return f"{name} {version}".strip()
 
 
+def _fallback_warning(name: LaunchTarget, failures: Sequence[LaunchFailure]) -> str | None:
+    """Warning shown when "auto" skipped a browser that exists but did not start."""
+    broken = [failure for failure in failures if failure.kind == "failed"]
+    if not broken:
+        return None
+    skipped = ", ".join(
+        f"{BROWSER_DISPLAY_NAMES[failure.name]} ({failure.reason})" for failure in broken
+    )
+    return f"Không khởi động được {skipped} — dùng {BROWSER_DISPLAY_NAMES[name]} thay thế."
+
+
 @asynccontextmanager
 async def open_browser(choice: BrowserChoice = "chromium") -> AsyncIterator[BrowserSession]:
     """Launch a headless browser for `choice`; always closes it (and its contexts) on exit.
@@ -173,18 +318,17 @@ async def open_browser(choice: BrowserChoice = "chromium") -> AsyncIterator[Brow
     - "msedge" / "chrome": the installed Microsoft Edge / Google Chrome (Playwright channel).
     - "auto": the first that launches of Playwright's Chromium -> Edge -> Chrome.
     - Nothing usable: BrowserNotInstalledError (hint: Edge/Chrome, the UI button or
-      `playwright install chromium`); any other launch failure: CollectError.
+      `playwright install chromium`); an explicit choice that is not installed:
+      BrowserNotInstalledError naming it; any other launch failure: CollectError.
     The yielded session's `label` names the browser really used ("msedge 141.0.3537.71").
-
-    Current behaviour: every choice launches Playwright's Chromium (the Edge / Chrome
-    fallback chain is not implemented yet).
+    When "auto" had to skip a browser that is installed but did not start, a warning says so.
     """
     async with async_playwright() as playwright:
+        name, browser, failures = await launch_browser(choice, playwright_launcher(playwright))
         try:
-            browser = await playwright.chromium.launch(headless=True)
-        except PlaywrightError as error:
-            raise _launch_error(error) from None
-        try:
+            warning = _fallback_warning(name, failures)
+            if warning is not None:
+                print_warning(warning)
             probe = await browser.new_page()
             try:
                 default_agent = str(await probe.evaluate("navigator.userAgent"))
@@ -193,7 +337,7 @@ async def open_browser(choice: BrowserChoice = "chromium") -> AsyncIterator[Brow
             yield BrowserSession(
                 browser=browser,
                 user_agent=browser_user_agent(default_agent),
-                label=session_label("chromium", browser.version),
+                label=session_label(name, browser.version),
             )
         finally:
             with suppress(PlaywrightError):
