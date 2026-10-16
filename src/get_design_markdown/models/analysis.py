@@ -261,8 +261,11 @@ class ComponentSpec(GdmModel):
     lineHeight, letterSpacing, textTransform, textDecoration, shadow, backdropFilter,
     placeholderColor, position, opacity. Colors are canonical hex (#rrggbb / #rrggbbaa) or
     "transparent"; lengths use px ("8px", padding as a CSS shorthand "12px 20px"); opacity is a
-    unitless number ("0.8", mostly seen in hover states). DESIGN.md front matter keeps only the
-    spec's component keys; tokens.json exports the rest.
+    unitless number ("0.8", mostly seen in hover states). `rounded` is one length, or - when the
+    corners differ - a border-radius shorthand in corner order top-left, top-right,
+    bottom-right, bottom-left, compressed like padding ("4px 4px 0px 0px" for a tab); token_refs
+    then has no "rounded" entry, since a {rounded.*} step stands for four equal corners.
+    DESIGN.md front matter keeps only the spec's component keys; tokens.json exports the rest.
 
     Form fields: single-line inputs and selects are "text-input" (kind input, with a height);
     <textarea> fields are "text-area" (kind input, variant "multiline") without a height, since
