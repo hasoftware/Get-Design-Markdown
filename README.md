@@ -46,6 +46,7 @@ gdm get https://stripe.com --open
 - [Xử lý lỗi thường gặp](#xử-lý-lỗi-thường-gặp)
 - [Đạo đức và robots.txt](#đạo-đức-và-robotstxt)
 - [Phát triển](#phát-triển)
+- [Thay đổi](#thay-đổi)
 - [Giấy phép](#giấy-phép)
 
 ## Bắt đầu nhanh
@@ -776,8 +777,9 @@ Lỗi được in bằng tiếng Việt kèm gợi ý; thêm `--debug` (`gdm --d
 - Trước khi mở trang, công cụ đọc `robots.txt` (theo RFC 9309) với tên bot `get-design-markdown`.
   Nếu trang không cho phép, công cụ **in cảnh báo** và vẫn tiếp tục vì đây là một lần truy cập phục
   vụ tham khảo, giống một người dùng mở trang. Hãy tôn trọng điều khoản sử dụng của trang và dừng
-  lại nếu trang không muốn bị phân tích. Khi không tải được `robots.txt` (mạng chậm, máy chủ không
-  trả lời), công cụ chỉ ghi một dòng thông tin rồi tiếp tục.
+  lại nếu trang không muốn bị phân tích. Trong giao diện đồ họa, kết quả của trang đó luôn kèm một
+  ghi chú nhắc lại điều này, kể cả khi mở lại từ lịch sử. Khi không tải được `robots.txt` (mạng
+  chậm, máy chủ không trả lời), công cụ chỉ ghi một dòng thông tin rồi tiếp tục.
 - Công cụ chỉ tải các trang bạn chỉ định (và tối đa 10 trang con với `--pages`), không crawl hàng
   loạt và không vượt qua cơ chế chống bot hay trang đăng nhập.
 - Kết quả chỉ chứa thông số style và ảnh chụp màn hình phục vụ phân tích, không chứa logo, hình ảnh
@@ -904,6 +906,32 @@ người duy trì áp dụng riêng, sinh lại fixture nếu cần
 (`uv run python -m tests.fixtures.build_samples`), rồi rebase nhánh của bạn.
 
 Mọi dependency mới phải có giấy phép tương thích GPLv3 (MIT, BSD, Apache-2.0, LGPL…).
+
+## Thay đổi
+
+### 0.2.0
+
+- **Giao diện đồ họa tiếng Việt**: lệnh `gdm ui` (mở trong trình duyệt) và bản exe cho Windows
+  (cửa sổ riêng), xem [Giao diện đồ họa](#giao-diện-đồ-họa) và
+  [Tải bản exe cho Windows](#tải-bản-exe-cho-windows).
+- **Chọn trình duyệt**: `--browser auto|chromium|msedge|chrome` hoặc `GDM_BROWSER`. `auto` (mặc
+  định) dùng Chromium của Playwright, nếu chưa có thì Microsoft Edge, rồi Google Chrome. `raw.json`
+  ghi thêm trình duyệt đã dùng (trường `browser`).
+- **Lời nhắn trên terminal dễ hiểu hơn**: bỏ hậu tố "(Tầng N)" ở các bước, viết rõ "trạng thái
+  khi rê chuột (hover)", "Bản giao diện tối (dark mode)", "Tệp CSS (stylesheet)", "Kiểu chữ",
+  "Khoảng cách", "Bố cục"… Script nào đọc chữ in ra của `gdm collect` / `gdm get` cần cập nhật;
+  định dạng các tệp kết quả (`raw.json`, `analysis.json`, `DESIGN.md`, `tokens.json`,
+  `preview.html`) không đổi.
+- Không tải được `robots.txt` (mạng chậm, máy chủ không trả lời) giờ chỉ là một dòng thông tin,
+  không còn là cảnh báo; trang thật sự không cho phép vẫn được cảnh báo như trước.
+- URL có tên miền chứa khoảng trắng, ký hiệu lạ hoặc số cổng không hợp lệ bị từ chối ngay, kèm gợi ý.
+- Mở trình duyệt có giới hạn thời gian: trình duyệt khởi động được nhưng không mở được trang nào
+  trong 60 giây sẽ báo lỗi thay vì chờ mãi.
+
+### 0.1.0
+
+- Bản đầu tiên: dòng lệnh `gdm` (`collect`, `analyze`, `synthesize`, `export`, `get`), DESIGN.md
+  theo định dạng Google Labs, `tokens.json` (W3C Design Tokens) và `preview.html`.
 
 ## Giấy phép
 
