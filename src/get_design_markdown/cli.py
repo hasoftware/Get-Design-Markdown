@@ -389,10 +389,13 @@ _VALUE_MESSAGES: _Table = [
         "{value} nằm ngoài khoảng {range}.",
     ),
     (
-        re.compile(r"(?P<value>.+) is not a valid integer( range)?\."),
+        re.compile(r"(?P<value>.+) is not a valid int(?:eger)?( range)?\."),
         "{value} không phải số nguyên.",
     ),
-    (re.compile(r"(?P<value>.+) is not a valid float( range)?\."), "{value} không phải số thực."),
+    (
+        re.compile(r"(?P<value>.+) is not a valid float(?:ing point value)?( range)?\."),
+        "{value} không phải số thực.",
+    ),
     (
         re.compile(r"(?P<value>.+) is not a valid boolean\..*", re.DOTALL),
         "{value} không phải giá trị đúng/sai.",

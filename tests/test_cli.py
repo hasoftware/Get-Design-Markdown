@@ -86,6 +86,8 @@ def _run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:
             "Giá trị không hợp lệ cho '--pages': 11 nằm ngoài khoảng 0<=x<=10.",
         ),
         (("analyze", "x", "--delta-e", "abc"), "'abc' không phải số thực."),
+        (("collect", "--pages", "abc", "https://example.com"), "'abc' không phải số nguyên."),
+        (("collect", "--max-elements", "1.5", "https://example.com"), "không phải số nguyên."),
         (("synthesize", "x", "--lang", "fr"), "'fr' không thuộc các giá trị 'en', 'vi'."),
         (("analyze", "a", "b"), "Thừa tham số không dùng tới: b."),
         (("analyze", "--delta-e"), "Tùy chọn '--delta-e' cần một giá trị."),
