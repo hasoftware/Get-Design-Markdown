@@ -1,17 +1,25 @@
-"""WCAG contrast pairs: every own-text element's color over its effective background."""
+"""WCAG contrast pairs: every own-text element's color over its effective background.
+
+occurrences is the raw number of elements; pairs are ranked by page-weighted occurrences (main
+page 1.0, sub-pages per common.page_weights), so a long sub-page cannot push the main page's
+pairs out of the list.
+"""
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from get_design_markdown.analyzer.colors_roles import is_chromatic
 from get_design_markdown.analyzer.colors_samples import ColorSample
 from get_design_markdown.analyzer.common import own_background
 from get_design_markdown.analyzer.css_values import (
     contrast_levels,
     contrast_ratio,
     is_large_text,
+    parse_color,
     parse_font_weight,
     parse_px,
 )
@@ -37,12 +45,27 @@ FOREGROUND_ROLES = frozenset(
 )
 NON_TEXT_ROLES = frozenset({ColorRole.BORDER, ColorRole.BACKGROUND, ColorRole.SURFACE})
 BACKGROUND_ROLES = frozenset({ColorRole.BACKGROUND, ColorRole.SURFACE})
+ACTION_ROLES = frozenset({ColorRole.BRAND, ColorRole.ACCENT})
+
+
+def _names_text(token: ColorToken) -> bool:
+    """Whether text of the token's color is "text in that token": not for surface, border or
+    canvas tokens, nor for a neutral action fill (a light-gray "invert" button background is
+    not the color of gray body text that happens to be close to it)."""
+    if token.role in NON_TEXT_ROLES:
+        return False
+    if token.role in ACTION_ROLES:
+        color = parse_color(token.value)
+        return color is not None and is_chromatic(color)
+    return True
 
 
 @dataclass(slots=True)
 class _PairGroup:
     sample: ColorSample
     occurrences: int = 0
+    #: Page weights of the occurrences (summed with math.fsum at the end).
+    weights: list[float] = field(default_factory=list)
     contexts: Counter[str] = field(default_factory=Counter)
 
 
@@ -73,7 +96,8 @@ def contrast_pairs(
     text_samples: Sequence[ColorSample], tokens: Sequence[ColorToken]
 ) -> list[ContrastPair]:
     """Foreground/background pairs grouped by colors; the 20 most frequent plus every pair that
-    fails WCAG AA, sorted by occurrences (then lowest ratio first)."""
+    fails WCAG AA, sorted by page-weighted occurrences (then raw occurrences, then lowest ratio
+    first)."""
     groups: dict[tuple[str, str], _PairGroup] = {}
     order: list[tuple[str, str]] = []
     for sample in text_samples:
@@ -85,9 +109,11 @@ def contrast_pairs(
             group = groups[key] = _PairGroup(sample)
             order.append(key)
         group.occurrences += 1
+        group.weights.append(sample.ref.weight)
         group.contexts[pair_context(sample)] += 1
-    text_tokens = [token for token in tokens if token.role not in NON_TEXT_ROLES]
+    text_tokens = [token for token in tokens if _names_text(token)]
     pairs: list[ContrastPair] = []
+    weighted: dict[tuple[str, str], float] = {}
     for key in order:
         group = groups[key]
         foreground = group.sample.color
@@ -101,6 +127,7 @@ def contrast_pairs(
         context = max(group.contexts.items(), key=lambda item: (item[1], item[0] != "placeholder"))[
             0
         ]
+        weighted[(foreground.css_hex, background.css_hex)] = math.fsum(group.weights)
         pairs.append(
             ContrastPair(
                 foreground=foreground.css_hex,
@@ -115,10 +142,17 @@ def contrast_pairs(
                 context=context,
             )
         )
-    frequent = sorted(pairs, key=lambda pair: (-pair.occurrences, pair.ratio))
+
+    def rank(pair: ContrastPair) -> tuple[float, int, float, str, str]:
+        return (
+            -weighted[(pair.foreground, pair.background)],
+            -pair.occurrences,
+            pair.ratio,
+            pair.foreground,
+            pair.background,
+        )
+
+    frequent = sorted(pairs, key=rank)
     kept = frequent[:MAX_FREQUENT_PAIRS]
     kept.extend(pair for pair in frequent[MAX_FREQUENT_PAIRS:] if not pair.passes_aa)
-    return sorted(
-        kept,
-        key=lambda pair: (-pair.occurrences, pair.ratio, pair.foreground, pair.background),
-    )
+    return sorted(kept, key=rank)

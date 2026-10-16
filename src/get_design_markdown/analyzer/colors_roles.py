@@ -8,7 +8,7 @@ name, a class name or a ✓/⚠/✕ symbol) and are never inferred from the hue 
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 
 from get_design_markdown.analyzer.colors_cluster import Cluster
@@ -16,6 +16,8 @@ from get_design_markdown.analyzer.colors_hints import (
     STATUS_WORDS,
     ColorVariable,
     is_generated_name,
+    is_glyph_name,
+    is_state_name,
     name_words,
     status_from_text,
     status_from_words,
@@ -56,8 +58,12 @@ LIGHT_NEUTRAL_MAX_CHROMA = 0.03
 LIGHT_NEUTRAL_LIGHTNESS = (0.8, 0.95)
 #: Brand and status colors need at least this OKLCH chroma (and must not be neutral).
 CHROMATIC_MIN_CHROMA = NEUTRAL_MAX_CHROMA
-#: A CSS variable hint only promotes a candidate scoring at least this share of the best one.
+#: A CSS variable hint only promotes a candidate scoring at least this share of the best one
+#: (exactly half counts: see reaches_share).
 HINT_MIN_SCORE_SHARE = 0.5
+#: Relative slack of every "at least this share of" comparison, so that a candidate exactly at
+#: the boundary passes whatever the last bit of the float sums (Python 3.12 changed sum()).
+SHARE_TOLERANCE = 1e-9
 #: "Sits on canvas/surface": effective background this close (ΔE2000) to a base surface.
 ON_BASE_DELTA_E = 3.0
 SURFACE_MIN_SHARE = 0.02
@@ -72,6 +78,9 @@ TEXT_ROLE_MIN_DELTA_E = 5.0
 #: Muted text is clearly dimmer than ink, faint clearly dimmer than muted (OKLCH lightness).
 MUTED_MIN_LIGHTNESS_GAP = 0.15
 FAINT_MIN_LIGHTNESS_GAP = 0.08
+#: A dimmer tier named as a text tier ("--text-subdued", "--text-quiet") or carrying a visible
+#: share of the text only needs this gap below muted (solid / soft / subdued / quiet ramps).
+FAINT_RELAXED_MIN_LIGHTNESS_GAP = 0.05
 #: A text tier named "secondary"/"muted" by a variable, or carrying this share of all text on
 #: canvas/surface, is a muted tier even when it is only this far below ink (a 4-step dark-theme
 #: ramp: primary / secondary / tertiary / quaternary text).
@@ -92,8 +101,11 @@ STATUS_VARIABLE_SCORE = 10.0
 STATUS_ORDER = ("success", "warning", "danger", "info")
 CLASS_HINT_DEPTH = 2
 #: A CSS variable is reported for a token only when its alpha matches the token value this well
-#: (#ffffff0d is not the value of a #ffffff14 hairline).
+#: (#ffffff0d is not the value of a #ffffff14 hairline)...
 VARIABLE_MAX_ALPHA_DIFF = 0.02
+#: ...and its color is the token value up to rounding (ΔE2000): a nearby shade of the same
+#: scale (#665efd for a #635bff token) is listed on the cluster, never cited for the token.
+VARIABLE_MAX_DELTA_E = 0.5
 #: Token names whose variables may stand in for each other (same kind of color).
 TOKEN_FAMILIES: dict[str, str] = {
     "primary": "brand",
@@ -144,6 +156,12 @@ def is_neutralish(color: RGBA) -> bool:
 def is_chromatic(color: RGBA) -> bool:
     """A real hue for brand/status roles: OKLCH chroma >= 0.06 and not a tinted neutral."""
     return to_oklch(color).chroma >= CHROMATIC_MIN_CHROMA and not is_neutralish(color)
+
+
+def reaches_share(value: float, best: float, share: float) -> bool:
+    """value >= share x best, with a relative tolerance so that exact boundaries (a candidate
+    scoring exactly half of the best) give the same answer on every Python version."""
+    return value >= share * best * (1.0 - SHARE_TOLERANCE)
 
 
 def hue_gap(first: OKLCH, second: OKLCH) -> float:
@@ -224,10 +242,17 @@ def _action_hinted(cluster: Cluster, name: str) -> bool:
     return any(variable.action == name for variable in cluster.variables)
 
 
-def _variable_rank(name: str) -> tuple[int, int, int, str]:
-    """Prefer names that say "color", then the fewest words, then the shortest."""
+def _variable_rank(name: str) -> tuple[int, int, int, int, str]:
+    """Prefer names not about icons, then names that say "color", then the fewest words, then
+    the shortest."""
     words = name_words(name)
-    return (0 if {"color", "colour", "colors"} & set(words) else 1, len(words), len(name), name)
+    return (
+        1 if is_glyph_name(name) else 0,
+        0 if {"color", "colour", "colors"} & set(words) else 1,
+        len(words),
+        len(name),
+        name,
+    )
 
 
 def _ranked(
@@ -246,7 +271,9 @@ def _ranked(
     best = max((measure(cluster) for cluster in pool), default=0.0)
 
     def tier(cluster: Cluster) -> int:
-        if not _hinted(cluster, name) or measure(cluster) < HINT_MIN_SCORE_SHARE * best:
+        if not _hinted(cluster, name) or not reaches_share(
+            measure(cluster), best, HINT_MIN_SCORE_SHARE
+        ):
             return 2
         return 0 if _action_hinted(cluster, name) else 1
 
@@ -266,7 +293,7 @@ def _promoted(
 ) -> bool:
     """Whether _ranked put the cluster first because of a hint for `name`."""
     best = max((measure(item) for item in pool), default=0.0)
-    return _hinted(cluster, name) and measure(cluster) >= HINT_MIN_SCORE_SHARE * best
+    return _hinted(cluster, name) and reaches_share(measure(cluster), best, HINT_MIN_SCORE_SHARE)
 
 
 def _on_colors(sample: ColorSample, colors: Sequence[RGBA]) -> bool:
@@ -332,7 +359,7 @@ def choose_canvas(backgrounds: Sequence[Cluster]) -> Cluster | None:
     for cluster in backgrounds:
         if cluster.decorative or not cluster.rep.is_opaque:
             continue
-        score = sum(
+        score = math.fsum(
             sample.weight
             for sample in cluster.samples
             if sample.synthetic is not None or sample.traits.page_root or sample.traits.full_width
@@ -366,7 +393,7 @@ def _background_evidence(cluster: Cluster) -> str:
 
 
 def _card_weight(cluster: Cluster) -> float:
-    return sum(sample.weight for sample in cluster.samples if sample.traits.card_like)
+    return math.fsum(sample.weight for sample in cluster.samples if sample.traits.card_like)
 
 
 def _lightness(color: RGBA) -> float:
@@ -512,7 +539,7 @@ def assign_text(context: RoleContext) -> None:
     significant = [
         cluster
         for cluster in texts
-        if stats[cluster.id].on_base_weight >= INK_SIGNIFICANT_SHARE * top
+        if reaches_share(stats[cluster.id].on_base_weight, top, INK_SIGNIFICANT_SHARE)
         and stats[cluster.id].contrast >= FAINT_MIN_CONTRAST
     ]
     hinted_ink = [cluster for cluster in significant if _hinted(cluster, "ink")]
@@ -532,7 +559,7 @@ def assign_text(context: RoleContext) -> None:
     ink_contrast = stats[ink.id].contrast
 
     ink_lightness = _lightness(ink_color)
-    on_base_total = sum(entry.on_base_weight for entry in stats.values())
+    on_base_total = math.fsum(entry.on_base_weight for entry in stats.values())
 
     def text_share(cluster: Cluster) -> float:
         return stats[cluster.id].on_base_weight / on_base_total if on_base_total > 0 else 0.0
@@ -568,7 +595,7 @@ def assign_text(context: RoleContext) -> None:
             for cluster in ranked_muted[1:]
             if stats[cluster.id].contrast > stats[muted.id].contrast
             and text_share(cluster) >= MUTED_SIGNIFICANT_SHARE
-            and on_base_weight(cluster) >= HINT_MIN_SCORE_SHARE * on_base_weight(muted)
+            and reaches_share(on_base_weight(cluster), on_base_weight(muted), HINT_MIN_SCORE_SHARE)
             and not _hinted(cluster, "faint")
         ]
         if brighter and text_share(muted) >= MUTED_SIGNIFICANT_SHARE:
@@ -581,6 +608,23 @@ def assign_text(context: RoleContext) -> None:
     reference_lightness = _lightness(context.apparent(reference))
     reference_gap = FAINT_MIN_LIGHTNESS_GAP if muted is not None else MUTED_MIN_LIGHTNESS_GAP
     others = [ink] if muted is None else [ink, muted]
+
+    def below_reference(cluster: Cluster) -> bool:
+        gap = abs(_lightness(context.apparent(cluster)) - reference_lightness)
+        if gap >= reference_gap:
+            return True
+        # Below muted, a named text tier ("--text-subdued") or a visibly used one is a tier of
+        # its own even when it is only a short step dimmer.
+        return (
+            muted is not None
+            and gap >= FAINT_RELAXED_MIN_LIGHTNESS_GAP
+            and (
+                _hinted(cluster, "muted")
+                or _hinted(cluster, "faint")
+                or text_share(cluster) >= MUTED_SIGNIFICANT_SHARE
+            )
+        )
+
     faint_candidates = [
         cluster
         for cluster in texts
@@ -591,18 +635,16 @@ def assign_text(context: RoleContext) -> None:
             for other in others
         )
         and FAINT_MIN_CONTRAST <= stats[cluster.id].contrast < reference_contrast
-        and abs(_lightness(context.apparent(cluster)) - reference_lightness) >= reference_gap
+        and below_reference(cluster)
         and (
             len(stats[cluster.id].on_base_elements) >= 2
             or stats[cluster.id].on_base_weight >= FAINT_MIN_TEXT_SHARE * context.text_total
         )
     ]
-    ranked_faint = _ranked(
-        faint_candidates,
-        "faint",
-        lambda cluster: -stats[cluster.id].contrast,
-        gate=on_base_weight,
-    )
+    # Of the tiers below muted, the most used one is the faint token (a rare, dimmer step such
+    # as an input placeholder gray does not outrank a tier carrying three times the text); a
+    # "faint"-named variable only promotes a tier used at least half as much.
+    ranked_faint = _ranked(faint_candidates, "faint", on_base_weight)
     if ranked_faint:
         faint = ranked_faint[0]
         if (
@@ -630,7 +672,8 @@ def _texts_on(
             and delta_e_2000(sample.traits.effective_background, color) < delta_e
         ]
         if samples:
-            found[cluster.id] = (cluster, samples, sum(sample.weight for sample in samples))
+            weight = math.fsum(sample.weight for sample in samples)
+            found[cluster.id] = (cluster, samples, weight)
     return found
 
 
@@ -657,7 +700,7 @@ def assign_on_inverse(context: RoleContext) -> None:
     top = max(weight for _, _, weight in found.values())
     # Like ink: the highest-contrast text among the significant ones on the inverse band.
     cluster, samples, _ = max(
-        (entry for entry in found.values() if entry[2] >= INK_SIGNIFICANT_SHARE * top),
+        (entry for entry in found.values() if reaches_share(entry[2], top, INK_SIGNIFICANT_SHARE)),
         key=lambda entry: (contrast_ratio(entry[0].rep, inverse_color), entry[2], entry[0].id),
     )
     taken = {pick.cluster.rep.css_hex for pick in context.picks.values()}
@@ -685,7 +728,7 @@ def assign_hairlines(context: RoleContext) -> None:
         on_base = [sample for sample in cluster.samples if _on_colors(sample, bases)]
         if not on_base:
             continue
-        weights[cluster.id] = sum(sample.weight for sample in on_base)
+        weights[cluster.id] = math.fsum(sample.weight for sample in on_base)
         elements[cluster.id] = {sample.key for sample in on_base}
         candidates.append(cluster)
     ranked = _ranked(candidates, "hairline", lambda cluster: weights[cluster.id])
@@ -713,7 +756,9 @@ def assign_hairlines(context: RoleContext) -> None:
 
 
 def _button_score(cluster: Cluster) -> float:
-    return sum(
+    """Prominence of the buttons the cluster fills (page weight x sqrt(area)); correctly
+    rounded (math.fsum), so equal sets of buttons tie exactly on every Python version."""
+    return math.fsum(
         sample.ref.weight * math.sqrt(max(sample.traits.area, 1.0))
         for sample in cluster.samples
         if sample.traits.button_like and sample.synthetic is None
@@ -760,6 +805,14 @@ def _brand_evidence(cluster: Cluster) -> str:
 
 
 def assign_brand(context: RoleContext) -> None:
+    """primary (+ on-primary), then secondary/tertiary action colors (+ on-secondary).
+
+    The primary is the chromatic color filling the most prominent buttons. A site whose buttons
+    have no hue (a light-gray "invert" CTA on a dark page) gets a neutral primary only when a
+    CSS variable names that color as a button fill ("--color-button-invert-bg"); its brand hue,
+    if it only colors toggles or mock-ups, then becomes the secondary accent.
+    """
+
     def chromatic(cluster: Cluster) -> bool:
         return not cluster.decorative and is_chromatic(context.apparent(cluster))
 
@@ -767,48 +820,75 @@ def assign_brand(context: RoleContext) -> None:
         count = len(_button_elements(cluster))
         return count >= ACTION_MIN_USES or (count == 1 and _hinted(cluster, "primary"))
 
-    buttons = [
-        cluster
-        for cluster in context.clusters["background"]
-        if chromatic(cluster) and enough_buttons(cluster)
-    ]
+    taken = {id(pick.cluster) for pick in context.picks.values()}
+
+    def neutral_fill(cluster: Cluster) -> bool:
+        """A neutral color a variable names as a button background, filling buttons, distinct
+        from the canvas and not already a surface token."""
+        if cluster.decorative or id(cluster) in taken or chromatic(cluster):
+            return False
+        if not any(
+            variable.button_fill and _same_value(variable, cluster.rep)
+            for variable in cluster.variables
+        ):
+            return False
+        return (
+            len(_button_elements(cluster)) >= ACTION_MIN_USES
+            and delta_e_2000(context.apparent(cluster), context.canvas) >= context.threshold
+        )
+
+    backgrounds = context.clusters["background"]
+    neutral_fills = [cluster for cluster in backgrounds if neutral_fill(cluster)]
+    buttons = [cluster for cluster in backgrounds if chromatic(cluster) and enough_buttons(cluster)]
+    # A neutral fill named as the primary variant ("--button-primary-bg: #111") competes with
+    # the chromatic buttons; other named neutral fills only stand in when no hue fills buttons.
+    buttons += [cluster for cluster in neutral_fills if _action_hinted(cluster, "primary")]
     links = [
         cluster
         for cluster in context.clusters["text"]
         if chromatic(cluster) and len(_link_elements(cluster)) >= ACTION_MIN_USES
     ]
-    primary: Cluster | None = None
+    # A brand-named color that no button uses: kept when it is a visible share of its channel
+    # or drives a few other controls (toggles, clickable chips).
+    fallback = [
+        cluster
+        for channel in ("background", "text", "border")
+        for cluster in context.clusters[channel]
+        if chromatic(cluster)
+        and _hinted(cluster, "primary")
+        and (
+            cluster.share >= FALLBACK_BRAND_MIN_SHARE
+            or len(_control_elements(cluster)) >= ACTION_MIN_USES
+        )
+    ]
     ranked_buttons = _ranked(buttons, "primary", _button_score)
     ranked_links = _ranked(links, "primary", lambda cluster: len(_link_elements(cluster)))
-    if ranked_buttons:
+    ranked_fallback = _ranked(fallback, "primary", lambda cluster: cluster.share)
+    button_actions = [
+        cluster for cluster in ranked_buttons if len(_button_elements(cluster)) >= ACTION_MIN_USES
+    ]
+    primary: Cluster | None = None
+    if button_actions:
+        primary = ranked_buttons[0]
+    elif neutral_fills:
+        primary = _ranked(neutral_fills, "primary", _button_score)[0]
+    elif ranked_buttons:
         primary = ranked_buttons[0]
     elif ranked_links:
         primary = ranked_links[0]
-    else:
-        # A brand-named color that no button uses: kept when it is a visible share of its
-        # channel or drives a few other controls (toggles, clickable chips).
-        fallback = [
-            cluster
-            for channel in ("background", "text", "border")
-            for cluster in context.clusters[channel]
-            if chromatic(cluster)
-            and _hinted(cluster, "primary")
-            and (
-                cluster.share >= FALLBACK_BRAND_MIN_SHARE
-                or len(_control_elements(cluster)) >= ACTION_MIN_USES
-            )
-        ]
-        ranked_fallback = _ranked(fallback, "primary", lambda cluster: cluster.share)
-        primary = ranked_fallback[0] if ranked_fallback else None
+    elif ranked_fallback:
+        primary = ranked_fallback[0]
     if primary is None:
         return
     context.pick("primary", primary, _brand_evidence(primary))
 
     chosen: list[Cluster] = [primary]
-    button_actions = [
-        cluster for cluster in ranked_buttons if len(_button_elements(cluster)) >= ACTION_MIN_USES
-    ]
     actions = button_actions + ranked_links
+    if not chromatic(primary):
+        # The brand hue of a site with neutral actions is its accent.
+        for cluster in [*ranked_buttons, *ranked_fallback]:
+            if chromatic(cluster) and cluster not in actions:
+                actions.append(cluster)
     primary_score = _button_score(primary)
     same_hue_used = False
     for name in ("secondary", "tertiary"):
@@ -817,7 +897,9 @@ def assign_brand(context: RoleContext) -> None:
             for cluster in actions
             if cluster not in chosen
             and all(
-                hue_gap(cluster.oklch, other.oklch) >= ACCENT_MIN_HUE_GAP
+                # A neutral action color has no hue to compare (#e5e5e6 still has a bluish
+                # OKLCH hue angle).
+                (hue_gap(cluster.oklch, other.oklch) >= ACCENT_MIN_HUE_GAP or not chromatic(other))
                 and delta_e_2000(context.apparent(cluster), context.apparent(other))
                 >= context.threshold
                 for other in chosen
@@ -830,7 +912,9 @@ def assign_brand(context: RoleContext) -> None:
                 cluster
                 for cluster in button_actions
                 if cluster not in chosen
-                and _button_score(cluster) >= SAME_HUE_ACTION_MIN_SCORE_SHARE * primary_score
+                and reaches_share(
+                    _button_score(cluster), primary_score, SAME_HUE_ACTION_MIN_SCORE_SHARE
+                )
                 and all(
                     delta_e_2000(context.apparent(cluster), context.apparent(other))
                     >= max(SAME_HUE_ACTION_MIN_DELTA_E, context.threshold)
@@ -954,28 +1038,47 @@ def assign_status(context: RoleContext) -> None:
 
 def _same_value(variable: ColorVariable, value: RGBA) -> bool:
     """The variable's color is the token value (alpha included), up to rounding."""
-    return abs(variable.color.alpha - value.alpha) <= VARIABLE_MAX_ALPHA_DIFF
+    return (
+        abs(variable.color.alpha - value.alpha) <= VARIABLE_MAX_ALPHA_DIFF
+        and delta_e_2000(variable.color, value) < VARIABLE_MAX_DELTA_E
+    )
 
 
-def _token_variable(pick: Pick) -> str | None:
+def _token_variable(
+    pick: Pick, claimed: Collection[str] = (), *, family_fallback: bool = True
+) -> str | None:
     """The variable whose value is the token value and whose name fits the token.
 
     By preference: the exact value hinting this token, the exact value hinting a token of the
     same family ("--color-border-primary" for hairline-strong, "--color-text-tertiary" for
-    muted), then the same two for a near value (ΔE2000 < 1). A variable whose alpha differs is
-    never reported, and neither is one whose name points at another kind of color.
+    muted), then the same two for the value up to rounding (ΔE2000 < 0.5). A variable whose
+    alpha differs, a nearby shade of the scale (ΔE >= 0.5) and one whose name points at another
+    kind of color are never reported. A `claimed` variable (another token's own, hinting that
+    token) is not borrowed through the family: "--button-primary-text" stays on-primary's, even
+    when on-secondary is the same white.
     """
     value = pick.cluster.rep
-    family = TOKEN_FAMILIES.get(pick.name)
+    family = TOKEN_FAMILIES.get(pick.name) if family_fallback else None
     variables = [item for item in pick.cluster.variables if _same_value(item, value)]
     exact = [item for item in variables if item.color.css_hex == value.css_hex]
 
     def fits_family(item: ColorVariable) -> bool:
-        return family is not None and any(TOKEN_FAMILIES.get(hint) == family for hint in item.hints)
+        return (
+            family is not None
+            and item.name not in claimed
+            and any(TOKEN_FAMILIES.get(hint) == family for hint in item.hints)
+        )
 
-    def rank(item: ColorVariable) -> tuple[int, tuple[int, int, int, str]]:
-        # "--button-primary-bg" says more about an action color than "--brand-600".
-        return (0 if item.action == pick.name else 1, _variable_rank(item.name))
+    token_words = set(name_words(pick.name))
+
+    def rank(item: ColorVariable) -> tuple[int, int, tuple[int, int, int, int, str]]:
+        # "--button-primary-bg" says more about an action color than "--brand-600", and
+        # "--surface-bg-subdued" more about a surface than "--util-bg-quiet".
+        return (
+            0 if item.action == pick.name else 1,
+            0 if token_words <= set(name_words(item.name)) else 1,
+            _variable_rank(item.name),
+        )
 
     for pool in (exact, variables):
         for accepts in (lambda item: pick.name in item.hints, fits_family):
@@ -993,10 +1096,13 @@ def build_tokens(context: RoleContext) -> list[ColorToken]:
         if name in names:
             names.remove(name)
     names = names[:MAX_TOKENS] if len(names) > MAX_TOKENS else names
+    # Variables naming a token directly ("--button-primary-text" -> on-primary).
+    own = {name: _token_variable(context.picks[name], family_fallback=False) for name in names}
     tokens: list[ColorToken] = []
     for name in names:
         pick = context.picks[name]
-        variable = _token_variable(pick)
+        claimed = {item for other, item in own.items() if other != name and item is not None}
+        variable = _token_variable(pick, claimed)
         evidence = pick.evidence
         mentioned = variable
         neutral_names = [
@@ -1004,6 +1110,7 @@ def build_tokens(context: RoleContext) -> list[ColorToken]:
             for item in pick.cluster.variables
             if not item.hints
             and not is_generated_name(item.name)
+            and not is_state_name(item.name)
             and _same_value(item, pick.cluster.rep)
         ]
         if mentioned is None and neutral_names:

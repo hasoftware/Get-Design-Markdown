@@ -63,7 +63,10 @@ _BRAND_WORDS = frozenset({"primary", "brand", "accent"})
 _BRAND_ONLY_WORDS = frozenset({"brand", "accent"})
 _INVERSE_WORDS = frozenset({"inverse", "inverted", "invert", "contrast"})
 _MUTED_WORDS = frozenset({"muted", "subtle", "secondary", "soft", "dim", "weak", "subdued"})
-_FAINT_WORDS = frozenset({"faint", "placeholder", "disabled", "tertiary", "quaternary", "ghost"})
+#: "quiet" is the dimmest step of a solid / soft / subdued / quiet text ramp.
+_FAINT_WORDS = frozenset(
+    {"faint", "placeholder", "disabled", "tertiary", "quaternary", "ghost", "quiet"}
+)
 _RAISED_WORDS = frozenset(
     {"raised", "elevated", "tertiary", "popover", "overlay", "modal", "dialog", "sheet"}
 )
@@ -81,6 +84,8 @@ _SURFACE_WORDS = frozenset(
         "tile",
         "well",
         "sunken",
+        "subdued",
+        "quiet",
     }
 )
 _STRONG_WORDS = frozenset({"strong", "heavy", "bold", "emphasis", "intense"})
@@ -92,6 +97,12 @@ _ACTION_WORDS = frozenset({"button", "buttons", "btn", "cta", "action"})
 #: Variant words of action colors, in token-name form.
 _VARIANT_WORDS = ("primary", "secondary", "tertiary")
 _FG_WORDS = frozenset({"foreground", "fg", "contrast"})
+#: Glyphs drawn on an action ("--button-primary-icon") are foreground, not its fill.
+_GLYPH_WORDS = frozenset({"icon", "icons", "glyph"})
+#: Words naming the painted area of a button ("--color-button-invert-bg").
+_FILL_WORDS = frozenset({"bg", "background", "fill", "surface"})
+#: Action states that never name the resting fill ("--button-primary-bgDisabled").
+_ACTION_STATE_WORDS = _STATE_WORDS | frozenset({"disabled", "loading"})
 
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
@@ -113,6 +124,16 @@ def _after(words: Sequence[str], word: str) -> str | None:
         if current == word:
             return words[position + 1]
     return None
+
+
+def is_state_name(name: str) -> bool:
+    """A variable for an interaction state ("--border-focus", "--button-bg-disabled")."""
+    return bool(set(name_words(name)) & _ACTION_STATE_WORDS)
+
+
+def is_glyph_name(name: str) -> bool:
+    """A variable for icons ("--button-primary-icon"), weaker evidence for text than "-text"."""
+    return bool(set(name_words(name)) & _GLYPH_WORDS)
 
 
 def is_generated_name(name: str) -> bool:
@@ -154,21 +175,43 @@ def _action_variant(words: Sequence[str]) -> str | None:
     return next((variant for variant in _VARIANT_WORDS if variant in words), None)
 
 
+def _names_action_fill(words: Sequence[str]) -> bool:
+    """The words name the resting fill of a button/CTA (any variant), not its text, icon,
+    border, state or a status color."""
+    word_set = set(words)
+    if not word_set & _ACTION_WORDS:
+        return False
+    if word_set & (_ACTION_STATE_WORDS | _TEXT_WORDS | _BORDER_WORDS | _FG_WORDS | _GLYPH_WORDS):
+        return False
+    return "on" not in word_set and status_from_words(words) is None
+
+
 def action_hint(name: str) -> str | None:
     """Brand token name of a variable that colors an action variant's fill.
 
     "--button-primary-bg" / "--hds-color-button-primary-bg" / "--btn-primary" -> "primary",
-    "--cta-secondary" -> "secondary"; text, border and state variables ("--button-primary-text",
-    "--button-primary-bg-hover") and plain brand names ("--brand-500") -> None. Such a variable
-    is stronger evidence for an action color than a generic brand-scale name.
+    "--cta-secondary" -> "secondary"; text, icon, border and state variables
+    ("--button-primary-text", "--button-primary-icon", "--button-primary-bg-hover") and plain
+    brand names ("--brand-500") -> None. Such a variable is stronger evidence for an action color
+    than a generic brand-scale name.
     """
     words = name_words(name)
-    word_set = set(words)
-    if not words or word_set & (_STATE_WORDS | _TEXT_WORDS | _BORDER_WORDS | _FG_WORDS):
-        return None
-    if "on" in word_set or status_from_words(words) is not None:
+    if not _names_action_fill(words):
         return None
     return _action_variant(words)
+
+
+def button_fill_hint(name: str) -> bool:
+    """The variable names the background of a button of any variant: "--button-primary-bg",
+    "--color-button-invert-bg", "--btn-bg", "--cta-fill" (not its text, icon, border or states).
+
+    Such a variable makes a neutral color an action color: a light-gray "invert" CTA on a dark
+    site is that site's primary action even though it has no hue.
+    """
+    words = name_words(name)
+    if not _names_action_fill(words):
+        return False
+    return bool(set(words) & _FILL_WORDS) or _action_variant(words) is not None
 
 
 def variable_hints(name: str) -> frozenset[str]:
@@ -177,8 +220,9 @@ def variable_hints(name: str) -> frozenset[str]:
     "--color-primary" -> {"primary"}, "--text-muted" -> {"muted"}, "--bg-canvas" ->
     {"canvas"}, "--border-subtle" -> {"hairline"}, "--primary-foreground" -> {"on-primary"},
     "--color-fg-secondary" -> {"muted"} (a text tier), "--button-primary-bg" -> {"primary"},
-    "--button-primary-text" -> {"on-primary"}, "--color-success" -> {"success"},
-    "--blue-500" -> {} and "--color-primary-hover" -> {}.
+    "--button-primary-text" / "--button-primary-icon" -> {"on-primary"},
+    "--color-button-invert-bg" -> {"primary"} (a button fill), "--text-quiet" -> {"faint"},
+    "--color-success" -> {"success"}, "--blue-500" -> {} and "--color-primary-hover" -> {}.
     """
     words = name_words(name)
     word_set = set(words)
@@ -191,8 +235,11 @@ def variable_hints(name: str) -> frozenset[str]:
     has_bg = bool(word_set & _BG_WORDS)
     has_border = bool(word_set & _BORDER_WORDS)
     variant = _action_variant(words)
+    if variant is None and _names_action_fill(words) and word_set & _FILL_WORDS:
+        # "--color-button-invert-bg", "--btn-bg": the fill of a button, i.e. an action color.
+        return frozenset({"primary"})
     if variant is not None and not has_border:
-        text_position = _first_position(words, _TEXT_WORDS | _FG_WORDS)
+        text_position = _first_position(words, _TEXT_WORDS | _FG_WORDS | _GLYPH_WORDS)
         if text_position is None:
             # "--button-primary-bg", "--btn-primary": the fill of that action variant.
             return frozenset({variant})
@@ -291,6 +338,8 @@ class ColorVariable:
     hints: frozenset[str]
     #: Brand token name when the variable colors an action variant ("--button-primary-bg").
     action: str | None = None
+    #: The variable names a button background of any variant ("--color-button-invert-bg").
+    button_fill: bool = False
 
 
 def collect_color_variables(
@@ -312,7 +361,11 @@ def collect_color_variables(
         if key in seen:
             return
         seen.add(key)
-        result.append(ColorVariable(name, color, variable_hints(name), action_hint(name)))
+        result.append(
+            ColorVariable(
+                name, color, variable_hints(name), action_hint(name), button_fill_hint(name)
+            )
+        )
 
     for variable in page_variables:
         page_names.add(variable.name)

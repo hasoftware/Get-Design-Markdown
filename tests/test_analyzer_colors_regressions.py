@@ -33,7 +33,9 @@ def _neutral_ctas(page: PageCapture) -> PageCapture:
 
 
 def _two_indigo_page(variables: list[CssVariable]) -> PageCapture:
-    """Six CTAs in #635bff and three in #533afd (ΔE2000 8.2, same hue)."""
+    """Six CTAs in #635bff and three in #533afd (ΔE2000 8.2, same hue). The #533afd buttons
+    score exactly half of the #635bff ones: the hint gate is inclusive at that boundary on every
+    Python version (colors_roles.reaches_share; 3.11 and 3.12 sum floats differently)."""
     extra = [
         _button(20 + n, "#635bff", y=900 + n * 60, box=(600, 900 + n * 60, 160, 44))
         for n in range(6)

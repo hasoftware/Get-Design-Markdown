@@ -6,6 +6,7 @@ alpha is kept: #ffffff and #ffffff14 are different colors.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
@@ -84,6 +85,26 @@ class Cluster:
 
     def heaviest_samples(self) -> list[ColorSample]:
         return sorted(self.samples, key=lambda sample: -sample.weight)
+
+    def main_page_representative(self) -> RGBA | None:
+        """Heaviest member color on the main page (pages[0]), None when only sub-pages use it.
+
+        The members of a cluster are near-identical colors; when the page the user asked for
+        uses one of them, that is the value to report, even if a long sub-page paints a bigger
+        area with its near twin (stripe.com: #f8fafd home sections vs the #f6f9fc pricing body).
+        """
+        weights: dict[str, float] = {}
+        colors: dict[str, RGBA] = {}
+        for sample in self.samples:
+            if sample.ref.page_index != 0:
+                continue
+            key = sample.color.css_hex
+            weights[key] = weights.get(key, 0.0) + sample.weight
+            colors[key] = sample.color
+        if not weights:
+            return None
+        best = min(weights, key=lambda key: (-weights[key], key))
+        return colors[best]
 
     def to_model(self) -> ColorCluster:
         selectors: list[str] = []
@@ -176,10 +197,11 @@ def cluster_channel(
 
     A color joins the nearest cluster (similar alpha) when ΔE2000 < threshold, unless the color
     is significant (>= 2% of the channel weight) and visibly distinct (ΔE >= 1) from it. The
-    representative of a cluster is its heaviest member.
+    representative of a cluster is its heaviest member on the main page (its heaviest member
+    overall when only sub-pages use it); clustering compares against the heaviest member.
     """
     uniques = _uniques(samples)
-    total = sum(unique.weight for unique in uniques)
+    total = math.fsum(unique.weight for unique in uniques)
     head = uniques[:MAX_UNIQUE_COLORS]
     buckets = _bucket_tail(uniques[MAX_UNIQUE_COLORS:])
     clusters: list[Cluster] = []
@@ -197,6 +219,8 @@ def cluster_channel(
             cluster = Cluster(channel, unique.color)
             cluster.absorb(unique)
             clusters.append(cluster)
+    for cluster in clusters:
+        cluster.rep = cluster.main_page_representative() or cluster.rep
     clusters.sort(key=lambda cluster: (-cluster.weight, cluster.rep.css_hex))
     for number, cluster in enumerate(clusters, start=1):
         cluster.id = f"{CHANNEL_PREFIX[channel]}-{number}"

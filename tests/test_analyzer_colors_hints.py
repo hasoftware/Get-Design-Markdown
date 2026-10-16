@@ -7,6 +7,7 @@ import pytest
 from get_design_markdown.analyzer import analyze
 from get_design_markdown.analyzer.colors_hints import (
     action_hint,
+    button_fill_hint,
     collect_color_variables,
     is_generated_name,
     name_words,
@@ -75,7 +76,13 @@ def test_name_words() -> None:
         ("--button-secondary-fg", {"on-secondary"}),
         ("--hds-color-action-text-secondary", {"muted"}),
         ("--hds-color-button-secondary-borderDisabled", {"hairline"}),
-        ("--color-button-invert-bg", {"surface-inverse"}),
+        # A button fill without a primary/secondary variant is still an action color.
+        ("--color-button-invert-bg", {"primary"}),
+        ("--btn-bg", {"primary"}),
+        ("--hds-color-button-primary-icon", {"on-primary"}),
+        ("--hds-color-text-quiet", {"faint"}),
+        ("--hds-color-util-bg-quiet", {"surface"}),
+        ("--color-bg-subdued", {"surface"}),
         ("--color-fg-primary", {"ink"}),
         ("--color-fg-secondary", {"muted"}),
         ("--color-fg-tertiary", {"faint"}),
@@ -106,10 +113,37 @@ def test_variable_hints(name: str, expected: set[str]) -> None:
         ("--brand-500", None),
         ("--color-primary", None),
         ("--color-bg-primary", None),
+        ("--hds-color-button-primary-icon", None),
+        ("--hds-color-button-primary-bgDisabled", None),
+        ("--color-button-invert-bg", None),
     ],
 )
 def test_action_hint(name: str, expected: str | None) -> None:
     assert action_hint(name) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("--color-button-invert-bg", True),
+        ("--hds-color-button-primary-bg", True),
+        ("--btn-primary", True),
+        ("--cta-fill", True),
+        ("--button-bg", True),
+        ("--color-button-invert-bg-hover", False),
+        ("--hds-color-button-primary-bgDisabled", False),
+        ("--hds-color-button-primary-text", False),
+        ("--hds-color-button-primary-icon", False),
+        ("--button-border", False),
+        ("--button-danger-bg", False),
+        ("--text-on-button", False),
+        ("--color-bg-primary", False),
+        ("--brand-500", False),
+        ("--button-radius", False),
+    ],
+)
+def test_button_fill_hint(name: str, expected: bool) -> None:
+    assert button_fill_hint(name) is expected
 
 
 @pytest.mark.parametrize(
