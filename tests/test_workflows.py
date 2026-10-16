@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import itertools
+import os
 import re
-from collections.abc import Iterator
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+
+from get_design_markdown.ui.settings import LOG_DIR_ENV
 
 ROOT = Path(__file__).resolve().parents[1]
 GITHUB_DIR = ROOT / ".github"
@@ -23,6 +29,20 @@ PINNED_ACTION_RE = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@v\d+(\.\d+\.\d+)?$"
 LOCAL_WORKFLOW_RE = re.compile(r"^\./\.github/workflows/[\w.-]+\.ya?ml$")
 #: The official DESIGN.md linter at an exact version.
 LINTER_PACKAGE_RE = re.compile(r"@google/design\.md@\d+\.\d+\.\d+")
+
+PACKAGE_DIR = ROOT / "src" / "get_design_markdown"
+UI_STATIC_DIR = PACKAGE_DIR / "ui" / "static"
+#: git pathspec of the wheel check that lists every file of the UI folder, whatever its suffix.
+UI_STATIC_PATHSPEC = "'src/get_design_markdown/ui/static/'"
+#: The Windows exe: dependencies, build command, built program and release asset.
+EXE_SYNC = "uv sync --locked --extra gui --group build"
+BUILD_EXE_SCRIPT = "scripts/build_exe.py"
+EXE_PROGRAM = r"dist\Get-Design-Markdown\Get-Design-Markdown.exe"
+EXE_ZIP_GLOB = "dist/Get-Design-Markdown-*-windows-x64.zip"
+RELEASE_EXE_ARTIFACT = "release-windows-exe"
+RELEASE_ASSET = "Get-Design-Markdown-${VERSION}-windows-x64.zip"
+#: Workspace folder that receives the exe's ui.log during the self-test (GDM_UI_LOG_DIR).
+EXE_LOG_DIR = "exe-logs"
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
@@ -65,6 +85,39 @@ def all_uses(workflow: dict[str, Any]) -> Iterator[str]:
         yield from uses(job)
 
 
+def step_index(job: dict[str, Any], predicate: Callable[[dict[str, Any]], bool]) -> int:
+    """Index of the first step matching `predicate` (fails when there is none)."""
+    for index, step in enumerate(steps(job)):
+        if predicate(step):
+            return index
+    raise AssertionError("no matching step")
+
+
+def run_contains(text: str) -> Callable[[dict[str, Any]], bool]:
+    return lambda step: text in str(step.get("run", ""))
+
+
+def uses_action(prefix: str) -> Callable[[dict[str, Any]], bool]:
+    return lambda step: str(step.get("uses", "")).startswith(prefix)
+
+
+def upload_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
+    return [step for step in steps(job) if uses_action("actions/upload-artifact@")(step)]
+
+
+def self_test_step(job: dict[str, Any]) -> dict[str, Any]:
+    return steps(job)[step_index(job, run_contains("Start-Process"))]
+
+
+def exe_build_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """Install, build and self-test steps of a job that builds the Windows exe."""
+    return [
+        steps(job)[step_index(job, run_contains(EXE_SYNC))],
+        steps(job)[step_index(job, run_contains(BUILD_EXE_SCRIPT))],
+        self_test_step(job),
+    ]
+
+
 def test_ci_triggers_and_permissions(ci: dict[str, Any]) -> None:
     triggers = ci["on"]
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch", "workflow_call"}
@@ -75,8 +128,9 @@ def test_ci_triggers_and_permissions(ci: dict[str, Any]) -> None:
 
 
 def test_ci_has_required_jobs(ci: dict[str, Any]) -> None:
-    assert {"lint", "test", "e2e", "build"} <= set(ci["jobs"])
+    assert {"lint", "test", "e2e", "build", "exe"} <= set(ci["jobs"])
     assert set(ci["jobs"]["e2e"]["needs"]) == {"lint", "test"}
+    assert ci["jobs"]["exe"]["needs"] == "lint"
 
 
 def test_lint_job_runs_the_gate(ci: dict[str, Any]) -> None:
@@ -149,18 +203,41 @@ def test_build_job_checks_every_packaged_resource(ci: dict[str, Any]) -> None:
     assert "uvx twine check" in script
     patterns = re.findall(r"'src/get_design_markdown/\*(\.[\w.]+)'", script)
     # Every non-Python file shipped in the package (e.g. the collector's in-page scripts) must
-    # be covered by the wheel check, which lists the files from git instead of by hand.
+    # be covered by the wheel check, which lists the files from git instead of by hand. The
+    # UI folder is listed as a whole, so a new kind of file there is covered as well.
+    assert UI_STATIC_PATHSPEC in script
     resources = [
         path
-        for path in (ROOT / "src" / "get_design_markdown").rglob("*")
-        if path.is_file() and path.suffix not in (".py", ".pyc", ".typed")
+        for path in PACKAGE_DIR.rglob("*")
+        if path.is_file()
+        and path.suffix not in (".py", ".pyc", ".typed")
+        and "__pycache__" not in path.parts
     ]
-    assert {path.suffix for path in resources} >= {".js", ".yaml", ".j2"}
+    assert {path.suffix for path in resources} >= {".js", ".yaml", ".j2", ".html"}
     for path in resources:
-        assert path.suffix in patterns, path
+        if UI_STATIC_DIR not in path.parents:
+            assert path.suffix in patterns, path
     assert "resources.txt" in script and "Wheel thiếu" in script
-    smoke = next(step for step in steps(job) if "wheel-env" in str(step.get("run", "")))
-    assert "resource_text" in smoke["run"] and "resources.txt" in smoke["run"]
+    # An empty or missing UI folder fails the check instead of passing silently.
+    assert (UI_STATIC_DIR / "index.html").is_file()
+    assert "'get_design_markdown/ui/static/index.html' resources.txt" in script
+
+
+def test_wheel_smoke_test_reads_the_ui_from_the_installed_wheel(ci: dict[str, Any]) -> None:
+    job = ci["jobs"]["build"]
+    smoke = steps(job)[step_index(job, run_contains("wheel-env"))]["run"]
+    assert "resource_text" in smoke and "resources.txt" in smoke
+    assert 'resource_path("ui", "static", "index.html")' in smoke
+    # Images are read as bytes; text files must also decode as UTF-8.
+    assert "read_bytes()" in smoke
+    # The code under test is the installed wheel, never the checkout.
+    assert '"wheel-env" in Path(get_design_markdown.__file__).parts' in smoke
+    for command in (
+        "wheel-env/bin/gdm --version",
+        "wheel-env/bin/gdm ui --help",
+        "wheel-env/bin/gdm-ui --help",
+    ):
+        assert command in smoke, command
 
 
 def test_sdist_is_built_from_an_explicit_file_list(ci: dict[str, Any]) -> None:
@@ -180,20 +257,219 @@ def test_sdist_is_built_from_an_explicit_file_list(ci: dict[str, Any]) -> None:
     assert "git ls-files" in check["run"] and "comm -23" in check["run"]
 
 
+def test_exe_job_builds_and_self_tests_on_windows(ci: dict[str, Any]) -> None:
+    job = ci["jobs"]["exe"]
+    assert job["runs-on"] == "windows-latest"
+    assert 0 < job["timeout-minutes"] <= 60
+    commands = runs(job)
+    assert EXE_SYNC in commands
+    build = next(command for command in commands if BUILD_EXE_SCRIPT in command)
+    assert build.startswith("uv run ") and build.endswith(f"python {BUILD_EXE_SCRIPT} --zip")
+    assert "--extra gui" in build and "--group build" in build
+    # Like on a user's PC: no Playwright Chromium, the self-test must find Edge by itself.
+    assert not any("playwright install" in command for command in commands)
+    assert not any(uses_action("actions/cache@")(step) for step in steps(job))
+
+    test = self_test_step(job)
+    assert test["shell"] == "pwsh"
+    assert 0 < test["timeout-minutes"] <= 20
+    script = test["run"]
+    # A windowed exe returns at once: only -Wait -PassThru gives its real exit code.
+    start = next(line for line in script.splitlines() if "Start-Process" in line)
+    assert f"-FilePath '{EXE_PROGRAM}'" in start
+    for token in ("-Wait", "-PassThru", "'--self-test'", "'--self-test-report'"):
+        assert token in start, token
+    assert "if ($p.ExitCode -ne 0)" in script and "exit 1" in script
+    assert "Get-Content" in script and "Test-Path $report" in script
+    # ui.log of the windowed exe (its only output) lands in the workspace and is uploaded.
+    assert f"$env:{LOG_DIR_ENV} = Join-Path (Get-Location) '{EXE_LOG_DIR}'" in script
+    assert "Get-Content -Encoding utf8 -Tail 60 $log" in script
+
+    order = [
+        step_index(job, run_contains(EXE_SYNC)),
+        step_index(job, run_contains(BUILD_EXE_SCRIPT)),
+        step_index(job, run_contains("Start-Process")),
+        step_index(job, lambda step: step.get("with", {}).get("path") == EXE_ZIP_GLOB),
+    ]
+    assert order == sorted(order), order
+    zip_upload, report_upload = upload_steps(job)
+    assert zip_upload["with"]["path"] == EXE_ZIP_GLOB
+    assert zip_upload["with"]["if-no-files-found"] == "error"
+    assert zip_upload["with"]["archive"] is False
+    assert "if" not in zip_upload
+    assert report_upload["with"]["path"].split() == ["self-test.json", f"{EXE_LOG_DIR}/"]
+    assert report_upload["if"] == "always()"
+
+
+def test_exe_is_built_the_same_way_in_ci_and_release(
+    ci: dict[str, Any], release: dict[str, Any]
+) -> None:
+    assert exe_build_steps(ci["jobs"]["exe"]) == exe_build_steps(release["jobs"]["exe"])
+
+
 def test_release_workflow(release: dict[str, Any]) -> None:
     assert release["on"] == {"push": {"tags": ["v*"]}}
     assert release["permissions"] == {"contents": "read"}
     jobs = release["jobs"]
     assert jobs["ci"]["uses"] == "./.github/workflows/ci.yml"
     job = jobs["release"]
-    assert job["needs"] == "ci"
+    assert set(job["needs"]) == {"ci", "exe"}
     assert job["permissions"] == {"contents": "write"}
     script = "\n".join(runs(job))
     assert "tomllib" in script and "GITHUB_REF_NAME" in script
+    assert 'echo "version=${version}" >> "$GITHUB_OUTPUT"' in script
     assert "uv build" in script
-    assert 'gh release create "$GITHUB_REF_NAME" dist/*' in script
-    create = next(step for step in steps(job) if "gh release create" in str(step.get("run", "")))
+    assert 'gh release create "$GITHUB_REF_NAME" dist/* "$exe_zip"' in script
+    assert f'exe_zip="exe/{RELEASE_ASSET}"' in script
+    create = steps(job)[step_index(job, run_contains("gh release create"))]
     assert create["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert create["env"]["VERSION"] == "${{ steps.version.outputs.version }}"
+    download_at = step_index(job, uses_action("actions/download-artifact@"))
+    assert steps(job)[download_at]["with"] == {"name": RELEASE_EXE_ARTIFACT, "path": "exe"}
+    assert download_at < step_index(job, run_contains("gh release create"))
+
+
+def test_release_builds_the_exe_for_the_tag(release: dict[str, Any]) -> None:
+    job = release["jobs"]["exe"]
+    assert job["needs"] == "ci"
+    assert job["runs-on"] == "windows-latest"
+    assert job["env"]["PYTHONUTF8"] == "1"
+    # The tag is checked before the (long) build, with bash on Windows.
+    version_at = step_index(job, lambda step: step.get("id") == "version")
+    version = steps(job)[version_at]
+    assert version["shell"] == "bash"
+    for needle in ("tomllib", "GITHUB_REF_NAME", 'echo "version=${version}" >> "$GITHUB_OUTPUT"'):
+        assert needle in version["run"], needle
+    assert version_at < step_index(job, run_contains(BUILD_EXE_SCRIPT))
+    check = steps(job)[step_index(job, run_contains(f'zip="dist/{RELEASE_ASSET}"'))]
+    assert check["shell"] == "bash"
+    assert check["env"]["VERSION"] == "${{ steps.version.outputs.version }}"
+    zip_upload, report_upload = upload_steps(job)
+    assert zip_upload["with"]["name"] == RELEASE_EXE_ARTIFACT
+    assert zip_upload["with"]["path"] == (
+        "dist/Get-Design-Markdown-${{ steps.version.outputs.version }}-windows-x64.zip"
+    )
+    assert zip_upload["with"]["if-no-files-found"] == "error"
+    assert report_upload["with"]["path"].split() == ["self-test.json", f"{EXE_LOG_DIR}/"]
+    assert report_upload["if"] == "always()"
+
+
+def _artifact_names(workflow: dict[str, Any]) -> list[str]:
+    names = []
+    for job in workflow["jobs"].values():
+        for step in upload_steps(job):
+            settings = step["with"]
+            # archive: false uploads one file under its own name; `name` is ignored then.
+            archived = settings.get("archive", True) is not False
+            names.append(str(settings["name"]) if archived else Path(settings["path"]).name)
+    return names
+
+
+def test_artifact_names_are_unique_in_a_release_run(
+    ci: dict[str, Any], release: dict[str, Any]
+) -> None:
+    # The release run includes the CI jobs (workflow_call): one artifact name used twice
+    # would fail the second upload.
+    names = _artifact_names(ci) + _artifact_names(release)
+    assert len(names) == len(set(names)), names
+    assert RELEASE_EXE_ARTIFACT in _artifact_names(release)
+
+
+def test_windows_steps_declare_their_shell(ci: dict[str, Any], release: dict[str, Any]) -> None:
+    # Windows runners default to PowerShell: bash syntax needs `shell: bash`.
+    bash_syntax = re.compile(r"\bif \[|\bfi\b|\$GITHUB_OUTPUT|\$\{\w+\}")
+    for workflow in (ci, release):
+        for name, job in workflow["jobs"].items():
+            if job.get("runs-on") != "windows-latest":
+                continue
+            for step in steps(job):
+                command = str(step.get("run", ""))
+                if "Start-Process" in command:
+                    assert step["shell"] == "pwsh", name
+                elif bash_syntax.search(command):
+                    assert step.get("shell") == "bash", (name, command)
+
+
+def test_build_script_produces_the_released_names() -> None:
+    script = ROOT / BUILD_EXE_SCRIPT
+    if not script.is_file():
+        pytest.skip(f"{BUILD_EXE_SCRIPT} chưa có trong bản mã nguồn này.")
+    text = script.read_text(encoding="utf-8")
+    assert "--zip" in text
+    assert "windows-x64.zip" in text and "Get-Design-Markdown" in text
+
+
+#: Stand-in for the windowed exe: writes the report it is given after a short pause (so a
+#: missing -Wait would be caught) and exits with $FAKE_EXIT.
+FAKE_EXE = """\
+import json, os, sys, time
+args = sys.argv[1:]
+with open("env.txt", "w", encoding="utf-8") as handle:
+    handle.write(os.environ.get("GDM_UI_LOG_DIR", ""))
+time.sleep(1.0)
+if os.environ["FAKE_REPORT"] == "1":
+    path = args[args.index("--self-test-report") + 1]
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"ok": os.environ["FAKE_EXIT"] == "0", "args": args}, handle)
+sys.exit(int(os.environ["FAKE_EXIT"]))
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Bước tự kiểm tra bản exe chạy trên Windows.")
+@pytest.mark.parametrize(
+    ("exit_code", "report", "expected"),
+    [(0, True, 0), (1, True, 1), (0, False, 1)],
+    ids=["passed", "failed", "no-report"],
+)
+def test_exe_self_test_step_runs_in_powershell(
+    ci: dict[str, Any], tmp_path: Path, exit_code: int, report: bool, expected: int
+) -> None:
+    """The CI step itself, run the way GitHub runs a pwsh step, with pythonw.exe (a windowed
+    program, like the exe) running a fake self-test in place of the exe."""
+    pwsh = shutil.which("pwsh")
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    if pwsh is None or not pythonw.is_file():
+        pytest.skip("Cần PowerShell 7 (pwsh) và pythonw.exe.")
+    fake = tmp_path / "fake_exe.py"
+    fake.write_text(FAKE_EXE, encoding="utf-8")
+    script = self_test_step(ci["jobs"]["exe"])["run"]
+    program = f"-FilePath '{EXE_PROGRAM}'"
+    arguments = "-ArgumentList '--self-test'"
+    assert script.count(program) == 1 and script.count(arguments) == 1
+    script = script.replace(program, f"-FilePath '{pythonw}'").replace(
+        arguments, f"-ArgumentList '\"{fake}\"','--self-test'"
+    )
+    work = tmp_path / "work dir"  # the report path holds a space
+    work.mkdir()
+    wrapper = work / "step.ps1"
+    wrapper.write_text(
+        "$ErrorActionPreference = 'stop'\n"
+        + script
+        + "\nif ((Test-Path -LiteralPath variable:\\LASTEXITCODE)) { exit $LASTEXITCODE }\n",
+        encoding="utf-8-sig",
+    )
+    env = dict(os.environ, FAKE_EXIT=str(exit_code), FAKE_REPORT="1" if report else "0")
+    completed = subprocess.run(
+        [pwsh, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", f". '{wrapper}'"],
+        cwd=work,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        check=False,
+    )
+    output = completed.stdout + completed.stderr
+    assert completed.returncode == expected, output
+    if report:
+        # The report is printed to the job log.
+        assert '"ok": ' in completed.stdout and "self-test.json" in completed.stdout
+    # The program was started with the log folder of the step.
+    assert (work / EXE_LOG_DIR).resolve() == Path(
+        (work / "env.txt").read_text(encoding="utf-8").strip()
+    ).resolve()
+    if expected:
+        assert "::error::" in completed.stdout, output
 
 
 def test_release_uses_no_secrets_or_pypi() -> None:
@@ -309,6 +585,91 @@ def test_readme_marker_commands_select_tests() -> None:
     # A documented `pytest -m X` must select something: exit code 5 is not a passing run.
     assert documented <= used_markers()
     assert readme_marker_rows(readme) == registered
+
+
+#: A Markdown heading outside code blocks, and an in-page link "](#anchor)".
+README_HEADING_RE = re.compile(r"^#{1,6} (.+?)\s*$")
+README_ANCHOR_LINK_RE = re.compile(r"\]\(#([^)\s]+)\)")
+
+
+def github_anchor(heading: str) -> str:
+    """The id GitHub gives a heading: lower case, punctuation dropped, spaces as dashes."""
+    return re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+
+
+def readme_anchors(readme: str) -> set[str]:
+    anchors: set[str] = set()
+    fenced = False
+    for line in readme.splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and (match := README_HEADING_RE.match(line)):
+            anchor = github_anchor(match.group(1))
+            # A repeated heading gets "-1", "-2"... like on GitHub.
+            suffix = 0
+            unique = anchor
+            while unique in anchors:
+                suffix += 1
+                unique = f"{anchor}-{suffix}"
+            anchors.add(unique)
+    return anchors
+
+
+def test_github_anchor() -> None:
+    assert github_anchor("Tải bản exe cho Windows") == "tải-bản-exe-cho-windows"
+    assert github_anchor("Định dạng DESIGN.md") == "định-dạng-designmd"
+    assert (
+        github_anchor("Dùng với Claude Code / claude.ai: `--prompt-only`")
+        == "dùng-với-claude-code--claudeai---prompt-only"
+    )
+
+
+def test_readme_links_point_to_existing_sections() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    anchors = readme_anchors(readme)
+    links = set(README_ANCHOR_LINK_RE.findall(readme))
+    assert links, "README has no table of contents"
+    assert links <= anchors, sorted(links - anchors)
+
+
+def test_readme_documents_the_ui_and_the_exe() -> None:
+    import typer
+
+    from get_design_markdown import cli
+    from get_design_markdown.models.raw import BROWSER_CHOICES
+    from get_design_markdown.ui import settings
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    commands = typer.main.get_command(cli.app).commands  # type: ignore[attr-defined]
+    # Every option of `gdm ui`, and --browser of collect/get, with its choices.
+    for name in ("ui", "get", "collect"):
+        for param in commands[name].params:
+            for option in param.opts:
+                if option.startswith("--"):
+                    assert f"`{option}" in readme, (name, option)
+    for choice in BROWSER_CHOICES:
+        assert f"`{choice}`" in readme, choice
+    assert "| `GDM_BROWSER` |" in readme
+    assert f"| `{settings.CONFIG_DIR_ENV}` |" in readme
+    assert f"| `{settings.LOG_DIR_ENV}` |" in readme
+    # Where the UI and the exe keep their files (ui/settings.py).
+    for needle in (
+        rf"%APPDATA%\{settings.APP_DIR_NAME}\{settings.SETTINGS_FILE}",
+        rf"%LOCALAPPDATA%\{settings.APP_DIR_NAME}\logs",
+        settings.LOG_FILE,
+        rf"Documents\{settings.EXE_OUTPUT_DIR_NAME}",
+    ):
+        assert needle in readme, needle
+    # The exe: release asset, unsigned-binary warning, options of ui/app.py main(), build.
+    asset = EXE_ZIP_GLOB.removeprefix("dist/").replace("*", "<phiên-bản>")
+    assert asset in readme
+    for needle in ("More info", "Run anyway", "Thông tin thêm", "Vẫn chạy", "Tải Chromium"):
+        assert needle in readme, needle
+    for option in ("--browser-tab", "--port", "--self-test", "--self-test-report"):
+        assert f"Get-Design-Markdown.exe {option}" in readme or f"'{option}'" in readme, option
+    assert f"python {BUILD_EXE_SCRIPT} --zip" in readme
+    assert "-Wait -PassThru" in readme
+    assert '[gui]"' in readme and "--extra gui" in readme
 
 
 def public_text_files() -> Iterator[Path]:

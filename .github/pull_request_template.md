@@ -14,6 +14,10 @@
 - [ ] Không commit file cục bộ: `CLAUDE.md`, `.env`, thư mục `output/`, `e2e-output/`
 - [ ] Đã chạy thử thật (`gdm get https://stripe.com`, `gdm get https://linear.app`) và kiểm
       thư mục kết quả bằng `uv run python scripts/verify_output.py output/<domain>`
+- [ ] Nếu sửa giao diện (`src/get_design_markdown/ui/`): đã chạy thử một lượt phân tích qua
+      `uv run gdm ui`, dùng được bằng bàn phím, cả theme sáng và tối
+- [ ] Nếu sửa phần đóng gói (`packaging/`, `scripts/build_exe.py`): đã build trên Windows bằng
+      `uv run --group build --extra gui python scripts/build_exe.py --zip` và bài `--self-test` đạt
 - [ ] Commit message tiếng Anh dạng Conventional Commits, không emoji
 - [ ] Thông báo cho người dùng viết tiếng Việt có dấu đầy đủ
 
