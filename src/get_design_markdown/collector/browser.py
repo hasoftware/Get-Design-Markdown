@@ -1,4 +1,4 @@
-"""Playwright session, navigation, lazy-load scrolling and blocker detection.
+"""Playwright session, navigation, lazy-load scrolling, focus release and blocker detection.
 
 The collector only *detects* bot challenges and sign-in walls and reports them; it never
 tries to solve captchas or evade challenges.
@@ -523,6 +523,48 @@ async def scroll_through(
         # The page navigated or closed while scrolling; capture what is there.
         with suppress(PlaywrightError):
             await page.evaluate(_SCROLL_TOP_JS)
+
+
+# ─── Focus ───────────────────────────────────────────────────────────────────
+
+#: Extra wait after blurring, on top of two animation frames (milliseconds).
+FOCUS_SETTLE_MS = 50
+
+
+@dataclass(frozen=True)
+class FocusRelease:
+    """What js/focus.js did: the tag it blurred (None when nothing was focused)."""
+
+    tag: str | None = None
+    still_focused: bool = False
+    finished_transitions: int = 0
+
+    @property
+    def blurred(self) -> bool:
+        return self.tag is not None
+
+
+async def release_focus(page: Page, *, settle_ms: int = FOCUS_SETTLE_MS) -> FocusRelease:
+    """Blur the focused element so styles and screenshots show controls at rest.
+
+    Autofocused fields (or a search box focused by script) would otherwise be measured with
+    their :focus / :focus-visible / :focus-within styles — a focus-ring border recorded as the
+    field's resting border. Waits for JS-tracked focus classes to re-render and finishes the
+    CSS transitions the blur started. Errors (page navigated or closed) are swallowed.
+    """
+    try:
+        result = await page.evaluate(
+            resource_text("collector", "js", "focus.js"), {"settleMs": settle_ms}
+        )
+    except PlaywrightError:
+        return FocusRelease()
+    if not isinstance(result, dict) or not result.get("blurred"):
+        return FocusRelease()
+    return FocusRelease(
+        tag=str(result.get("tag") or "?"),
+        still_focused=bool(result.get("still_focused")),
+        finished_transitions=int(result.get("finished_transitions") or 0),
+    )
 
 
 async def wait_quietly(page: Page, *, timeout_s: float) -> None:

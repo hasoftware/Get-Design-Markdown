@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PIL import Image
 
-from get_design_markdown.collector import browser, robots, viewports
+from get_design_markdown.collector import browser, dom, robots, viewports
 from get_design_markdown.collector.collect import collect_site
 from get_design_markdown.errors import (
     BotBlockedError,
@@ -194,6 +195,48 @@ def test_cookie_banner_is_an_overlay(home: PageCapture) -> None:
     assert any("in_overlay" in warning for warning in home.warnings)
     overlay_indexes = {element.index for element in home.elements if element.in_overlay}
     assert not overlay_indexes & {state.element_index for state in home.hover_states}
+
+
+#: The fixture's email field is autofocused; its focus look fades out over 600 ms (styles.css).
+REST_BORDER = ("rgb(203, 213, 225)",) * 4  # --color-border-strong
+REST_SHADOW = "rgba(15, 23, 42, 0.06) 0px 1px 2px 0px"  # --shadow-sm
+FOCUS_RING = "0px 0px 0px 3px"
+
+
+def _is_focus_indigo(pixel: tuple[int, ...]) -> bool:
+    red, green, blue = pixel[:3]
+    return blue - red > 60 and blue - green > 60
+
+
+def test_autofocused_field_is_measured_at_rest(
+    full: tuple[RawCapture, Path], home: PageCapture
+) -> None:
+    raw, out_dir = full
+    email = next(element for element in home.elements if element.tag == "input")
+    assert email.styles.border_color == REST_BORDER
+    assert email.styles.box_shadow == REST_SHADOW
+    form = next(element for element in home.elements if element.index == email.parent_index)
+    assert form.tag == "form"
+
+    assert raw.dark is not None
+    dark_email = next(element for element in raw.dark.elements if element.tag == "input")
+    assert dark_email.styles.border_color == ("rgb(51, 65, 85)",) * 4  # dark border-strong
+    assert FOCUS_RING not in dark_email.styles.box_shadow
+
+    # The screenshot shows the resting gray border, not the indigo focus border or ring.
+    shot = next(shot for shot in home.screenshots if shot.viewport_width == 1440)
+    with Image.open(out_dir / shot.path) as image:
+        rgb = image.convert("RGB")
+        middle = round(email.box.y + email.box.height / 2)
+        left = round(email.box.x)
+        strip = [
+            rgb.getpixel((x, y))
+            for x in range(left - 4, left + 3)
+            for y in range(middle - 2, middle + 3)
+        ]
+    pixels = [pixel for pixel in strip if isinstance(pixel, tuple)]
+    assert len(pixels) == len(strip)
+    assert not any(_is_focus_indigo(pixel) for pixel in pixels), pixels
 
 
 def test_stylesheets_include_cross_origin_css(full: tuple[RawCapture, Path]) -> None:
@@ -514,3 +557,105 @@ def test_probe_reports_password_fields(site_url: str) -> None:
     result = asyncio.run(run())
     assert result["title"].startswith("Sign in")
     assert result["passwords"] == 1 and 0 < result["texts"] < 40
+
+
+# ─── Focus release ───────────────────────────────────────────────────────────
+
+#: Focus styles apply instantly and fade out over 3 s once focus leaves (the after-change
+#: style's transition runs), so a read right after blur() would still see the focus look.
+FOCUS_STYLE = """<style>
+  body { margin: 0; font: 16px/1.5 sans-serif; }
+  .wrap { padding: 4px; border: 1px solid transparent; transition: border-color 3s linear; }
+  .wrap:focus-within { border-color: rgb(236, 72, 153); transition: none; }
+  .field {
+    border: 1px solid rgb(203, 213, 225); outline: none; padding: 8px;
+    transition: border-color 3s linear, box-shadow 3s linear;
+  }
+  .field:focus {
+    border-color: rgb(79, 70, 229); box-shadow: rgb(79, 70, 229) 0px 0px 0px 3px;
+    transition: none;
+  }
+  .field.is-focused { border-color: rgb(22, 163, 74); transition: none; }
+</style>"""
+#: An autofocused field inside a :focus-within wrapper.
+AUTOFOCUS_PAGE = f"""<!doctype html><html lang="en"><head>{FOCUS_STYLE}</head><body><main>
+  <form class="wrap" id="wrap"><input class="field" id="field" type="email" autofocus></form>
+</main></body></html>"""
+#: A field whose focus look is a class a framework removes one frame after the blur event.
+JS_FOCUS_PAGE = f"""<!doctype html><html lang="en"><head>{FOCUS_STYLE}
+<style>.field:focus:not(.is-focused) {{ border-color: rgb(203, 213, 225); box-shadow: none; }}
+</style>
+</head><body><main>
+  <form class="wrap" id="wrap"><input class="field" id="field" type="search"></form>
+  <script>
+    const field = document.getElementById("field");
+    field.addEventListener("focus", () => field.classList.add("is-focused"));
+    field.addEventListener("blur", () =>
+      requestAnimationFrame(() => field.classList.remove("is-focused")));
+  </script>
+</main></body></html>"""
+#: A field inside an open shadow root (web component design systems).
+SHADOW_PAGE = f"""<!doctype html><html lang="en"><head>{FOCUS_STYLE}</head><body><main>
+  <form class="wrap" id="wrap"><x-field id="host"></x-field></form>
+  <script>
+    const host = document.getElementById("host");
+    const root = host.attachShadow({{ mode: "open" }});
+    root.innerHTML = `{FOCUS_STYLE}<input class="field" id="field" type="email">`;
+  </script>
+</main></body></html>"""
+FOCUS_SCRIPTS = {
+    "autofocus": None,
+    "js-class": "() => document.getElementById('field').focus()",
+    "shadow": "() => document.getElementById('host').shadowRoot.getElementById('field').focus()",
+}
+
+
+DEEP_ACTIVE_ID = (
+    "() => { let a = document.activeElement;"
+    " while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;"
+    " return a ? a.id : null; }"
+)
+
+
+def _released(
+    content: str, focus_js: str | None, *, expect_focus: bool = True
+) -> tuple[str | None, browser.FocusRelease, dom.DomExtraction]:
+    async def run() -> tuple[str | None, browser.FocusRelease, dom.DomExtraction]:
+        async with browser.open_context(QUICK) as context:
+            page = await context.new_page()
+            await page.set_content(content)
+            if focus_js:
+                await page.evaluate(focus_js)
+            if expect_focus:  # autofocus is applied at the next rendering update
+                await page.wait_for_function(f"() => ({DEEP_ACTIVE_ID})() === 'field'")
+            focused = await page.evaluate(DEEP_ACTIVE_ID)
+            release = await browser.release_focus(page)
+            extraction = await dom.extract_dom(page, max_elements=200)
+            return focused, release, extraction
+
+    return asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("scenario", "content"),
+    [("autofocus", AUTOFOCUS_PAGE), ("js-class", JS_FOCUS_PAGE), ("shadow", SHADOW_PAGE)],
+)
+def test_release_focus_measures_fields_at_rest(scenario: str, content: str) -> None:
+    focused, release, extraction = _released(content, FOCUS_SCRIPTS[scenario])
+    assert focused == "field"  # the precondition: the field really had focus
+    assert release.blurred and release.tag == "input" and not release.still_focused
+    by_id = {element.id: element for element in extraction.elements if element.id}
+    field = by_id["field"]
+    # Resting values, not the focus border/ring nor a value 3 s transitions left halfway.
+    assert field.styles.border_color == ("rgb(203, 213, 225)",) * 4
+    assert field.styles.box_shadow == "none"
+    assert by_id["wrap"].styles.border_color == ("rgba(0, 0, 0, 0)",) * 4  # :focus-within off
+
+
+def test_release_focus_without_a_focused_element() -> None:
+    _, release, extraction = _released(
+        AUTOFOCUS_PAGE.replace(" autofocus", ""), None, expect_focus=False
+    )
+    assert release == browser.FocusRelease() and not release.blurred
+    field = next(element for element in extraction.elements if element.id == "field")
+    assert field.styles.border_color == ("rgb(203, 213, 225)",) * 4

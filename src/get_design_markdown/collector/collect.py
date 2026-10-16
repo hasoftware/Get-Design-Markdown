@@ -6,8 +6,9 @@ PUBLIC ENTRY POINT (frozen signature, called by pipeline.run_collect):
 Everything else in the collector package is internal to the collector stream.
 
 Per page: load (load + networkidle, with fallbacks) -> blocker check -> scroll for lazy
-content -> mark overlays -> extract DOM styles + CSS variables -> hide overlays -> hover
-states -> layout snapshots and screenshots at each width -> stylesheets from the network.
+content -> blur the focused element (autofocus fields are measured at rest) -> mark overlays
+-> extract DOM styles + CSS variables -> hide overlays -> hover states -> layout snapshots and
+screenshots at each width -> stylesheets from the network.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from get_design_markdown.collector.browser import (
     load_page,
     new_context,
     open_browser,
+    release_focus,
     scroll_through,
 )
 from get_design_markdown.collector.discovery import discover_pages, unique_page_name
@@ -145,6 +147,8 @@ async def capture_page(
 
         notify("Cuộn để tải nội dung lazy-load…")
         await scroll_through(page)
+        # Measure controls at rest: an autofocused field would report its focus ring.
+        await release_focus(page)
 
         overlays = await _detect_overlays(page)
         notify("Trích xuất style…")
@@ -173,6 +177,7 @@ async def capture_page(
         screenshots: list[Screenshot] = []
         if plan.widths:
             notify(f"Chụp ảnh {_widths_label(plan.widths)}…")
+            await release_focus(page)  # a script may have focused a field since extraction
             layouts, screenshots = await capture_viewports(
                 page,
                 page_name=plan.name,
