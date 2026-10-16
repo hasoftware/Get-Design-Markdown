@@ -207,6 +207,15 @@ def test_mock_up_panels_are_not_shadow_levels_or_radii() -> None:
     assert [step.value_px for step in analyze_radii([page])] == [6.0]
 
 
+def test_mock_up_text_and_spacing_are_skipped_by_every_foundation() -> None:
+    # linear.app: the 12px labels of the hero app window ("2min ago") made a caption level of
+    # their own; typography and spacing now skip the window like shapes and components do.
+    page = _mockup_page()
+    kept = {ref.element.index for ref in iter_foundation_elements([page])}
+    assert kept.isdisjoint({1, 2, 3, 4})
+    assert {0, 10} <= kept
+
+
 # ─── Lone component surfaces ─────────────────────────────────────────────────
 
 

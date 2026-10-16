@@ -21,11 +21,12 @@ they lift a component surface (a control, or a painted box holding content such 
 form panel), so a component's measured shadow stays one of the levels; at most six remain.
 Levels are ordered by score and named sm, md, lg... (or from xs when there are six).
 
-Both scales read through iter_shape_elements(): common.iter_design_elements() (decorative
-subtrees and off-canvas boxes skipped) minus animated illustrations built as BEM blocks named
-"*-animation" (animation_indexes(); typography and spacing skip them too, through
-iter_foundation_elements()) and app-window mock-ups, framed boxes in <main> holding their own
-navigation (mock_frame_indexes()): their panels and fake buttons are pictures of a product.
+Both scales read through iter_foundation_elements(), like typography and spacing:
+common.iter_design_elements() (decorative subtrees and off-canvas boxes skipped) minus animated
+illustrations built as BEM blocks named "*-animation" (animation_indexes()) and app-window
+mock-ups, framed boxes in <main> holding their own navigation (mock_frame_indexes(), the rule
+the components analyzer applies too): their panels, fake buttons and tiny labels are pictures
+of a product, not the site's own shapes, type or spacing.
 """
 
 from __future__ import annotations
@@ -204,20 +205,21 @@ def mock_frame_indexes(page: PageCapture) -> frozenset[int]:
 
 
 def iter_foundation_elements(pages: Sequence[PageCapture]) -> Iterator[ElementRef]:
-    """common.iter_design_elements() without animated illustrations (animation_indexes()):
-    the elements typography and spacing read."""
-    skipped = {position: animation_indexes(page) for position, page in enumerate(pages)}
+    """common.iter_design_elements() without animated illustrations (animation_indexes()) and
+    app-window mock-ups (mock_frame_indexes()): the elements typography, spacing and the shape
+    scales read."""
+    skipped = {
+        position: animation_indexes(page) | mock_frame_indexes(page)
+        for position, page in enumerate(pages)
+    }
     for ref in iter_design_elements(pages):
         if ref.element.index not in skipped[ref.page_index]:
             yield ref
 
 
 def iter_shape_elements(pages: Sequence[PageCapture]) -> Iterator[ElementRef]:
-    """iter_foundation_elements() without app-window mock-ups (mock_frame_indexes())."""
-    skipped = {position: mock_frame_indexes(page) for position, page in enumerate(pages)}
-    for ref in iter_foundation_elements(pages):
-        if ref.element.index not in skipped[ref.page_index]:
-            yield ref
+    """The elements the radius and shadow scales read: iter_foundation_elements()."""
+    return iter_foundation_elements(pages)
 
 
 # ─── Radii ───────────────────────────────────────────────────────────────────

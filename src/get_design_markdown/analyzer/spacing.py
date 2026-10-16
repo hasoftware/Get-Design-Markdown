@@ -7,8 +7,9 @@ Rules (pure, deterministic; page weights from analyzer/common.py):
 - Every foundation analyzer (typography, spacing, shapes) reads elements through
   shapes.iter_foundation_elements(): common.iter_elements() minus decorative subtrees (DOM-built
   mockups and graphics: role="img" or a graphic/illustration/mockup/artwork class segment),
-  animated illustrations (BEM blocks named "*-animation") and off-canvas elements (entirely
-  outside the 1440px viewport).
+  animated illustrations (BEM blocks named "*-animation"), app-window mock-ups (framed boxes in
+  <main> holding their own navigation) and off-canvas elements (entirely outside the 1440px
+  viewport).
 - Values: padding sides, positive margins and row/column gaps of rendered, non-overlay
   elements, in px rounded to 0.5; values under 2px are ignored, and so are auto-centering
   margins (left ~ right >= 32px on a horizontally centered element, or a side >= 25% of the

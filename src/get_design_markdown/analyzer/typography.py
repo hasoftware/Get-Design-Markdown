@@ -6,8 +6,9 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
 How it works (pure, deterministic):
 1. Samples: every rendered, non-overlay element that renders its own text (has_own_text),
    weighted by min(len(text), 50) x page weight. Screen-reader-only boxes, icon/emoji fonts,
-   decorative subtrees (DOM-built mockups and graphics, see common.decorative_indexes()) and
-   animated illustrations (shapes.animation_indexes()) are skipped. A stack that starts with a
+   decorative subtrees (DOM-built mockups and graphics, see common.decorative_indexes()),
+   animated illustrations (shapes.animation_indexes()) and app-window mock-ups
+   (shapes.mock_frame_indexes()) are skipped. A stack that starts with a
    system alias (system-ui, -apple-system...) is the "system-ui" family; otherwise the first
    non-generic, non-icon family of the stack. Inline wrappers take the tag of their
    heading/link/button/paragraph ancestor (semantic_tag()), so the spans that hold an h1's text
