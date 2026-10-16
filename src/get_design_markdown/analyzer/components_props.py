@@ -140,6 +140,8 @@ HOVER_FIELDS = {
     "opacity": "opacity",
 }
 _TYPE_SIZE_TOLERANCE_PX = 0.5
+#: A {typography.*} reference needs the level's line height within this many px.
+_LINE_HEIGHT_TOLERANCE_PX = 1.0
 _UTILITY_PREFIX = (
     r"p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|w|h|size|min-w|min-h|max-w|max-h|"
     r"gap|gap-x|gap-y|space-x|space-y|text|bg|border|border-[trblxyse]|rounded|"
@@ -227,6 +229,8 @@ class TextStyle:
     line_height_px: float
     letter_spacing_px: float
     text_transform: str
+    #: The computed line-height was "normal" (line_height_px is then size x 1.2).
+    line_height_normal: bool = False
 
 
 def text_source(ctx: PageContext, element: ElementSample) -> ElementSample:
@@ -271,6 +275,7 @@ def text_style(element: ElementSample, typography: Typography) -> TextStyle:
         line_height_px=size * NORMAL_LINE_HEIGHT if line_height is None else line_height,
         letter_spacing_px=parse_letter_spacing(styles.letter_spacing, size),
         text_transform=transform,
+        line_height_normal=styles.line_height.strip().lower() == "normal",
     )
 
 
@@ -412,8 +417,10 @@ def padding_ref(element: ElementSample, tokens: TokenContext) -> str | None:
 
 
 def typography_ref(style: TextStyle, tokens: TokenContext) -> str | None:
-    """Type level with the same size, the exact same weight, the same family and the same
-    letter-spacing (a reference stands for every value of the level)."""
+    """Type level with the same size, the exact same weight, the same family, the same
+    letter-spacing and (unless the element's line-height is "normal") the same line height
+    within 1px: a reference stands for every value of the level, so a 14px/14px nav link is
+    not a 14px / 1.2 level."""
     level = match_type_level(
         style.size_px,
         style.weight,
@@ -427,6 +434,14 @@ def typography_ref(style: TextStyle, tokens: TokenContext) -> str | None:
         return None
     if abs(level.letter_spacing_px - style.letter_spacing_px) > _LETTER_SPACING_TOLERANCE_PX:
         return None
+    if not style.line_height_normal:
+        expected = level.line_height_px
+        if expected is None and level.line_height is not None:
+            expected = level.line_height * level.size_px
+        if expected is not None and abs(expected - style.line_height_px) > (
+            _LINE_HEIGHT_TOLERANCE_PX
+        ):
+            return None
     return token_ref(TYPOGRAPHY, level.name)
 
 

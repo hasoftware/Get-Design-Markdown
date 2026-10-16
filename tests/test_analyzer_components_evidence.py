@@ -17,6 +17,8 @@ from get_design_markdown.models.analysis import (
     ColorRole,
     ColorToken,
     ScaleStep,
+    TypeLevel,
+    Typography,
 )
 from tests.test_analyzer_components import (
     BRAND,
@@ -229,3 +231,34 @@ def test_card_keeps_uneven_corners_of_its_surface() -> None:
 )
 def test_rounded_value(corners: tuple[float, float, float, float], expected: str | None) -> None:
     assert rounded_value(corners) == expected
+
+
+# ─── Typography references ───────────────────────────────────────────────────
+
+
+def test_typography_reference_needs_the_level_line_height() -> None:
+    # stripe.com: a 14px/14px nav link referenced {typography.caption} 14px / 1.2 (16.8px);
+    # a reference stands for every value of the level, line height included.
+    level = TypeLevel(
+        name="ui", size_px=15, font_family="Inter", weight=500, line_height_px=18, line_height=1.2
+    )
+    page = PageBuilder()
+    page.add("a", page.main, (100, 200, 160, 40), "Start now", **button_styles(BRAND))
+    spec = analyze([page.page()], typography=Typography(levels=[level]))["button-primary"]
+    assert spec.properties["lineHeight"] == "20px"
+    assert "typography" not in spec.token_refs
+
+    within = level.model_copy(update={"line_height_px": 19.5, "line_height": 1.3})
+    spec = analyze([page.page()], typography=Typography(levels=[within]))["button-primary"]
+    assert spec.token_refs["typography"] == "{typography.ui}"
+
+    normal = PageBuilder()
+    normal.add(
+        "a",
+        normal.main,
+        (100, 200, 160, 40),
+        "Start now",
+        **button_styles(BRAND, line_height="normal"),
+    )
+    spec = analyze([normal.page()], typography=Typography(levels=[level]))["button-primary"]
+    assert spec.token_refs["typography"] == "{typography.ui}"
