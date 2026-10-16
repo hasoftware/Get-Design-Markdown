@@ -157,7 +157,7 @@ class App {
 
   /**
    * The first-run guide shows until it is dismissed, and never once sites have been analysed:
-   * the exe's window keeps no browser data between launches, the history does.
+   * browser data can be cleared or blocked (or belong to another browser), the history stays.
    */
   initGuide() {
     if (this.expired || this.guideDecided) return;

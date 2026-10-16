@@ -20,6 +20,7 @@ import pytest
 from get_design_markdown.console import console as ui_console
 from get_design_markdown.errors import GdmError
 from get_design_markdown.ui import app
+from get_design_markdown.ui import settings as ui_settings
 from get_design_markdown.ui.app import (
     INSTALL_BROWSER_COMMAND,
     PYWEBVIEW_MISSING,
@@ -291,7 +292,11 @@ def test_open_window_creates_the_window(fake_webview: FakeWebview) -> None:
     assert args == (WINDOW_TITLE, "http://127.0.0.1:5000/#token=t")
     assert (kwargs["width"], kwargs["height"]) == WINDOW_SIZE
     assert kwargs["min_size"] == WINDOW_MIN_SIZE
-    assert fake_webview.started == [{"private_mode": True}]
+    assert fake_webview.started == [
+        {"private_mode": False, "storage_path": str(app.webview_storage_dir())}
+    ]
+    # The profile follows the settings folder (GDM_UI_CONFIG_DIR in tests), never the cwd.
+    assert app.webview_storage_dir() == ui_settings.config_dir() / "webview"
     assert fake_webview.settings["ALLOW_DOWNLOADS"] is True
 
 

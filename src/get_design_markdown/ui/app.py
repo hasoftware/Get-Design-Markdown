@@ -87,7 +87,7 @@ from get_design_markdown.models.base import GdmModel
 from get_design_markdown.resources import is_frozen, resource_path, template_environment
 from get_design_markdown.ui.browser_install import ensure_user_browsers_path, run_install_cli
 from get_design_markdown.ui.server import TOKEN_HEADER, UiMode, UiServer
-from get_design_markdown.ui.settings import LOG_FILE, log_dir
+from get_design_markdown.ui.settings import LOG_FILE, config_dir, log_dir
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +273,14 @@ def _prefers_dark() -> bool:
     return bool(value == 0)
 
 
+def webview_storage_dir() -> Path:
+    """Profile folder of the window's web engine: <config folder>/webview (GDM_UI_CONFIG_DIR
+    moves it with the settings). A persistent profile keeps the page's own cookies, so the
+    dismissed first-run guide and a manual light / dark choice survive a new launch; the page
+    only ever loads the local UI, and its session token lives in sessionStorage."""
+    return config_dir() / "webview"
+
+
 def open_window(url: str) -> bool:
     """Show `url` in a pywebview window and block until it is closed; False (without opening
     anything) when pywebview or its engine is unavailable."""
@@ -298,7 +306,7 @@ def open_window(url: str) -> bool:
             background_color="#111318" if _prefers_dark() else "#FFFFFF",
             text_select=True,
         )
-        webview.start(private_mode=True)
+        webview.start(private_mode=False, storage_path=str(webview_storage_dir()))
     except Exception as error:
         shown = window is not None and _event_is_set(getattr(window, "events", None), "shown")
         logger.warning("The native window failed (shown=%s): %s", shown, error, exc_info=True)
