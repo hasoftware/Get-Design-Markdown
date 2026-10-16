@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -66,7 +67,7 @@ def all_uses(workflow: dict[str, Any]) -> Iterator[str]:
 def test_ci_triggers_and_permissions(ci: dict[str, Any]) -> None:
     triggers = ci["on"]
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch", "workflow_call"}
-    assert triggers["push"]["branches"] == ["main", "stream/**"]
+    assert triggers["push"]["branches"] == ["main"]
     assert ci["permissions"] == {"contents": "read"}
     assert "github.ref" in ci["concurrency"]["group"]
     assert ci["concurrency"]["cancel-in-progress"] is True
@@ -252,3 +253,130 @@ def test_pull_request_template_checklist() -> None:
         "scripts/verify_output.py",
     ):
         assert needle in text, needle
+
+
+# ─── Public repository hygiene ───────────────────────────────────────────────
+
+#: `pytest -m <marker>` commands the README documents (a single marker, not an expression).
+README_MARKER_COMMAND_RE = re.compile(r"pytest -m (\w+)(?=[`\s;)]|$)")
+#: First cell of a README table row: | `browser` | ... |
+README_ROW_KEY_RE = re.compile(r"^\| `(\w+)` \|")
+README_MARKER_TABLE_INTRO = "Marker của pytest:"
+PYTEST_MARK_RE = re.compile(r"pytest\.mark\.(\w+)")
+
+#: Wording of the internal parallel build: stream branches, stream ownership notes and the
+#: integrator role. The public repository describes the project, not how it was assembled.
+INTERNAL_PROCESS_RE = re.compile(
+    r"\bstream/[\w*]"
+    r"|\(stream [a-z]"
+    r"|\bstreams? (?:analyzer|collector|synthesizer|exporters|qa-devops)\b"
+    r"|\b(?:collector|analyzer(?:-[\w-]+)?|synthesizer|exporters?|components|qa-devops|parallel"
+    r"|this|their) streams?\b"
+    r"|\bintegrator\b"
+    r"|phạm vi của mình",
+    re.IGNORECASE,
+)
+PUBLIC_TEXT_SUFFIXES = frozenset(
+    {".py", ".md", ".yml", ".yaml", ".toml", ".j2", ".js", ".html", ".css", ".txt"}
+)
+#: Leftovers in files outside .github/, scripts/ and README.md, whose rewording was sent as a
+#: change request; drop an entry once its file is reworded.
+PENDING_REWORDING = frozenset(
+    {
+        "src/get_design_markdown/analyzer/components.py",
+        "src/get_design_markdown/analyzer/components_context.py",
+        "src/get_design_markdown/analyzer/components_detect.py",
+        "src/get_design_markdown/analyzer/components_props.py",
+        "src/get_design_markdown/analyzer/components_surface.py",
+        "src/get_design_markdown/collector/collect.py",
+        "src/get_design_markdown/synthesizer/synthesize.py",
+        "tests/conftest.py",
+        "tests/fixtures/build_samples.py",
+        "tests/test_analyzer_layout.py",
+        "tests/test_fixtures.py",
+        "tests/test_glue.py",
+    }
+)
+
+
+def registered_markers() -> set[str]:
+    import tomllib
+
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    markers = config["tool"]["pytest"]["ini_options"]["markers"]
+    return {str(line).split(":", 1)[0].strip() for line in markers}
+
+
+def used_markers() -> set[str]:
+    this_file = Path(__file__).resolve()
+    return {
+        marker
+        for path in (ROOT / "tests").rglob("*.py")
+        if path.resolve() != this_file
+        for marker in PYTEST_MARK_RE.findall(path.read_text(encoding="utf-8"))
+    }
+
+
+def readme_marker_rows(readme: str) -> set[str]:
+    """Markers listed in the README table that follows "Marker của pytest:"."""
+    assert README_MARKER_TABLE_INTRO in readme
+    lines = readme.split(README_MARKER_TABLE_INTRO, 1)[1].strip().splitlines()
+    rows = itertools.takewhile(lambda line: line.startswith("|"), lines)
+    return {match.group(1) for row in rows if (match := README_ROW_KEY_RE.match(row))}
+
+
+def test_readme_marker_commands_select_tests() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    documented = set(README_MARKER_COMMAND_RE.findall(readme))
+    assert "e2e" in documented
+    registered = registered_markers()
+    assert documented <= registered
+    # A documented `pytest -m X` must select something: exit code 5 is not a passing run.
+    assert documented <= used_markers()
+    assert readme_marker_rows(readme) == registered
+
+
+def public_text_files() -> Iterator[Path]:
+    yield ROOT / "README.md"
+    yield ROOT / "pyproject.toml"
+    this_file = Path(__file__).resolve()
+    for folder in (GITHUB_DIR, ROOT / "scripts", ROOT / "src", ROOT / "tests"):
+        for path in sorted(folder.rglob("*")):
+            if (
+                path.is_file()
+                and path.suffix in PUBLIC_TEXT_SUFFIXES
+                and "__pycache__" not in path.parts
+                and path.resolve() != this_file
+            ):
+                yield path
+
+
+def test_public_files_do_not_describe_the_parallel_build() -> None:
+    found: dict[str, list[str]] = {}
+    for path in public_text_files():
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if INTERNAL_PROCESS_RE.search(line):
+                found.setdefault(path.relative_to(ROOT).as_posix(), []).append(
+                    f"{number}: {line.strip()}"
+                )
+    unexpected = {path: lines for path, lines in found.items() if path not in PENDING_REWORDING}
+    assert unexpected == {}
+
+
+def test_internal_process_pattern() -> None:
+    for text in (
+        '      - "stream/**"',
+        "Private to analyzer/components*.py (stream analyzer-components); not public.",
+        "internal to the collector stream.",
+        "whatever the state of the parallel streams",
+        "test fixtures (integrator-owned, frozen)",
+        "- [ ] Chỉ sửa các file thuộc phạm vi của mình",
+    ):
+        assert INTERNAL_PROCESS_RE.search(text), text
+    for text in (
+        "if isinstance(stream, io.TextIOWrapper):",
+        "for stream in (sys.stdout, sys.stderr):",
+        "git push origin main upstream/main",
+        "Private to analyzer/components*.py; not a public interface.",
+    ):
+        assert INTERNAL_PROCESS_RE.search(text) is None, text

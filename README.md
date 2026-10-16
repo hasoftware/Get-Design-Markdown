@@ -323,9 +323,15 @@ desktop và mobile đã thu nhỏ (cạnh dài tối đa 1568px).
 Sau khi AI viết lại, nên chạy `scripts/verify_output.py` (xem bên dưới). Bộ kiểm tra đọc cả phần
 thân chứ không chỉ front matter: giá trị viết cạnh tham chiếu (`` `{colors.canvas}` — #ffffff ``,
 `` `{rounded.md}` (8px) ``, dòng bảng bắt đầu bằng một token) phải đúng giá trị trong front matter,
-và mọi mã màu hex, độ dài `px`, tỉ lệ tương phản `N:1` trong văn bản phải có trong `analysis.json`.
-Nó không phát hiện được trường hợp một con số trong câu văn tự do bị đổi thành một số đo **khác
-cũng có thật** (ví dụ 16px thành 24px khi cả hai đều đo được), nên vẫn nên đọc lại bản viết lại.
+và mọi màu (hex 3, 4, 6 hoặc 8 chữ số, `rgb()`, `hsl()`, `oklch()`…), độ dài `px` hay `rem` (kể
+cả viết tách như "16 px") và tỉ lệ tương phản `N:1` trong văn bản phải có trong `analysis.json`.
+Văn bản trong ngoặc kép cong “…” chỉ được bỏ qua khi đúng là chữ trên trang đã thu (`raw.json`).
+Nó **không** phát hiện được các trường hợp sau, nên vẫn cần đọc lại bản viết lại:
+
+- một con số trong câu văn tự do bị đổi thành một số đo **khác cũng có thật** (ví dụ 16px thành
+  24px khi cả hai đều đo được);
+- số không có đơn vị (font weight như "300, 400, 700", line-height như 1.5), giá trị `em` hay `%`,
+  và tên màu (`white`, `navy`…).
 
 ## tokens.json và preview.html
 
@@ -372,11 +378,15 @@ Bộ kiểm tra xác nhận:
 - `DESIGN.md`: front matter hợp lệ (`version: alpha`, có `name`), mọi `{nhóm.tên}` trỏ tới token có
   thật, thứ tự section đúng, có ghi chú nguồn; **không có con số bịa**: mọi màu, bo góc, spacing,
   cỡ chữ của front matter đều có trong `analysis.json`; trong phần thân (ngoài khối code), giá trị
-  viết cạnh tham chiếu token và các dòng bảng bắt đầu bằng token khớp front matter, còn mọi mã
-  hex, độ dài `px` và tỉ lệ `N:1` đều có trong `analysis.json` (hoặc là mốc chuẩn như 4.5:1,
-  44px, hoặc suy ra trực tiếp từ số đo: màu đặc mà một màu trong suốt đo được hiện ra trên nền
-  canvas, tỉ lệ mà công cụ bỏ qua alpha báo cho màu đó); cặp màu component dưới 4.5:1 được nhắc trong Do's and Don'ts; breakpoint đo được có trong
-  mục Layout; trạng thái hover có biến thể `-hover`.
+  viết cạnh tham chiếu token và các dòng bảng bắt đầu bằng token khớp front matter, còn mọi màu
+  (hex 3/4/6/8 chữ số hoặc hàm màu CSS như `rgb()`, `hsl()`), độ dài `px` hoặc `rem` (có hay không
+  có khoảng trắng trước đơn vị) và tỉ lệ `N:1` đều có trong `analysis.json` (hoặc là mốc chuẩn như
+  4.5:1, 44px, hoặc suy ra trực tiếp từ số đo: màu đặc mà một màu trong suốt đo được hiện ra trên
+  nền canvas, tỉ lệ mà công cụ bỏ qua alpha báo cho màu đó). Chỉ URL, tên/selector lấy từ trang và
+  câu trích trong ngoặc kép cong “…” khớp chữ trên trang (`raw.json`) được bỏ qua; số không đơn vị
+  (font weight, line-height), `em`, `%` và tên màu thì không được kiểm. Cặp màu component dưới
+  4.5:1 được nhắc trong Do's and Don'ts; breakpoint đo được có trong mục Layout; trạng thái hover
+  có biến thể `-hover`.
 - Mọi tầng đều đã chạy đủ: `analysis.json` không có phần phân tích bị bỏ qua và `synthesis.json`
   không ghi bước nào "chưa được xây dựng" (với `--partial` đây chỉ là ghi chú).
 - `tokens.json` (mọi token có `$type`, alias trỏ đúng, giá trị màu/kích thước hợp lệ) và
@@ -448,12 +458,13 @@ Marker của pytest:
 |---|---|---|
 | `browser` | Cần Chromium, chạy trên trang fixture cục bộ `tests/fixtures/site/` | Có trong `uv run pytest`; tự bỏ qua nếu thiếu Chromium, trừ khi đặt `GDM_REQUIRE_BROWSER=1` (CI đặt sẵn) |
 | `e2e` | Trọn pipeline trên trang fixture | `uv run pytest -m e2e`; thất bại khi một tầng chưa được xây dựng, bị bỏ qua hoặc không ghi file |
-| `network` | Cần Internet | Không chạy mặc định; `uv run pytest -m network` |
+| `network` | Dành cho test cần Internet | Bị loại khỏi lần chạy mặc định (`addopts` trong `pyproject.toml`). Trang thật (stripe.com, linear.app) được kiểm bằng `gdm get` và `scripts/verify_output.py` chứ không bằng pytest |
 
-Mạng: các test không cần Internet, trừ `tests/test_synthesizer_linter.py`. Test này chạy linter
-chính thức qua `npx`, nên cần Node.js và lần đầu phải tải gói `@google/design.md` từ npm (sau đó
-dùng bộ nhớ đệm của npm). Khi không có `npx` hoặc không tải được gói, test tự bỏ qua kèm lý do
-thay vì thất bại.
+Mạng: các test không cần Internet, trừ `tests/test_synthesizer_linter.py`. Test này cố ý không
+mang marker `network`, để `uv run pytest` trên máy và mọi job test của CI đều chạy nó: nó chạy
+linter chính thức qua `npx`, nên cần Node.js và lần đầu phải tải gói `@google/design.md` từ npm
+(sau đó dùng bộ nhớ đệm của npm). Khi không có `npx` hoặc không tải được gói, test tự bỏ qua kèm
+lý do thay vì thất bại.
 
 Chạy trọn pipeline trên trang fixture và kiểm tra kết quả giống job e2e của CI:
 
@@ -489,7 +500,7 @@ viết tiếng Việt có dấu.
 
 ### CI/CD
 
-- **`.github/workflows/ci.yml`** chạy khi push lên `main` hoặc `stream/**`, khi mở pull request,
+- **`.github/workflows/ci.yml`** chạy khi push lên `main`, khi mở pull request,
   khi chạy tay và khi được workflow khác gọi:
   - `lint`: ruff, ruff format, mypy (`src tests` và `scripts`);
   - `test`: pytest trên Ubuntu và Windows × Python 3.11, 3.12, 3.13, có Chromium

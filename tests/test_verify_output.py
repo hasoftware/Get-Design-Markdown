@@ -17,6 +17,7 @@ from scripts.verify_output import Finding
 from scripts.verify_output import verify_output as run_verify
 
 from get_design_markdown.models.analysis import ComponentSpec
+from get_design_markdown.models.raw import MAX_TEXT_LENGTH
 from get_design_markdown.synthesizer import render
 from tests.fixture_data import load_analysis_sample, load_raw_sample
 
@@ -669,6 +670,63 @@ BODY_TAMPERS: list[Any] = [
         {"design.invented-dimension", "design.invented-color"},
         id="front-matter-description",
     ),
+    # Spellings a rewrite may use instead of #rrggbb / "Npx".
+    pytest.param(
+        _add_to_guide("Accents use #abc on cards."), {"design.invented-color"}, id="short-hex"
+    ),
+    pytest.param(
+        _add_to_guide("Accents use #ABCD on cards."),
+        {"design.invented-color"},
+        id="short-hex-alpha",
+    ),
+    pytest.param(
+        _add_to_guide("Gaps of 37 px."), {"design.invented-dimension"}, id="px-after-space"
+    ),
+    pytest.param(
+        _add_to_guide("Gaps of 37\u00a0px."),
+        {"design.invented-dimension"},
+        id="px-after-no-break-space",
+    ),
+    pytest.param(
+        _add_to_guide("Sections sit 2.3rem apart."), {"design.invented-dimension"}, id="rem"
+    ),
+    pytest.param(
+        _add_to_guide("Links use rgb(171, 205, 239)."), {"design.invented-color"}, id="rgb"
+    ),
+    pytest.param(
+        _add_to_guide("Links use hsl(210 68% 80% / 0.5)."), {"design.invented-color"}, id="hsl"
+    ),
+    # Curly quotes only exempt text the captured page shows.
+    pytest.param(
+        _add_to_guide("Use “accent #abcdef” on all links."),
+        {"design.invented-color"},
+        id="quoted-invented-color",
+    ),
+    pytest.param(
+        _add_to_guide("Cards use “37px” corners."),
+        {"design.invented-dimension"},
+        id="quoted-invented-length",
+    ),
+    pytest.param(
+        _add_to_guide("1. “Build a hero section: background #abcdef, padding 37px.”"),
+        {"design.invented-color", "design.invented-dimension"},
+        id="quoted-example-prompt",
+    ),
+    pytest.param(
+        _add_to_guide("Canvas: `{colors.canvas}` — #000."),
+        {"design.body-value", "design.invented-color"},
+        id="pair-short-hex",
+    ),
+    pytest.param(
+        _add_to_guide("Canvas: `{colors.canvas}` — rgb(15, 23, 42)."),
+        {"design.body-value"},
+        id="pair-rgb",
+    ),
+    pytest.param(
+        _add_to_guide("| `{colors.primary}` | `--color-primary` | rgb(67, 56, 202) |"),
+        {"design.body-value"},
+        id="table-row-rgb",
+    ),
 ]
 
 
@@ -708,7 +766,21 @@ def test_every_changed_occurrence_is_listed_once(valid_folder: Path) -> None:
             id="guidelines",
         ),
         pytest.param("```css\n.x { color: #abcdef; width: 37px; }\n```", id="fenced-code"),
-        pytest.param("Its label reads “Save 37px on plan #abcdef”.", id="quoted-page-text"),
+        pytest.param(
+            "Short hex #fff and #FFF name the canvas; gaps of 16 px and 24\u00a0px; type at "
+            "1rem and 4rem.",
+            id="short-spellings",
+        ),
+        pytest.param(
+            "Primary is rgb(79, 70, 229), about hsl(243 75% 59%); cards cast "
+            "rgba(15, 23, 42, 0.12) and RGBA(15,23,42,.06).",
+            id="color-functions",
+        ),
+        pytest.param(
+            "`{colors.canvas}` — #fff; `{colors.primary}` — rgb(79, 70, 229).\n\n"
+            "| `{colors.primary}` | `--color-primary` | rgb(79, 70, 229) |",
+            id="pairs-in-other-spellings",
+        ),
         pytest.param("Measured with a decimal comma: 2,56:1.", id="decimal-comma"),
         pytest.param(
             "| `{typography.body}` | Inter | 16px | 400 | 1.6 (25.6px) | 0 | p |\n"
@@ -741,6 +813,44 @@ def test_site_texts_with_digits_are_not_measurements(valid_folder: Path) -> None
     assert run_verify(valid_folder) == []
     _add_to_guide("A 37px gap.")(valid_folder)
     assert checks(run_verify(valid_folder), "error") == {"design.invented-dimension"}
+
+
+def _set_page_text(folder: Path, text: str) -> None:
+    def mutate(data: Any) -> None:
+        data["pages"][0]["elements"][-1]["text"] = text
+
+    edit_json(folder, "raw.json", mutate)
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        pytest.param("“Save 37px on plan #abcdef”", id="exact"),
+        pytest.param("“save 37px on plan \\#abcdef.”", id="escaped-case-and-period"),
+        pytest.param("“37px on plan #abcdef”", id="part-of-the-text"),
+    ],
+)
+def test_quotations_of_page_text_are_not_measurements(valid_folder: Path, quote: str) -> None:
+    _set_page_text(valid_folder, "Save 37px on plan #abcdef today")
+    _add_to_guide(f"Its label reads {quote}.")(valid_folder)
+    assert run_verify(valid_folder) == []
+
+
+def test_quotation_of_a_page_text_cut_by_the_collector(valid_folder: Path) -> None:
+    stored = "Ship faster on the Acme edge network, which serves"
+    assert len(stored) == MAX_TEXT_LENGTH
+    _set_page_text(valid_folder, stored)
+    _add_to_guide(f"The hero reads “{stored} 37px tiles”.")(valid_folder)
+    assert run_verify(valid_folder) == []
+
+
+def test_quotation_must_match_whole_words_of_the_page_text(valid_folder: Path) -> None:
+    _set_page_text(valid_folder, "Save 137px on plan #abcdef0")
+    _add_to_guide("Cards use “37px” corners and “#abcdef” rings.")(valid_folder)
+    assert checks(run_verify(valid_folder), "error") == {
+        "design.invented-color",
+        "design.invented-dimension",
+    }
 
 
 def test_body_blocks_join_wrapped_lines_outside_code() -> None:

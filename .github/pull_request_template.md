@@ -7,7 +7,7 @@
 - [ ] Đã chạy đủ cổng kiểm tra và tất cả đều pass:
       `uv run ruff check .` · `uv run ruff format --check .` · `uv run mypy src tests` ·
       `uv run mypy scripts` · `uv run pytest` (có Chromium; `GDM_REQUIRE_BROWSER=1` nếu muốn bắt buộc)
-- [ ] Chỉ sửa các file thuộc phạm vi của mình; không sửa file đóng băng (models, glue CLI/pipeline,
+- [ ] Không sửa lẫn file đóng băng vào PR tính năng (models, glue CLI/pipeline,
       `css_values`/`common`/`naming`, `pyproject.toml`, `uv.lock`, fixture dùng chung…)
 - [ ] Mọi thay đổi cần ở file đóng băng được ghi thành **change request** bên dưới (file, thay đổi
       chính xác, lý do)

@@ -47,6 +47,7 @@ from get_design_markdown.models.analysis import (
 )
 from get_design_markdown.models.raw import (
     DEFAULT_SCREENSHOT_WIDTHS,
+    MAX_TEXT_LENGTH,
     RAW_SCHEMA_VERSION,
     PageCapture,
     RawCapture,
@@ -1877,30 +1878,51 @@ def _check_breakpoints_documented(
 #
 # A "--prompt-only" rewrite (or a hand edit) only touches the prose, so the body is checked on
 # its own: outside fenced code, every "`{group.name}` — value" pair and every table row keyed by
-# a token must repeat the front-matter value, and every hex color, px length and "N:1" contrast
-# ratio must come from analysis.json (or from the few guideline values the rules quote).
+# a token must repeat the front-matter value, and every color (hex, short hex or a CSS color
+# function), length (px or rem) and "N:1" contrast ratio must come from analysis.json (or from
+# the few guideline values the rules quote). Unitless numbers (font weights, line heights),
+# em/% values and named colors are not checked.
 
 #: Values the rules quote from guidelines rather than from measurements: the WCAG thresholds,
 #: the WCAG large-text sizes (24px, or 18.66px bold), the 44px tap-target guideline, 1px rings.
 GUIDELINE_RATIOS: Final = (3.0, 4.5, 7.0)
 GUIDELINE_PX: Final = (0.0, 1.0, 18.66, 24.0, 44.0)
 BODY_RATIO_TOLERANCE: Final = 0.02
+#: A rem length is compared in px at the page's root font size and at the browser default.
+DEFAULT_ROOT_FONT_PX: Final = 16.0
+#: rgb()/hsl()/oklch()… spellings of a measured color round its channels (hsl percentages,
+#: alpha decimals): within this distance they still name that color. Hex must match exactly.
+FUNCTION_COLOR_DELTA_E: Final = 1.0
+FUNCTION_COLOR_ALPHA: Final = 0.02
+#: Trailing punctuation a rewrite may add inside a quotation of page text.
+QUOTE_PUNCTUATION: Final = " .,;:!?…"
 
 _BLOCK_START_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|\||#{1,6}\s|>)")
 #: Table rows and headings never continue on the next line.
 _SINGLE_LINE_BLOCK_RE = re.compile(r"^\s*(?:\||#{1,6}\s)")
-_BODY_HEX_RE = re.compile(r"(?<![\w&#\\])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\w-])")
-_BODY_PX_RE = re.compile(r"(?<![\w.,#\[/\\-])-?\d+(?:\.\d+)?px(?![\w-])")
+#: #rrggbbaa, #rrggbb, #rgba and #rgb (never an entity "&#123;", an escaped "\#" or "a#b").
+_HEX_DIGITS = r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])"
+_BODY_HEX_RE = re.compile(r"(?<![\w&#\\])" + _HEX_DIGITS)
+_COLOR_FUNCTION = r"(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)"
+_BODY_COLOR_FUNCTION_RE = re.compile(r"(?<![\w-])" + _COLOR_FUNCTION, re.IGNORECASE)
+#: Optional space (also no-break and narrow no-break) between a number and its unit: "16 px".
+_UNIT_SPACE = "[ \u00a0\u202f]?"
+_BODY_PX_RE = re.compile(r"(?<![\w.,#\[/\\-])(-?\d+(?:\.\d+)?)" + _UNIT_SPACE + r"px(?![\w-])")
+_BODY_REM_RE = re.compile(
+    r"(?<![\w.,#\[/\\-])(-?(?:\d+(?:\.\d+)?|\.\d+))" + _UNIT_SPACE + r"rem(?![\w-])"
+)
 _BODY_RATIO_RE = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?) ?: ?1(?!\d|[.,]\d)")
 _CSS_PX_RE = re.compile(r"(-?\d+(?:\.\d+)?)px")
 _URL_RE = re.compile(r"<?https?://[^\s>)\]]+>?")
-_QUOTED_RE = re.compile(r"“[^”]*”")
+_QUOTED_RE = re.compile(r"“([^”]*)”")
 _MD_SPECIAL_RE = re.compile(r"([\\`*_\[\]<>|{}#~])")
+_MD_UNESCAPE_RE = re.compile(r"\\([\\`*_\[\]<>|{}#~])")
 _TABLE_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
 _VALUE_REF_RE = re.compile(r"`\{(colors|typography|rounded|spacing)\.([a-z0-9]+(?:-[a-z0-9]+)*)\}`")
 _DASH_RE = re.compile(r"\s*—\s*")
 _PAREN_RE = re.compile(r"\s*\(\s*([^()]*?)\s*\)")
-_LEADING_HEX_RE = re.compile(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\w-])")
+_LEADING_HEX_RE = re.compile(_HEX_DIGITS)
+_LEADING_COLOR_FUNCTION_RE = re.compile(_COLOR_FUNCTION, re.IGNORECASE)
 _LEADING_DIMENSION_RE = re.compile(r"-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em)(?![\w-])")
 #: "Inter 15px / 500 / 1.33" — how a typography token is written next to its reference.
 _TYPE_SUMMARY_RE = re.compile(
@@ -2025,9 +2047,72 @@ def _site_strings(analysis: DesignAnalysis) -> list[str]:
     return sorted(variants, key=len, reverse=True)
 
 
-def _scannable(text: str, site_pattern: re.Pattern[str] | None) -> str:
-    """`text` without URLs, quoted page texts and other site-derived strings."""
-    text = _URL_RE.sub(" ", _QUOTED_RE.sub(" ", text))
+def _plain(text: str) -> str:
+    """Markdown-unescaped, whitespace-collapsed, case-folded text, to compare page texts."""
+    return " ".join(_MD_UNESCAPE_RE.sub(r"\1", text).split()).casefold()
+
+
+def _may_hold_values(text: str) -> bool:
+    return any(character.isdigit() or character == "#" for character in text)
+
+
+def _page_texts(analysis: DesignAnalysis, raw: RawCapture | None) -> list[str]:
+    """Plain texts of the captured pages (raw.json elements, titles, analysis samples) that a
+    quotation holding a measurement-like value may come from: texts with a digit or "#", and
+    texts the collector cut at MAX_TEXT_LENGTH (their continuation is unknown)."""
+    texts: list[str] = [analysis.site.title or "", analysis.site.description or ""]
+    for level in analysis.typography.levels:
+        texts.extend(level.samples)
+    for component in analysis.components:
+        texts.extend(component.samples)
+    if raw is not None:
+        for page in [*raw.pages, *([raw.dark] if raw.dark else [])]:
+            texts.extend((page.title or "", page.meta_description or ""))
+            texts.extend(element.text for element in page.elements)
+    return sorted(
+        {
+            plain
+            for text in texts
+            if _may_hold_values(plain := _plain(text)) or len(plain) >= MAX_TEXT_LENGTH
+        }
+    )
+
+
+def _contains_words(text: str, part: str) -> bool:
+    """`part` occurs in `text` without cutting a word or a number at either end."""
+    start = text.find(part)
+    while start >= 0:
+        end = start + len(part)
+        before = text[start - 1] if start > 0 else " "
+        after = text[end] if end < len(text) else " "
+        if not before.isalnum() and not after.isalnum():
+            return True
+        start = text.find(part, start + 1)
+    return False
+
+
+def _is_page_quote(content: str, page_texts: Sequence[str]) -> bool:
+    """A curly-quoted span is page text (exempt from the value checks) only when the page shows
+    it: it occurs in a captured text, or starts with a text the capture cut at
+    MAX_TEXT_LENGTH characters. Any other quotation (an example prompt, an invented label) is
+    checked like the rest of the prose."""
+    quote = _plain(content).strip(QUOTE_PUNCTUATION)
+    if not _may_hold_values(quote):
+        return True
+    return any(
+        _contains_words(text, quote) or (len(text) >= MAX_TEXT_LENGTH and quote.startswith(text))
+        for text in page_texts
+    )
+
+
+def _scannable(
+    text: str, site_pattern: re.Pattern[str] | None, page_texts: Sequence[str] = ()
+) -> str:
+    """`text` without URLs, quotations of page text and other site-derived strings."""
+    text = _QUOTED_RE.sub(
+        lambda match: " " if _is_page_quote(match.group(1), page_texts) else match.group(0), text
+    )
+    text = _URL_RE.sub(" ", text)
     return site_pattern.sub(" ", text) if site_pattern is not None else text
 
 
@@ -2237,12 +2322,17 @@ def _pair_mismatch(
     value = after[dash.end() :] if dash is not None else paren.group(1) if paren else ""
     if group == naming.COLORS:
         hex_match = _LEADING_HEX_RE.match(value)
-        if hex_match is None or (paren is not None and hex_match.end() != len(value)):
+        color_match = hex_match or _LEADING_COLOR_FUNCTION_RE.match(value)
+        if color_match is None or (paren is not None and color_match.end() != len(value)):
             return None
-        written = hex_match.group(0)
-        if _canonical_hex(written) != _canonical_hex(str(expected)):
-            return written, str(expected)
-        return None
+        written = " ".join(color_match.group(0).split())
+        if hex_match is not None:
+            same = _canonical_hex(written) == _canonical_hex(str(expected))
+        else:
+            color = css_values.parse_color(written)
+            target = css_values.parse_color(str(expected))
+            same = color is None or target is None or _same_function_color(color, [target])
+        return None if same else (written, str(expected))
     if group in (naming.ROUNDED, naming.SPACING):
         dimension = _LEADING_DIMENSION_RE.match(value)
         if dimension is None or (paren is not None and dimension.end() != len(value)):
@@ -2281,10 +2371,19 @@ def _row_mismatch(cells: Sequence[str], tokens: FrontMatterTokens) -> tuple[str,
         return None
     others = cells[1:]
     if group == naming.COLORS:
+        target = css_values.parse_color(str(expected))
         for cell in others:
             for match in _BODY_HEX_RE.finditer(cell):
                 if _canonical_hex(match.group(0)) != _canonical_hex(str(expected)):
                     return match.group(0), str(expected)
+            for match in _BODY_COLOR_FUNCTION_RE.finditer(cell):
+                color = css_values.parse_color(match.group(0))
+                if (
+                    color is not None
+                    and target is not None
+                    and not _same_function_color(color, [target])
+                ):
+                    return " ".join(match.group(0).split()), str(expected)
         return None
     if group in (naming.ROUNDED, naming.SPACING):
         for cell in others:
@@ -2371,19 +2470,58 @@ def _check_body_token_values(
         )
 
 
+def _css_value_colors(analysis: DesignAnalysis) -> set[str]:
+    """Colors written inside measured CSS values: shadow layers and every component property
+    (gradients, shadows, borders), which the rules may quote verbatim."""
+    values = [shadow.css for shadow in analysis.shadows]
+    for component in analysis.components:
+        for properties in [component.properties, *component.states.values()]:
+            values.extend(str(value) for value in properties.values())
+    colors: set[str] = set()
+    for value in values:
+        for match in itertools.chain(
+            _BODY_HEX_RE.finditer(value), _BODY_COLOR_FUNCTION_RE.finditer(value)
+        ):
+            color = css_values.parse_color(match.group(0))
+            if color is not None:
+                colors.add(color.css_hex)
+    return colors
+
+
+def _same_function_color(color: RGBA, others: Iterable[RGBA]) -> bool:
+    """`color` (written as rgb()/hsl()/…) names one of `others` up to channel rounding."""
+    return any(
+        abs(color.alpha - other.alpha) <= FUNCTION_COLOR_ALPHA
+        and css_values.delta_e_2000(color, other) <= FUNCTION_COLOR_DELTA_E
+        for other in others
+    )
+
+
+def _root_font_sizes(raw: RawCapture | None) -> list[float]:
+    sizes = [DEFAULT_ROOT_FONT_PX]
+    if raw is not None and raw.pages and raw.pages[0].root_font_size_px:
+        sizes.append(float(raw.pages[0].root_font_size_px))
+    return sizes
+
+
 def _check_body_measurements(
     document: DesignDocument,
     tokens: FrontMatterTokens,
     analysis: DesignAnalysis,
+    raw: RawCapture | None,
     report: _Report,
 ) -> None:
-    """Hex colors, px lengths and contrast ratios in the prose must come from analysis.json."""
+    """Colors, lengths and contrast ratios in the prose must come from analysis.json."""
     front_matter = document.front_matter or {}
     strings = _site_strings(analysis)
     site_pattern = re.compile("|".join(map(re.escape, strings))) if strings else None
+    page_texts = _page_texts(analysis, raw)
     measured_colors = _measured_colors(analysis)
     measured_colors |= _flattened_colors(analysis, measured_colors)
+    measured_colors |= _css_value_colors(analysis)
+    measured_rgba: list[RGBA] | None = None
     measured_px = _measured_px(analysis)
+    root_sizes = _root_font_sizes(raw)
     measured_ratios = _measured_ratios(analysis)
     reference_colors = [
         color
@@ -2403,7 +2541,7 @@ def _check_body_measurements(
     lengths: dict[str, list[str]] = {}
     ratios: dict[str, list[str]] = {}
     for block in blocks:
-        text = _scannable(block.text, site_pattern)
+        text = _scannable(block.text, site_pattern, page_texts)
         block_colors: list[RGBA] = []
         for match in _BODY_HEX_RE.finditer(text):
             color = css_values.parse_color(match.group(0))
@@ -2411,8 +2549,27 @@ def _check_body_measurements(
                 block_colors.append(color)
             if _canonical_hex(match.group(0)) not in measured_colors:
                 colors.setdefault(match.group(0).lower(), []).append(block.where)
+        for match in _BODY_COLOR_FUNCTION_RE.finditer(text):
+            color = css_values.parse_color(match.group(0))
+            if color is None:
+                continue
+            block_colors.append(color)
+            if color.css_hex in measured_colors:
+                continue
+            if measured_rgba is None:
+                measured_rgba = [
+                    parsed
+                    for value in sorted(measured_colors)
+                    if (parsed := css_values.parse_color(value)) is not None
+                ]
+            if not _same_function_color(color, measured_rgba):
+                colors.setdefault(" ".join(match.group(0).split()), []).append(block.where)
         for match in _BODY_PX_RE.finditer(text):
-            if not _matches_any(float(match.group(0)[:-2]), measured_px):
+            if not _matches_any(float(match.group(1)), measured_px):
+                lengths.setdefault(match.group(0), []).append(block.where)
+        for match in _BODY_REM_RE.finditer(text):
+            rem = float(match.group(1))
+            if not any(_matches_any(rem * size, measured_px) for size in root_sizes):
                 lengths.setdefault(match.group(0), []).append(block.where)
         written_ratios = [match.group(1) for match in _BODY_RATIO_RE.finditer(text)]
         if not written_ratios:
@@ -2487,7 +2644,7 @@ def _check_design(
     if document.front_matter is not None and analysis is not None:
         _check_invented_values(front_matter, tokens, analysis, report)
         _check_components_vs_analysis(front_matter, tokens, analysis, report)
-        _check_body_measurements(document, tokens, analysis, report)
+        _check_body_measurements(document, tokens, analysis, raw, report)
     _check_design_contrast(document, tokens, analysis, report)
     if analysis is not None:
         _check_breakpoints_documented(document, analysis, report)
