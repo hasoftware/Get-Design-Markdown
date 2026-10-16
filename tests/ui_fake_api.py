@@ -77,7 +77,12 @@ from get_design_markdown.ui.browser_install import (
     BrowserInfo,
     InstallStatus,
 )
-from get_design_markdown.ui.history import THUMBNAIL_PREFERENCE, HistoryEntry, is_valid_site_name
+from get_design_markdown.ui.history import (
+    THUMBNAIL_PREFERENCE,
+    HistoryEntry,
+    is_valid_site_name,
+    recorded_prompt,
+)
 from get_design_markdown.ui.jobs import (
     FINAL_SUCCESS_MESSAGE,
     PIPELINE_STEPS,
@@ -118,6 +123,7 @@ from get_design_markdown.ui.server import (
     ShutdownResponse,
     UiMode,
     mixed_runs_note,
+    robots_refused_note,
 )
 from get_design_markdown.ui.settings import (
     MAX_DELTA_E,
@@ -351,6 +357,12 @@ def results_for(folder: Path) -> ResultsResponse | None:
         if prompt_dir.is_dir()
         else []
     )
+    prompt_file: Path | None = folder / PROMPT_FILE
+    recorded = recorded_prompt(folder)  # same rule as the real server
+    if recorded is not None:
+        prompt_path, image_paths = recorded
+        prompt_file = folder / prompt_path if prompt_path else None
+        prompt_images = [_files_url(site, path) for path in image_paths] if prompt_path else []
     token_counts: dict[str, int] | None = None
     if (folder / SYNTHESIS_FILE).is_file():
         synthesis = SynthesisResult.model_validate_json(
@@ -358,7 +370,10 @@ def results_for(folder: Path) -> ResultsResponse | None:
         )
         token_counts = dict(synthesis.token_counts)
     warnings = list(analysis.warnings) if analysis else []
-    mixed = mixed_runs_note(folder)  # same rule as the real server
+    robots = robots_refused_note(folder)  # same rules as the real server
+    if robots is not None:
+        warnings.insert(0, robots)
+    mixed = mixed_runs_note(folder)
     if mixed is not None:
         warnings.insert(0, mixed)
     return ResultsResponse(
@@ -367,7 +382,7 @@ def results_for(folder: Path) -> ResultsResponse | None:
         folder=str(folder.resolve()),
         files=files,
         design=_render_document(folder / DESIGN_FILE),
-        prompt=_render_document(folder / PROMPT_FILE),
+        prompt=_render_document(prompt_file) if prompt_file is not None else None,
         preview_url=_files_url(site, PREVIEW_FILE) if (folder / PREVIEW_FILE).is_file() else None,
         screenshots=screenshots,
         prompt_images=prompt_images,

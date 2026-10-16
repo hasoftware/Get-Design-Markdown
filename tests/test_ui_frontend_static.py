@@ -303,6 +303,22 @@ def test_chromium_size_matches_what_the_download_installs() -> None:
     assert quoted == 3
 
 
+def test_robots_refused_prefix_matches_the_server_note(tmp_path: Path) -> None:
+    """results.js recognises the note server.robots_refused_note() adds to the warnings."""
+    from get_design_markdown.ui.server import ROBOTS_REFUSED_PREFIX, robots_refused_note
+
+    match = re.search(r'const ROBOTS_REFUSED_PREFIX =\s*"([^"]+)";', _read("results.js"))
+    assert match is not None and match.group(1) == ROBOTS_REFUSED_PREFIX
+    (tmp_path / "raw.json").write_text(
+        '{"robots": {"robots_url": "https://x.test/robots.txt", "allowed": false}}',
+        encoding="utf-8",
+    )
+    note = robots_refused_note(tmp_path)
+    assert note is not None and note.startswith(match.group(1))
+    html = _read("index.html")
+    assert 'id="results-robots"' in html and 'id="results-robots-text"' in html
+
+
 def test_mixed_runs_prefix_matches_the_server_note(tmp_path: Path) -> None:
     """results.js recognises the note server.mixed_runs_note() puts first in the warnings."""
     import os

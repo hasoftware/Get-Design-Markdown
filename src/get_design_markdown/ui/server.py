@@ -124,7 +124,9 @@ GET  /api/results/{site}
                                                # synthesis.json image_paths (with prompt)
           "token_counts": {"colors": 10, ...} | null,   # synthesis.json token_counts
           "warnings": ["..."]}   # analysis.json warnings, preceded by a note when the files
-                                 # come from two runs (server.mixed_runs_note)
+                                 # come from two runs (server.mixed_runs_note) and by one
+                                 # when robots.txt refused automated access at capture time
+                                 # (server.robots_refused_note)
      URLs are root-relative and percent-encoded. 404 "site_not_found" for an invalid or
      missing site.
 
@@ -209,7 +211,7 @@ from get_design_markdown.errors import (
     NotImplementedYetError,
 )
 from get_design_markdown.models.base import GdmModel
-from get_design_markdown.models.raw import BROWSER_CHOICES, Screenshot
+from get_design_markdown.models.raw import BROWSER_CHOICES, RobotsCheck, Screenshot
 from get_design_markdown.resources import resource_path
 from get_design_markdown.storage import (
     ANALYSIS_FILE,
@@ -1193,6 +1195,45 @@ def mixed_runs_note(folder: Path) -> str | None:
     )
 
 
+#: RawCapture writes `robots` before `pages`, so the note only needs the head of raw.json
+#: (which can weigh tens of MB).
+_RAW_HEAD_BYTES = 64 * 1024
+_ROBOTS_KEY_RE = re.compile(r'"robots"\s*:\s*')
+#: Start of robots_refused_note() (results.js shows it as a callout above the tabs).
+ROBOTS_REFUSED_PREFIX = "Lúc thu thập, robots.txt của trang này không cho phép công cụ tự động đọc"
+
+
+def recorded_robots(folder: Path) -> RobotsCheck | None:
+    """raw.json's robots.txt verdict, read from the head of the file; None when unknown."""
+    path = safe_child(folder, [RAW_FILE])
+    if path is None:
+        return None
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(_RAW_HEAD_BYTES).decode("utf-8", errors="ignore")
+    except OSError:
+        return None
+    match = _ROBOTS_KEY_RE.search(head)
+    if match is None:
+        return None
+    try:
+        value, _ = json.JSONDecoder().raw_decode(head, match.end())
+        return RobotsCheck.model_validate(value)
+    except (ValueError, ValidationError):
+        return None
+
+
+def robots_refused_note(folder: Path) -> str | None:
+    """A Vietnamese note when robots.txt disallowed this tool when the site was captured."""
+    robots = recorded_robots(folder)
+    if robots is None or robots.allowed is not False:
+        return None
+    return (
+        f"{ROBOTS_REFUSED_PREFIX} ({robots.robots_url}). Chỉ dùng kết quả để tham khảo và tôn "
+        "trọng điều khoản sử dụng của trang."
+    )
+
+
 def _token_counts(folder: Path) -> dict[str, int] | None:
     synthesis = _read_json_object(folder / SYNTHESIS_FILE)
     if synthesis is None:
@@ -1224,6 +1265,9 @@ def build_results(output_root: Path, site: str) -> ResultsResponse | None:
     design = safe_child(folder, [DESIGN_FILE])
     prompt, prompt_images = _current_prompt(folder, site)
     warnings = _analysis_warnings(analysis)
+    robots = robots_refused_note(folder)
+    if robots is not None:
+        warnings.insert(0, robots)
     mixed = mixed_runs_note(folder)
     if mixed is not None:
         warnings.insert(0, mixed)

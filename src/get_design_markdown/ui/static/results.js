@@ -40,6 +40,25 @@ const FILE_PURPOSES = {
 const FILE_ICONS = { design: "doc", preview: "eye", image: "image" };
 // First warning of a folder whose files come from two runs (server.mixed_runs_note).
 const MIXED_RUNS_PREFIX = "Lượt chạy gần nhất của trang này chưa đi hết các bước";
+// Warning of a site whose robots.txt refused automated access (server.robots_refused_note).
+const ROBOTS_REFUSED_PREFIX =
+  "Lúc thu thập, robots.txt của trang này không cho phép công cụ tự động đọc";
+
+// prompt.md and its images are rewritten only by a "prompt-only" run: when the latest run did
+// not write them (results.prompt is null) they belong to an earlier run.
+function isPromptFile(path) {
+  return path === "prompt.md" || path.startsWith("prompt-images/");
+}
+
+function filePurpose(file, results) {
+  if (isPromptFile(file.path) && !results.prompt) {
+    return { text: "Từ một lượt chạy trước, không khớp DESIGN.md hiện tại", stale: true };
+  }
+  if (file.path.startsWith("prompt-images/")) {
+    return { text: "Ảnh thu nhỏ để dán kèm prompt.md", stale: false };
+  }
+  return { text: FILE_PURPOSES[file.kind] || FILE_PURPOSES.other, stale: false };
+}
 
 function deviceOf(width) {
   if (width >= 1200) return { size: "desktop", label: "Máy tính" };
@@ -187,6 +206,11 @@ export class ResultsView {
     byId("results-mixed-text").textContent = mixed || "";
     byId("results-mixed").hidden = mixed === null;
     if (mixed !== null) warnings = warnings.slice(1);
+    // A robots.txt refusal outlives the job view: shown above the tabs too.
+    const robots = warnings.find((warning) => warning.startsWith(ROBOTS_REFUSED_PREFIX)) || null;
+    byId("results-robots-text").textContent = robots || "";
+    byId("results-robots").hidden = robots === null;
+    if (robots !== null) warnings = warnings.filter((warning) => warning !== robots);
     for (const warning of warnings) list.appendChild(h("li", { text: warning }));
     byId("results-warnings-title").textContent =
       `Ghi chú khi phân tích (${warnings.length})`;
@@ -370,10 +394,11 @@ export class ResultsView {
     for (const file of results.files || []) {
       const slash = file.path.lastIndexOf("/");
       const dir = slash >= 0 ? file.path.slice(0, slash + 1) : "";
+      const purpose = filePurpose(file, results);
       body.appendChild(
         h(
           "tr",
-          {},
+          { class: purpose.stale ? "file-stale" : null },
           h(
             "td",
             {},
@@ -389,7 +414,12 @@ export class ResultsView {
               ),
             ),
           ),
-          h("td", { class: "file-purpose", text: FILE_PURPOSES[file.kind] || FILE_PURPOSES.other }),
+          h(
+            "td",
+            { class: "file-purpose" },
+            purpose.stale ? h("span", { class: "file-badge", text: "Cũ" }) : null,
+            purpose.text,
+          ),
           h("td", { class: "num", text: formatBytes(file.size) }),
           h(
             "td",

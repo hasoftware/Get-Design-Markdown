@@ -1991,6 +1991,53 @@ def test_results_say_when_an_unfinished_run_left_newer_screenshots(
     assert results.warnings[1:] == analysis_warnings
 
 
+def _refuse_robots(folder: Path) -> None:
+    """Rewrite raw.json as a capture that robots.txt disallowed, keeping its mtime."""
+    raw_path = folder / "raw.json"
+    stat = raw_path.stat()
+    data = json.loads(raw_path.read_text(encoding="utf-8"))
+    data["robots"] = {
+        "robots_url": "http://127.0.0.1/robots.txt",
+        "allowed": False,
+        "status_code": 200,
+        "note": "robots.txt không cho phép bot.",
+    }
+    raw_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    os.utime(raw_path, (stat.st_atime, stat.st_mtime))
+
+
+def test_results_keep_a_robots_refusal_after_the_job(
+    client: httpx.Client, output_root: Path
+) -> None:
+    folder = output_root / ACME_SITE
+    analysis_warnings = json.loads((folder / "analysis.json").read_text(encoding="utf-8"))[
+        "warnings"
+    ]
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert results.warnings == analysis_warnings  # allowed: no note
+    _refuse_robots(folder)
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    note = results.warnings[0]
+    assert note.startswith(server_module.ROBOTS_REFUSED_PREFIX)
+    assert "http://127.0.0.1/robots.txt" in note and "tham khảo" in note
+    assert results.warnings[1:] == analysis_warnings
+
+
+def test_recorded_robots_reads_only_the_head_of_raw_json(tmp_path: Path) -> None:
+    assert server_module.recorded_robots(tmp_path) is None  # no raw.json
+    raw = tmp_path / "raw.json"
+    raw.write_text('{"schema_version": 1, "robots": {"robots_url": "u", "allowed": null}}')
+    robots = server_module.recorded_robots(tmp_path)
+    assert robots is not None and robots.allowed is None
+    assert server_module.robots_refused_note(tmp_path) is None  # unknown is not a refusal
+    raw.write_text('{"robots": {"robots_url": "u", "allowed": false}, "pages": [' + "1," * 9)
+    assert server_module.robots_refused_note(tmp_path) is not None  # truncated tail is fine
+    raw.write_text('{"robots": {"allowed": "maybe"')
+    assert server_module.recorded_robots(tmp_path) is None
+    raw.write_text(" " * (70 * 1024) + '{"robots": {"robots_url": "u", "allowed": false}}')
+    assert server_module.recorded_robots(tmp_path) is None  # beyond the head: unknown
+
+
 def test_mixed_runs_note(tmp_path: Path) -> None:
     folder = tmp_path / "site"
     (folder / "screenshots").mkdir(parents=True)

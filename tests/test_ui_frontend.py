@@ -9,6 +9,7 @@ FILES_HTML_CSP permits it inside the sandboxed preview).
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import shutil
@@ -1169,6 +1170,64 @@ def test_results_from_two_runs_are_flagged_up_front(ui: OpenUi, ui_fake_api: Fak
     assert not any(note.startswith("Lượt chạy gần nhất") for note in notes)
     page.click("#results-mixed-rerun")
     expect(page.locator("#job-url")).to_contain_text("acme.example")
+
+
+def test_results_keep_a_robots_refusal_visible(ui: OpenUi, ui_fake_api: FakeApi) -> None:
+    """A site whose robots.txt refused automated access says so above the tabs whenever its
+    results are opened, not only while the job runs."""
+    folder = ui_fake_api.output_root / "robots.example"
+    shutil.copytree(ui_fake_api.output_root / ACME_SITE, folder)
+    raw_path = folder / "raw.json"
+    stat = raw_path.stat()
+    data = json.loads(raw_path.read_text(encoding="utf-8"))
+    data["robots"] = {"robots_url": "https://robots.example/robots.txt", "allowed": False}
+    raw_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    os.utime(raw_path, (stat.st_atime, stat.st_mtime))
+    session = ui().open()
+    page = session.page
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    expect(page.locator("#results-robots")).to_be_hidden()
+
+    page.click(".history-item[data-site='robots.example']")
+    session.wait_results()
+    callout = page.locator("#results-robots")
+    expect(callout).to_be_visible()
+    expect(callout).to_contain_text("không muốn bị công cụ tự động đọc")
+    expect(callout).to_contain_text("https://robots.example/robots.txt")
+    expect(page.locator("#results-mixed")).to_be_hidden()
+    notes = page.locator("#results-warnings-list li").all_text_contents()
+    assert not any("robots.txt của trang này" in note for note in notes)
+
+
+def test_files_from_an_earlier_prompt_only_run_are_marked_old(
+    ui: OpenUi, ui_fake_api: FakeApi
+) -> None:
+    """prompt.md and prompt-images/ left by an earlier "prompt-only" run do not match the
+    latest DESIGN.md: the Files tab labels them, the AI tab does not offer them."""
+    folder = ui_fake_api.output_root / "oldprompt.example"
+    shutil.copytree(ui_fake_api.output_root / ACME_SITE, folder)
+    (folder / "prompt.md").write_text("# Old prompt\n", encoding="utf-8")
+    (folder / "prompt-images").mkdir(exist_ok=True)
+    shutil.copyfile(folder / "screenshots" / "home-1440.png", folder / "prompt-images" / "d.png")
+    synthesis_path = folder / "synthesis.json"
+    synthesis = json.loads(synthesis_path.read_text(encoding="utf-8"))
+    synthesis.update(prompt_path=None, image_paths=[])
+    synthesis_path.write_text(json.dumps(synthesis), encoding="utf-8")
+    session = ui().open()
+    page = session.page
+    page.click(".history-item[data-site='oldprompt.example']")
+    session.wait_results()
+    page.click("#tab-ai")
+    expect(page.locator("#prompt-present")).to_be_hidden()
+    page.click("#tab-files")
+    stale = page.locator("#files-body tr.file-stale")
+    expect(stale).to_have_count(len(list((folder / "prompt-images").iterdir())) + 1)
+    expect(stale.first).to_contain_text("prompt-images")
+    expect(stale.last).to_contain_text("prompt.md")
+    expect(stale.last).to_contain_text("Từ một lượt chạy trước")
+    current = page.locator("#files-body tr:not(.file-stale) .file-base")
+    expect(current.filter(has_text=re.compile(r"^DESIGN\.md$"))).to_have_count(1)
 
 
 def test_empty_history_invites_a_first_analysis(ui: OpenUi) -> None:

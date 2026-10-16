@@ -2429,6 +2429,22 @@ details[open] > summary .chevron {
   color: var(--ink-2);
 }
 
+.file-stale .file-purpose {
+  color: var(--warn-ink);
+}
+
+.file-badge {
+  display: inline-block;
+  margin-right: var(--s1);
+  padding: 0 6px;
+  border: 1px solid var(--warn-line);
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
 .file-actions {
   display: flex;
   gap: var(--s1);
