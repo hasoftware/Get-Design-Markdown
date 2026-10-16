@@ -5,6 +5,9 @@ __pycache__/
 build/
 dist/
 
+# Bản exe đóng gói (scripts/build_exe.py)
+*.zip
+
 # Môi trường & cache công cụ
 .venv/
 .mypy_cache/

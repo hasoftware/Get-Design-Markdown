@@ -11,6 +11,7 @@ dependencies = [
     "coloraide>=8.0",
     "httpx>=0.27",
     "jinja2>=3.1",
+    "markdown-it-py>=3.0",
     "pillow>=10.4",
     "playwright>=1.48",
     "pydantic>=2.8",
@@ -20,6 +21,10 @@ dependencies = [
     "tinycss2>=1.3",
     "typer>=0.27.2,<0.28",  # cli.py uses typer._click and typer.TyperException
 ]
+
+[project.optional-dependencies]
+# Native window for `gdm ui --window` and the Windows exe (WebView2 through pythonnet on Windows).
+gui = ["pywebview>=5.3"]
 
 [project.urls]
 Repository = "https://github.com/hasoftware/Get-Design-Markdown"
@@ -35,6 +40,8 @@ dev = [
     "ruff>=0.6",
     "types-pyyaml>=6.0",
 ]
+# Packaging of the Windows exe only (scripts/build_exe.py); never a runtime dependency.
+build = ["pyinstaller>=6.10"]
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -82,5 +89,5 @@ plugins = ["pydantic.mypy"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["tinycss2.*"]
+module = ["tinycss2.*", "webview", "webview.*", "PyInstaller", "PyInstaller.*"]
 ignore_missing_imports = true
