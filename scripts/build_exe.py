@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib
 import importlib.metadata
 import json
@@ -74,6 +75,7 @@ REQUIRED_NOTICES: Final = (
     "pythonnet",
     "clr_loader",
     "playwright",
+    "pyinstaller",
 )
 #: This project: its license is LICENSE.txt, not a third-party notice.
 PROJECT_DISTRIBUTION: Final = "get-design-markdown"
@@ -264,8 +266,18 @@ def canonical_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+@functools.cache
+def _real_folder(folder: str) -> str:
+    return os.path.realpath(folder)
+
+
 def _path_key(path: str | os.PathLike[str]) -> str:
-    return os.path.normcase(os.path.abspath(os.fspath(path)))
+    """Comparable spelling of a file path: the folder is resolved (subst drives, junctions,
+    8.3 short names), so the spec's sources and the installed files match however each was
+    spelled."""
+    absolute = os.path.abspath(os.fspath(path))
+    folder, name = os.path.split(absolute)
+    return os.path.normcase(os.path.join(_real_folder(folder), name))
 
 
 def load_bundled_sources(path: Path) -> list[str]:

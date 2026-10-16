@@ -395,6 +395,38 @@ NATIVE_SOURCES = [
 ]
 
 
+def test_bundled_distributions_match_sources_spelled_through_another_drive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build from a subst drive lists its sources on drive W: and the installed files on
+    drive C:; both folders resolve to the same place, so the owner is still found."""
+    site = tmp_path / "site-packages"
+    owner = _fake_distribution(site, "hooks")
+    alias = tmp_path / "alias-drive"
+    real_realpath = os.path.realpath
+
+    def fake_realpath(path: str | os.PathLike[str], **kwargs: object) -> str:
+        text = os.fspath(path)
+        if os.path.normcase(text).startswith(os.path.normcase(str(alias))):
+            text = str(tmp_path) + text[len(str(alias)) :]
+        return real_realpath(text)
+
+    monkeypatch.setattr(os.path, "realpath", fake_realpath)
+    build_exe._real_folder.cache_clear()
+    try:
+        found = build_exe.bundled_distributions(
+            [str(alias / "site-packages" / "hooks" / "__init__.py")], [owner]
+        )
+    finally:
+        build_exe._real_folder.cache_clear()
+    assert [dist.metadata["Name"] for dist in found] == ["hooks"]
+
+
+def test_pyinstaller_is_a_required_notice() -> None:
+    """Its Apache-2.0 run-time hooks and the bootloader live inside the exe."""
+    assert "pyinstaller" in build_exe.REQUIRED_NOTICES
+
+
 def test_notices_of_bundled_distributions_and_native_libraries(tmp_path: Path) -> None:
     site = tmp_path / "site-packages"
     app = tmp_path / "Get-Design-Markdown"
@@ -486,7 +518,15 @@ def test_notices_of_the_real_gui_build_name_pywebview_pythonnet_and_openssl(
     if sys.platform != "win32":
         pytest.skip("the exe is built on Windows only")
     sources: list[str] = list(NATIVE_SOURCES)
-    for module in ("webview", "pythonnet", "clr_loader", "playwright", "pydantic", "PIL"):
+    for module in (
+        "webview",
+        "pythonnet",
+        "clr_loader",
+        "playwright",
+        "pydantic",
+        "PIL",
+        "PyInstaller",
+    ):
         spec = importlib.util.find_spec(module)
         if spec is None or spec.origin is None:
             pytest.skip(f"{module} is not installed (uv sync --extra gui)")
