@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import unquote, urlsplit, urlunsplit
@@ -28,6 +30,8 @@ PROMPT_IMAGES_DIR = "prompt-images"
 M = TypeVar("M", bound=BaseModel)
 
 _SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+#: One label of a host name: letters (also accented, IDN), digits, "-" and "_".
+_HOST_LABEL_RE = re.compile(r"[\w-]{1,63}")
 _JSON_POSITION_RE = re.compile(r"line (\d+) column (\d+)")
 #: pydantic error type -> Vietnamese description (pydantic's own messages are English).
 _ERROR_TEXT: dict[str, str] = {
@@ -86,14 +90,39 @@ def normalize_url(url: str) -> str:
         raise InvalidUrlError(
             f"URL không hợp lệ: {url!r} (thiếu tên miền).", hint="Ví dụ: https://stripe.com"
         )
+    if not _valid_host(host):
+        raise InvalidUrlError(
+            f"URL không hợp lệ: {url!r} (tên miền có dấu cách hoặc ký tự không dùng được).",
+            hint="Tên miền chỉ gồm chữ, số, dấu gạch ngang và dấu chấm. Ví dụ: https://stripe.com",
+        )
+    try:
+        parts.port  # noqa: B018 - raises ValueError for a port that is not a number 0-65535
+    except ValueError:
+        raise InvalidUrlError(
+            f"URL không hợp lệ: {url!r} (số cổng sau dấu ':' không đúng).",
+            hint="Ví dụ: https://stripe.com hoặc http://localhost:8000",
+        ) from None
     path = parts.path or "/"
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+
+
+def _valid_host(host: str) -> bool:
+    """A host name made of labels of letters (IDN too), digits, "-" and "_" separated by
+    single dots (a trailing dot is allowed), or an IP address; no spaces or other symbols."""
+    if ":" in host:  # IPv6 literal ([::1] -> "::1")
+        try:
+            ipaddress.IPv6Address(host.split("%", 1)[0])
+        except ValueError:
+            return False
+        return True
+    labels = unicodedata.normalize("NFC", host).removesuffix(".").split(".")
+    return all(_HOST_LABEL_RE.fullmatch(label) for label in labels)
 
 
 def domain_of(url: str) -> str:
     """Folder-safe domain name: lowercase host without 'www.', port kept as '_<port>'."""
     parts = urlsplit(normalize_url(url))
-    host = (parts.hostname or "").removeprefix("www.")
+    host = (parts.hostname or "").rstrip(".").removeprefix("www.")  # "stripe.com." too
     name = f"{host}_{parts.port}" if parts.port else host
     return _UNSAFE_PATH_CHARS.sub("_", name)
 

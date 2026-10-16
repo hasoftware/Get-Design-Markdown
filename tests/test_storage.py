@@ -29,16 +29,40 @@ from get_design_markdown.storage import (
         ("http://example.com/pricing?plan=pro#faq", "http://example.com/pricing?plan=pro"),
         ("  https://stripe.com/docs  ", "https://stripe.com/docs"),
         ("http://localhost:8000", "http://localhost:8000/"),
+        ("https://bücher.de", "https://bücher.de/"),
+        ("tiếng-việt.vn", "https://tiếng-việt.vn/"),
+        ("https://a_b.example.com/x", "https://a_b.example.com/x"),
+        ("https://xn--bcher-kva.example", "https://xn--bcher-kva.example/"),
     ],
 )
 def test_normalize_url(url: str, expected: str) -> None:
     assert normalize_url(url) == expected
 
 
-@pytest.mark.parametrize("url", ["", "   ", "ftp://stripe.com", "https://", "notadomain"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "   ",
+        "ftp://stripe.com",
+        "https://",
+        "notadomain",
+        "https://exa mple.com",
+        "exa mple.com",
+        "https://exa%20mple.com",
+        "https://foo..com",
+        "https://exa<mple.com",
+        "https://stripe.com:abc",
+        "https://stripe.com:99999",
+    ],
+)
 def test_normalize_url_rejects_invalid(url: str) -> None:
     with pytest.raises(InvalidUrlError):
         normalize_url(url)
+
+
+def test_domain_of_drops_a_trailing_dot() -> None:
+    assert domain_of("https://stripe.com./pricing") == "stripe.com"
 
 
 @pytest.mark.parametrize(
