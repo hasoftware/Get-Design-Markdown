@@ -10,6 +10,7 @@ from typing import Any, TypeVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ValidationError
+from pydantic_core import ErrorDetails
 
 from get_design_markdown.errors import InvalidDataError, InvalidUrlError, OutputNotFoundError
 
@@ -27,6 +28,43 @@ PROMPT_IMAGES_DIR = "prompt-images"
 M = TypeVar("M", bound=BaseModel)
 
 _SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+_JSON_POSITION_RE = re.compile(r"line (\d+) column (\d+)")
+#: pydantic error type -> Vietnamese description (pydantic's own messages are English).
+_ERROR_TEXT: dict[str, str] = {
+    "missing": "thiếu trường bắt buộc",
+    "extra_forbidden": "có trường không được phép",
+    "json_type": "cần dữ liệu JSON",
+    "model_type": "cần một đối tượng JSON",
+    "model_attributes_type": "cần một đối tượng JSON",
+    "dict_type": "cần một đối tượng JSON",
+    "list_type": "cần một mảng",
+    "tuple_type": "cần một mảng",
+    "string_type": "cần một chuỗi",
+    "int_type": "cần một số nguyên",
+    "int_parsing": "cần một số nguyên",
+    "int_from_float": "cần một số nguyên",
+    "float_type": "cần một số",
+    "float_parsing": "cần một số",
+    "bool_type": "cần true hoặc false",
+    "bool_parsing": "cần true hoặc false",
+    "datetime_type": "cần ngày giờ",
+    "datetime_parsing": "không đọc được ngày giờ",
+    "datetime_from_date_parsing": "không đọc được ngày giờ",
+    "date_parsing": "không đọc được ngày",
+    "enum": "giá trị không thuộc danh sách cho phép",
+    "literal_error": "giá trị không thuộc danh sách cho phép",
+    "string_pattern_mismatch": "giá trị không đúng mẫu",
+    "string_too_short": "chuỗi quá ngắn",
+    "string_too_long": "chuỗi quá dài",
+    "too_short": "quá ít phần tử",
+    "too_long": "quá nhiều phần tử",
+    "greater_than": "giá trị quá nhỏ",
+    "greater_than_equal": "giá trị quá nhỏ",
+    "less_than": "giá trị quá lớn",
+    "less_than_equal": "giá trị quá lớn",
+    "value_error": "giá trị không hợp lệ",
+    "assertion_error": "giá trị không hợp lệ",
+}
 _UNSAFE_PATH_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -127,10 +165,28 @@ def load_model(model_type: type[M], path: Path) -> M:
         first = exc.errors()[0]
         location = ".".join(str(part) for part in first["loc"]) or "(gốc)"
         raise InvalidDataError(
-            f"File {path} không đúng định dạng: {location} — {first['msg']} "
+            f"File {path} không đúng định dạng: {location} — {describe_error(first)} "
             f"({exc.error_count()} lỗi).",
             hint="File có thể được tạo bởi phiên bản cũ; hãy chạy lại bước tạo ra nó.",
         ) from None
+
+
+def describe_error(error: ErrorDetails) -> str:
+    """Vietnamese description of one pydantic validation error (its type, not its English
+    message); the input position is kept for invalid JSON."""
+    kind = error["type"]
+    if kind == "json_invalid":
+        position = _JSON_POSITION_RE.search(str(error.get("ctx", {}).get("error", "")))
+        if position is not None:
+            return f"JSON không hợp lệ (dòng {position.group(1)}, cột {position.group(2)})"
+        return "JSON không hợp lệ"
+    text = _ERROR_TEXT.get(kind)
+    if text is None:
+        text = "sai kiểu dữ liệu" if kind.endswith("_type") else "dữ liệu không hợp lệ"
+    expected = error.get("ctx", {}).get("expected")
+    if kind in ("enum", "literal_error") and expected:
+        text += f" ({expected})"
+    return text
 
 
 def _missing_file_hint(filename: str) -> str:

@@ -113,3 +113,24 @@ def test_save_text_and_json_use_utf8_and_lf(tmp_path: Path) -> None:
     assert text_path.read_bytes() == text.encode()
     json_path = save_json({"tên": "màu"}, tmp_path / "tokens.json")
     assert json_path.read_bytes() == '{\n  "tên": "màu"\n}\n'.encode()
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("{\n", "(gốc) — JSON không hợp lệ (dòng 2, cột 0)"),
+        ('{"schema_version": 1}', "— thiếu trường bắt buộc"),
+        ('{"schema_version": "x"}', "schema_version — cần một số nguyên"),
+    ],
+)
+def test_load_invalid_file_explains_in_vietnamese(
+    tmp_path: Path, content: str, expected: str
+) -> None:
+    path = tmp_path / RAW_FILE
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(InvalidDataError) as info:
+        load_model(RawCapture, path)
+    message = info.value.message
+    assert expected in message
+    for english in ("Invalid JSON", "Field required", "EOF while parsing", "Input should be"):
+        assert english not in message

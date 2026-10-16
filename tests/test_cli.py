@@ -77,7 +77,7 @@ def _run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        (("analyze",), "Lỗi: Thiếu tham số bắt buộc 'target'."),
+        (("analyze",), "Lỗi: Thiếu tham số bắt buộc 'THƯ_MỤC'."),
         (("bogus",), "Lỗi: Không có lệnh 'bogus'."),
         (("anlyze",), "Không có lệnh 'anlyze'. Có phải ý bạn là 'analyze'?"),
         (("analyze", "x", "--bogus"), "Lỗi: Không có tùy chọn --bogus."),
@@ -115,6 +115,16 @@ def test_help_is_vietnamese(capsys: pytest.CaptureFixture[str]) -> None:
         assert "Show this message" not in output and "Usage:" not in output
     _, output = _run(capsys, "analyze", "--help")
     assert "Tham số" in output and "Tùy chọn" in output and "[bắt buộc]" in output
+    # Placeholders are Vietnamese too: no Typer type labels or Click's [OPTIONS].
+    assert "gdm analyze [TÙY_CHỌN] THƯ_MỤC" in " ".join(output.split()).replace("pytest", "gdm")
+    for english in ("<str>", "<float", "<int", "<path>", "[OPTIONS]", "COMMAND", "{"):
+        assert english not in output, english
+    _, output = _run(capsys, "collect", "--help")
+    assert "SỐ [0<=x<=10]" in output and "THƯ_MỤC" in output
+    for english in ("<str>", "<int", "<path>", "[OPTIONS]"):
+        assert english not in output, english
+    _, output = _run(capsys, "-h")
+    assert "[TÙY_CHỌN] LỆNH [THAM_SỐ]..." in output
 
 
 def test_run_returns_the_command_exit_code(capsys: pytest.CaptureFixture[str]) -> None:

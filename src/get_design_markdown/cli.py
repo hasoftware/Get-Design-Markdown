@@ -13,6 +13,8 @@ from typing import Annotated, Any, ParamSpec, TypeVar
 
 import typer
 from typer import rich_utils
+from typer._click.core import Context, Parameter
+from typer._click.types import StringParamType
 from typer.core import TyperCommand, TyperGroup
 
 from get_design_markdown import __version__
@@ -33,6 +35,9 @@ R = TypeVar("R")
 
 HELP_OPTION_TEXT = "Hiện hướng dẫn này rồi thoát."
 USAGE_PREFIX = "Cách dùng: "
+#: Usage-line placeholders (Click's defaults are "[OPTIONS]" and "COMMAND [ARGS]...").
+OPTIONS_METAVAR = "[TÙY_CHỌN]"
+SUBCOMMAND_METAVAR = "LỆNH [THAM_SỐ]..."
 
 
 def _localize_help_option(option: Any) -> Any:
@@ -42,7 +47,12 @@ def _localize_help_option(option: Any) -> Any:
 
 
 class VietnameseGroup(TyperGroup):
-    """The gdm group: Vietnamese --help/-h text and usage prefix."""
+    """The gdm group: Vietnamese --help/-h text, usage prefix and placeholders."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.options_metavar = OPTIONS_METAVAR
+        self.subcommand_metavar = SUBCOMMAND_METAVAR
 
     def get_help_option(self, ctx: Any) -> Any:
         return _localize_help_option(super().get_help_option(ctx))
@@ -53,14 +63,30 @@ class VietnameseGroup(TyperGroup):
 
 
 class VietnameseCommand(TyperCommand):
-    """A gdm sub-command: Vietnamese --help/-h text and usage prefix."""
+    """A gdm sub-command: Vietnamese --help/-h text, usage prefix and placeholders."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.options_metavar = OPTIONS_METAVAR
 
     def get_help_option(self, ctx: Any) -> Any:
         return _localize_help_option(super().get_help_option(ctx))
 
     def format_usage(self, ctx: Any, formatter: Any) -> None:
-        pieces = self.collect_usage_pieces(ctx)
+        # Typer writes a required argument as "{URL}"; the plain name reads better.
+        pieces = [_unbrace(piece) for piece in self.collect_usage_pieces(ctx)]
         formatter.write_usage(ctx.command_path, " ".join(pieces), prefix=USAGE_PREFIX)
+
+
+def _unbrace(piece: str) -> str:
+    return piece[1:-1] if piece.startswith("{") and piece.endswith("}") else piece
+
+
+class PlainText(StringParamType):
+    """A text argument whose help row shows only its Vietnamese name, not Typer's "<str>"."""
+
+    def get_metavar(self, param: Parameter, ctx: Context) -> str | None:
+        return ""
 
 
 def _localize_help_screen() -> None:
@@ -151,12 +177,27 @@ def capture_options(
     )
 
 
+#: Placeholders shown in usage lines and help screens instead of Typer's <str>, <path>...
+URL_METAVAR = "URL"
+FOLDER_METAVAR = "THƯ_MỤC"
+NUMBER_METAVAR = "SỐ"
+
 TargetArgument = Annotated[
-    str, typer.Argument(help="Thư mục output/<domain> hoặc URL/tên miền đã thu thập.")
+    str,
+    typer.Argument(
+        metavar=FOLDER_METAVAR,
+        click_type=PlainText(),
+        help="Thư mục output/<domain> hoặc URL/tên miền đã thu thập.",
+    ),
 ]
 OutOption = Annotated[
     Path | None,
-    typer.Option("--out", "-o", help="Thư mục gốc chứa kết quả (mặc định: output/)."),
+    typer.Option(
+        "--out",
+        "-o",
+        metavar=FOLDER_METAVAR,
+        help="Thư mục gốc chứa kết quả (mặc định: output/).",
+    ),
 ]
 DarkOption = Annotated[
     bool, typer.Option("--dark", help="Thu thêm bản dark mode (prefers-color-scheme: dark).")
@@ -164,12 +205,21 @@ DarkOption = Annotated[
 PagesOption = Annotated[
     int,
     typer.Option(
-        "--pages", min=0, max=10, help="Số trang con quan trọng (từ navigation) phân tích thêm."
+        "--pages",
+        min=0,
+        max=10,
+        metavar=NUMBER_METAVAR,
+        help="Số trang con quan trọng (từ navigation) phân tích thêm.",
     ),
 ]
 MaxElementsOption = Annotated[
     int | None,
-    typer.Option("--max-elements", min=1, help="Số phần tử tối đa lấy style (mặc định 3000)."),
+    typer.Option(
+        "--max-elements",
+        min=1,
+        metavar=NUMBER_METAVAR,
+        help="Số phần tử tối đa lấy style (mặc định 3000).",
+    ),
 ]
 LangOption = Annotated[Lang, typer.Option("--lang", help="Ngôn ngữ phần mô tả trong DESIGN.md.")]
 PromptOnlyOption = Annotated[
@@ -187,14 +237,27 @@ OpenOption = Annotated[
 ]
 DeltaEOption = Annotated[
     float,
-    typer.Option("--delta-e", min=0.5, max=20.0, help="Ngưỡng gom cụm màu CIEDE2000 (mặc định 3)."),
+    typer.Option(
+        "--delta-e",
+        min=0.5,
+        max=20.0,
+        metavar=NUMBER_METAVAR,
+        help="Ngưỡng gom cụm màu CIEDE2000 (mặc định 3).",
+    ),
 ]
 
 
 @app.command(cls=VietnameseCommand)
 @handle_errors
 def collect(
-    url: Annotated[str, typer.Argument(help="URL trang cần phân tích, ví dụ https://stripe.com")],
+    url: Annotated[
+        str,
+        typer.Argument(
+            metavar=URL_METAVAR,
+            click_type=PlainText(),
+            help="URL trang cần phân tích, ví dụ https://stripe.com",
+        ),
+    ],
     out: OutOption = None,
     dark: DarkOption = False,
     pages: PagesOption = 0,
@@ -240,7 +303,12 @@ def export(target: TargetArgument, open_browser: OpenOption = False) -> None:
 @app.command(cls=VietnameseCommand)
 @handle_errors
 def get(
-    url: Annotated[str, typer.Argument(help="URL trang cần phân tích.")],
+    url: Annotated[
+        str,
+        typer.Argument(
+            metavar=URL_METAVAR, click_type=PlainText(), help="URL trang cần phân tích."
+        ),
+    ],
     out: OutOption = None,
     dark: DarkOption = False,
     open_browser: OpenOption = False,
