@@ -711,9 +711,10 @@ textarea {
 
 .sidebar-foot {
   display: flex;
+  flex-wrap: wrap; /* the version moves under the button when the sidebar is narrow */
   align-items: center;
   justify-content: space-between;
-  gap: var(--s2);
+  gap: var(--s1) var(--s2);
   padding: var(--s3) var(--s3);
   border-top: 1px solid var(--line);
 }

@@ -1118,6 +1118,15 @@ def _no_horizontal_scroll(page: Page) -> bool:
 def test_layout_has_no_horizontal_scroll(ui: OpenUi, width: int) -> None:
     session = ui(width=width, height=768).open()
     page = session.page
+    # The sidebar footer (open-folder button + version) stays inside the sidebar.
+    expect(page.locator("#app-version")).to_have_text(re.compile(r"^Phiên bản \d+\.\d+"))
+    sidebar = page.locator("#sidebar").bounding_box()
+    assert sidebar is not None
+    for selector in ("#open-root", "#app-version"):
+        box = page.locator(selector).bounding_box()
+        assert box is not None and box["x"] + box["width"] <= sidebar["x"] + sidebar["width"], (
+            selector
+        )
     page.click("#advanced > summary")
     assert _no_horizontal_scroll(page)
     session.start_job("fail.example")
