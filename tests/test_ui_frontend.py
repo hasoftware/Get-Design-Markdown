@@ -48,6 +48,11 @@ expect.set_options(timeout=10_000)
 #: the Windows window, WebView2). Unset: Playwright's Chromium, as in CI.
 CHANNEL_ENV = "GDM_UI_TEST_CHANNEL"
 
+#: A request the OS itself refused (Windows WSAENOBUFS: the CI runner ran short of sockets late in
+#: a long test run). Not a frontend defect: the UI already copes with a failed request (job poll
+#: retried, heartbeat repeated, resume skipped), and a test that needed the reply still fails.
+TRANSIENT_SOCKET_ERROR = re.compile(r"net::ERR_NO_BUFFER_SPACE")
+
 #: Collects CSP violations in every frame the page opens.
 CSP_PROBE = """
 window.__gdmViolations = [];
@@ -159,7 +164,7 @@ class UiSession:
     external: list[str] = field(default_factory=list)
     preview_external: list[str] = field(default_factory=list)
     api_requests: list[tuple[str, str, str | None]] = field(default_factory=list)
-    allowed_console: list[re.Pattern[str]] = field(default_factory=list)
+    allowed_console: list[re.Pattern[str]] = field(default_factory=lambda: [TRANSIENT_SOCKET_ERROR])
     allowed_csp: list[re.Pattern[str]] = field(default_factory=list)
 
     def open(self, *, token: bool = True, wait: bool = True) -> UiSession:
