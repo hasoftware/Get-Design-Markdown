@@ -93,6 +93,7 @@ from get_design_markdown.ui.server import (
     INDEX_CSP,
     MAX_BODY_BYTES,
     MAX_DRAIN_BYTES,
+    PENDING_BODY_WAIT_S,
     TOKEN_HEADER,
     ApiError,
     ApiErrorCode,
@@ -852,10 +853,34 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
+                self._discard_pending()
                 return
             if 0 < length <= MAX_DRAIN_BYTES:
                 with contextlib.suppress(OSError):
                     self.rfile.read(length)
+
+        def _discard_pending(self) -> None:
+            """Read what the client already sent of a body of unknown length (a bad
+            Content-Length), waiting at most PENDING_BODY_WAIT_S, as the real server does: the
+            unread bytes would otherwise make Windows reset the connection before the client
+            has read the error."""
+            self._body_consumed = True
+            read1 = getattr(self.rfile, "read1", None)
+            if read1 is None:
+                return
+            try:
+                self.connection.settimeout(PENDING_BODY_WAIT_S)
+                budget = MAX_DRAIN_BYTES
+                while budget > 0:
+                    chunk = read1(min(budget, 65536))
+                    if not chunk:
+                        break
+                    budget -= len(chunk)
+            except (OSError, ValueError):
+                pass
+            finally:
+                with contextlib.suppress(OSError):
+                    self.connection.settimeout(self.timeout)
 
         def _send_error(self, error: _HttpError) -> None:
             self._drain_unread_body()
@@ -902,9 +927,9 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
-                self.close_connection = True
-                raise _HttpError(400, "bad_json", "Content-Length không hợp lệ.") from None
+                length = -1
             if length < 0:
+                self._discard_pending()
                 self.close_connection = True
                 raise _HttpError(400, "bad_json", "Content-Length không hợp lệ.")
             if length > MAX_BODY_BYTES:
