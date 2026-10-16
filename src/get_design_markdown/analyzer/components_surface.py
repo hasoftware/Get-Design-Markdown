@@ -1,6 +1,6 @@
 """Internal helpers of the component analyzer: the painted surface of a container.
 
-Private to analyzer/components*.py (stream analyzer-components); not a public interface.
+Private to analyzer/components*.py; not a public interface.
 
 Many cards are drawn by layers rather than by the card element itself: Bootstrap keeps the
 padding on .card-body, and gradient/hairline borders are often a wrapper painting a 1-3px

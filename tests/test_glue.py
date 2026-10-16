@@ -1,5 +1,5 @@
 """Frozen glue (analyze orchestrator, synthesize/export I/O, pipeline) tested with fakes, so these
-tests stay valid whatever the state of the parallel streams."""
+tests stay valid whichever stages are built."""
 
 from __future__ import annotations
 

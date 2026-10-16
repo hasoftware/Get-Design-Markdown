@@ -135,7 +135,7 @@ def analyze_components(
 ) -> list[ComponentSpec]:
     """Component variants in naming.COMPONENT_NAME_ORDER order (pure).
 
-    The other analyses may be empty (their stream not merged yet): then token_refs stay empty
+    The other analyses may be empty (that part was skipped): then token_refs stay empty
     for that group, the raw `properties` are still filled.
     """
     del shadows  # shadows have no token group in the DESIGN.md front matter

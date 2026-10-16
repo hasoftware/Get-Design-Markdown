@@ -129,9 +129,7 @@ def site_url() -> Iterator[str]:
     for cross-origin stylesheet tests. Skips when the site does not exist yet.
     """
     if not (SITE_DIR / "index.html").is_file():
-        pytest.skip(
-            "Trang fixture tests/fixtures/site/index.html chưa được tạo (stream collector)."
-        )
+        pytest.skip("Trang fixture tests/fixtures/site/index.html chưa được tạo.")
     server, url = serve_directory(SITE_DIR)
     try:
         yield url

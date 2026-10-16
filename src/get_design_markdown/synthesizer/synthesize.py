@@ -1,6 +1,6 @@
 """Stage 3 orchestration (frozen glue): analysis.json -> DESIGN.md (+ prompt.md), synthesis.json.
 
-The pure functions live in render.py, validate.py and prompt_export.py (synthesizer stream).
+The pure functions live in render.py, validate.py and prompt_export.py.
 """
 
 from __future__ import annotations

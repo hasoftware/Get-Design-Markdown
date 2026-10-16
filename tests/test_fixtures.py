@@ -111,7 +111,7 @@ def test_site_contract_matches_analysis_sample() -> None:
 
 
 def test_analysis_sample_component_property_rules() -> None:
-    """Property-inclusion rules the components stream must follow (see its brief)."""
+    """Property-inclusion rules analyzer/components.py must follow."""
     font_keys = {"fontFamily", "fontSize", "fontWeight", "lineHeight"}
     for component in load_analysis_sample().components:
         keys = set(component.properties)

@@ -3,7 +3,7 @@
 PUBLIC ENTRY POINT (frozen signature, called by pipeline.run_collect):
     collect_site(url, out_dir=..., options=..., progress=...) -> RawCapture
 
-Everything else in the collector package is internal to the collector stream.
+Everything else in the collector package is internal.
 
 Per page: load (load + networkidle, with fallbacks) -> blocker check -> scroll for lazy
 content -> blur the focused element (autofocus fields are measured at rest) -> mark overlays

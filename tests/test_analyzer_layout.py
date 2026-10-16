@@ -94,7 +94,7 @@ def test_fixture_layout() -> None:
 
 
 def test_fixture_foundations_through_analyze_capture() -> None:
-    """The frozen glue runs this stream's analyzers and assembles the reference answers."""
+    """The frozen glue runs the foundation analyzers and assembles the reference answers."""
     raw = load_raw_sample()
     reference = load_analysis_sample()
     result = analyze.analyze_capture(raw, now=FIXED_TIME)

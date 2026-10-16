@@ -1,4 +1,4 @@
-"""Deterministic generator of the shared, read-only test fixtures (integrator-owned, frozen).
+"""Deterministic generator of the shared, read-only test fixtures (maintainer-owned, frozen).
 
     python -m uv run python -m tests.fixtures.build_samples
 
@@ -1810,7 +1810,7 @@ def build_analysis(raw: RawCapture) -> DesignAnalysis:
     )
 
 
-# ─── Site contract (tests/fixtures/site is built by the collector stream) ────
+# ─── Site contract (tests/fixtures/site implements it) ───────────────────────
 
 
 def build_site_contract(analysis: DesignAnalysis) -> dict[str, Any]:

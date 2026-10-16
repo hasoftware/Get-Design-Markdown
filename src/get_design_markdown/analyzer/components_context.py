@@ -1,6 +1,6 @@
 """Internal helpers of the component analyzer: page context, members, colors and geometry.
 
-Private to analyzer/components*.py (stream analyzer-components); not a public interface.
+Private to analyzer/components*.py; not a public interface.
 """
 
 from __future__ import annotations

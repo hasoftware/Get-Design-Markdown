@@ -1,7 +1,7 @@
 """Internal helpers of the component analyzer: which elements are buttons, links, inputs,
 cards, badges and page chrome (top nav, sidebar, footer).
 
-Private to analyzer/components*.py (stream analyzer-components); not a public interface.
+Private to analyzer/components*.py; not a public interface.
 
 Besides overlays (skipped by common.iter_elements), decorative subtrees are ignored: product
 illustrations and app mock-ups built from real DOM (<figure> and role="img" containers,

@@ -1,7 +1,7 @@
 """Internal helpers of the component analyzer: properties, token references, hover states,
 contrast, class hints and samples.
 
-Private to analyzer/components*.py (stream analyzer-components); not a public interface.
+Private to analyzer/components*.py; not a public interface.
 """
 
 from __future__ import annotations

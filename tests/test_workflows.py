@@ -279,24 +279,6 @@ INTERNAL_PROCESS_RE = re.compile(
 PUBLIC_TEXT_SUFFIXES = frozenset(
     {".py", ".md", ".yml", ".yaml", ".toml", ".j2", ".js", ".html", ".css", ".txt"}
 )
-#: Leftovers in files outside .github/, scripts/ and README.md, whose rewording was sent as a
-#: change request; drop an entry once its file is reworded.
-PENDING_REWORDING = frozenset(
-    {
-        "src/get_design_markdown/analyzer/components.py",
-        "src/get_design_markdown/analyzer/components_context.py",
-        "src/get_design_markdown/analyzer/components_detect.py",
-        "src/get_design_markdown/analyzer/components_props.py",
-        "src/get_design_markdown/analyzer/components_surface.py",
-        "src/get_design_markdown/collector/collect.py",
-        "src/get_design_markdown/synthesizer/synthesize.py",
-        "tests/conftest.py",
-        "tests/fixtures/build_samples.py",
-        "tests/test_analyzer_layout.py",
-        "tests/test_fixtures.py",
-        "tests/test_glue.py",
-    }
-)
 
 
 def registered_markers() -> set[str]:
@@ -359,8 +341,7 @@ def test_public_files_do_not_describe_the_parallel_build() -> None:
                 found.setdefault(path.relative_to(ROOT).as_posix(), []).append(
                     f"{number}: {line.strip()}"
                 )
-    unexpected = {path: lines for path, lines in found.items() if path not in PENDING_REWORDING}
-    assert unexpected == {}
+    assert found == {}
 
 
 def test_internal_process_pattern() -> None:
