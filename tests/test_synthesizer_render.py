@@ -200,6 +200,11 @@ def test_rule_canvas_lightness() -> None:
 def test_rule_heavy_weights_only() -> None:
     analysis = load_analysis_sample()
     analysis.typography.weights_used = [600, 700]
+    # Weights in use include every level and family weight, so they must be heavy too.
+    for level in analysis.typography.levels:
+        level.weight = max(level.weight, 600)
+    for family in analysis.typography.families:
+        family.weights = [max(weight, 600) for weight in family.weights]
     text = render_design_md(analysis)
     assert "heavy weights only — no regular 400" in text.lower()
     assert "Don't fall back to regular 400" in text

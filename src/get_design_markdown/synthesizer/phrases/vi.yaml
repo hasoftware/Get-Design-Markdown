@@ -41,6 +41,7 @@ heading:
     text: "Chữ"
     borders: "Viền"
     status: "Trạng thái"
+    unreferenced: "Token chưa được component tham chiếu"
 
 color_name:
   deep: "{hue} đậm"
@@ -81,6 +82,9 @@ trait:
     single: "một màu nhấn {name} duy nhất ({hex})"
     two: "hệ thống hành động hai tín hiệu ({colors})"
     multi: "{count} màu nhấn cho hành động ({colors})"
+  shades:
+    one: "{hex} kèm một sắc độ biến thể {shades}"
+    many: "{hex} kèm các sắc độ biến thể {shades}"
   type:
     pair: "tiêu đề {heading} kết hợp chữ {body}"
     single: "{family} cho toàn bộ chữ"
@@ -110,6 +114,10 @@ overview:
     two: "Các hành động theo hệ thống hai tín hiệu: {colors}."
     multi: "Các hành động dùng nhiều màu nhấn (số lượng: {count}): {colors}."
     minor: "Màu hành động phụ, hiếm khi dùng: {colors}."
+    shade_color: "{value} trên {components}"
+    shades:
+      one: "{lead}, kèm một sắc độ biến thể {shades}"
+      many: "{lead}, kèm các sắc độ biến thể {shades}"
   weights:
     heavy_only: "Chỉ dùng độ đậm cao — không có độ đậm thường 400 ({weights})."
     no_bold: "Không dùng chữ in đậm ({weights})."
@@ -157,6 +165,10 @@ colors:
   evidence: "bằng chứng đo được: {evidence}"
   css_variable: "biến CSS {variable}"
   used_by: "được dùng bởi {components}"
+  unreferenced:
+    intro: "Không component nào trong front matter tham chiếu các token màu này, nên bước kiểm tra token mồ côi (như linter DESIGN.md) có thể cảnh báo:"
+    indirect: "{tokens}: chỉ được dùng qua thuộc tính component mà spec DESIGN.md không có khóa (màu viền hoặc màu placeholder) — xem phần Components"
+    outside: "{tokens}: đo được trên phần tử của trang nằm ngoài các component đã nhận diện"
   role:
     background: "nền trang (vùng nền lớn nhất)"
     surface: "bề mặt / nền section"

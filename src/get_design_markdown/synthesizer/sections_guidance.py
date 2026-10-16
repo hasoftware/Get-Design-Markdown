@@ -59,6 +59,11 @@ DISPLAY_KEYS = (
     "textDecoration",
 )
 LABELLED_SAMPLE_KINDS = frozenset({ComponentKind.BUTTON, ComponentKind.LINK, ComponentKind.BADGE})
+#: Front-matter keys left out of the nav call to action: button-primary is measured on all
+#: its instances (linear.app: the 44px hero "Get started"), not on the compact header button.
+NAV_CTA_SIZE_KEYS = frozenset({"typography", "padding", "size", "height", "width"})
+#: A secondary text tier holding at least this share of the text is a Quick Reference neutral.
+QUICK_TEXT_TIER_SHARE = 0.10
 MAX_SAMPLES = 3
 #: Named families kept in a CSS font hint before the generic fallback.
 MAX_STACK_FAMILIES = 4
@@ -118,7 +123,7 @@ def _border_text(ctx: Context, spec: ComponentSpec) -> str | None:
 
 
 def _typography_text(ctx: Context, spec: ComponentSpec) -> str | None:
-    ref = spec.token_refs.get("typography")
+    ref = ctx.facts.typography_ref(spec)
     if ref is not None and ctx.facts.has_ref(ref):
         return ctx.facts.ref_from_string(ref)
     props = spec.properties
@@ -337,9 +342,12 @@ def components(ctx: Context) -> str | None:
 # ─── Do's and Don'ts ─────────────────────────────────────────────────────────
 
 
-def _component_brief(ctx: Context, name: str) -> str | None:
-    """ "background `{colors.primary}` — #4f46e5, text …" from the front-matter entry."""
-    props = ctx.components.get(name)
+def _component_brief(ctx: Context, name: str, exclude: frozenset[str] = frozenset()) -> str | None:
+    """ "background `{colors.primary}` — #4f46e5, text …" from the front-matter entry
+    (without the `exclude` keys)."""
+    props = {
+        key: value for key, value in ctx.components.get(name, {}).items() if key not in exclude
+    }
     if not props:
         return None
     return ", ".join(
@@ -539,8 +547,9 @@ def _quick_reference(ctx: Context) -> list[str]:
         items.append(ctx.p("guide.quick.primary", primary=ctx.color_ref("primary")))
     neutrals = [
         ctx.color_ref(name)
-        for name in ("canvas", "surface", "ink", "muted", "hairline")
+        for name in ("canvas", "surface", "ink", "muted", "faint", "hairline")
         if name in facts.colors
+        and (name != "faint" or (facts.token_share(name) or 0.0) >= QUICK_TEXT_TIER_SHARE)
     ]
     if neutrals:
         items.append(ctx.p("guide.quick.neutrals", items=ctx.phrases.join(neutrals)))
@@ -614,10 +623,10 @@ def _hero_prompt(ctx: Context) -> str | None:
         )
     lead = facts.lead_level()
     if lead is not None and (heading is None or lead.name != heading.name):
-        muted = "muted" if "muted" in facts.colors else None
-        key = "guide.prompt.clause.lead_color" if muted else "guide.prompt.clause.lead"
+        color = facts.lead_color(lead)
+        key = "guide.prompt.clause.lead_color" if color else "guide.prompt.clause.lead"
         clauses.append(
-            ctx.p(key, ref=ctx.level_ref(lead.name), color=ctx.color_ref(muted) if muted else "")
+            ctx.p(key, ref=ctx.level_ref(lead.name), color=ctx.color_ref(color) if color else "")
         )
     brief = _component_brief(ctx, "button-primary")
     if brief:
@@ -716,14 +725,16 @@ def _form_prompt(ctx: Context) -> str | None:
 
 
 def _nav_prompt(ctx: Context) -> str | None:
-    """The top navigation built from top-nav / nav-link / button-primary and the hamburger."""
+    """The top navigation built from top-nav / nav-link / button-primary and the hamburger.
+    The call to action keeps button-primary's colors and radius but not its size, which was
+    measured on every instance, not on the header one."""
     clauses: list[str] = []
-    for name, key in (
-        ("top-nav", "guide.prompt.clause.nav"),
-        ("nav-link", "guide.prompt.clause.nav_links"),
-        ("button-primary", "guide.prompt.clause.nav_cta"),
+    for name, key, exclude in (
+        ("top-nav", "guide.prompt.clause.nav", frozenset[str]()),
+        ("nav-link", "guide.prompt.clause.nav_links", frozenset[str]()),
+        ("button-primary", "guide.prompt.clause.nav_cta", NAV_CTA_SIZE_KEYS),
     ):
-        brief = _component_brief(ctx, name)
+        brief = _component_brief(ctx, name, exclude)
         if brief:
             clauses.append(ctx.p(key, component=name, details=brief))
     hamburger = ctx.hamburger("guide.prompt.clause.hamburger")

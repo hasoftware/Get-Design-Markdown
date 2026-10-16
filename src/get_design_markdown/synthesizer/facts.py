@@ -18,8 +18,12 @@ from get_design_markdown.analyzer.css_values import (
     contrast_ratio,
     delta_e_2000,
     flatten,
+    is_large_text,
     parse_box_shadow,
     parse_color,
+    parse_font_weight,
+    parse_line_height,
+    parse_px,
     to_oklch,
 )
 from get_design_markdown.analyzer.naming import (
@@ -55,7 +59,7 @@ from get_design_markdown.models.analysis import (
     TypeLevel,
 )
 from get_design_markdown.synthesizer.colornames import is_chromatic
-from get_design_markdown.synthesizer.formatting import fmt_num, fmt_px
+from get_design_markdown.synthesizer.formatting import fmt_num, fmt_px, fmt_ratio
 
 T = TypeVar("T")
 
@@ -99,6 +103,17 @@ LEAD_MAX_SCALE: Final = 1.5
 MAX_SURFACE_CHECKS: Final = 3
 #: Two chromatic action colors whose OKLCH hues differ by at most this are one accent family.
 SAME_FAMILY_HUE_DEG: Final = 20.0
+#: A component keeps its typography reference only when its measured size and line height
+#: are this close to the level's (a reference stands for every value of the level).
+TYPE_SIZE_TOLERANCE_PX: Final = 0.5
+LINE_HEIGHT_TOLERANCE_PX: Final = 1.0
+#: Contrast-pair context of running text; " (large)" marks WCAG large text.
+BODY_TEXT_CONTEXT: Final = "body text"
+LARGE_CONTEXT_SUFFIX: Final = " (large)"
+#: Component properties holding a color (base values and states).
+COLOR_VALUE_KEYS: Final = frozenset(
+    {"backgroundColor", "textColor", "borderColor", "placeholderColor"}
+)
 #: Warning that analysis.json files of earlier versions carry when analyzer parts were skipped
 #: (the glue now stops instead), and its labels.
 SKIPPED_WARNING_PREFIX: Final = "Chưa phân tích"
@@ -184,10 +199,18 @@ class ActionColor:
     hex: str
     token: str | None
     components: tuple[str, ...]
-    #: Button instances using this family.
+    #: Button instances using this color (shades not included).
     count: int = 1
     #: Other hex values of the same family (e.g. a darker variant on another button).
     variants: tuple[str, ...] = ()
+    #: Other color tokens of the same hue family ({colors.secondary} #635bff next to
+    #: {colors.primary} #533afd): variant shades of this accent, not a second signal.
+    shades: tuple[ActionColor, ...] = ()
+
+    @property
+    def total(self) -> int:
+        """Button instances of the accent, its shades included."""
+        return self.count + sum(shade.total for shade in self.shades)
 
 
 @dataclass(frozen=True)
@@ -219,9 +242,9 @@ class _Family:
         gap = abs(self.hue - hue) % 360.0
         return min(gap, 360.0 - gap) <= SAME_FAMILY_HUE_DEG
 
-    def freeze(self) -> ActionColor:
+    def freeze(self, shades: tuple[ActionColor, ...] = ()) -> ActionColor:
         return ActionColor(
-            self.hex, self.token, tuple(self.components), self.count, tuple(self.variants)
+            self.hex, self.token, tuple(self.components), self.count, tuple(self.variants), shades
         )
 
 
@@ -397,10 +420,38 @@ class DesignFacts:
         """Spec properties of a component as written in the front matter."""
         props: dict[str, str] = {}
         for key in SPEC_COMPONENT_KEYS:
-            value = self._spec_value(key, spec.token_refs.get(key), spec.properties.get(key))
+            ref = self.typography_ref(spec) if key == "typography" else spec.token_refs.get(key)
+            value = self._spec_value(key, ref, spec.properties.get(key))
             if value is not None:
                 props[key] = value
         return props
+
+    def typography_ref(self, spec: ComponentSpec) -> str | None:
+        """The component's {typography.*} reference, kept only when the level matches the
+        measured font size, weight and line height: a 14px/14px nav link is not
+        {typography.caption} 14px / 1.2 (16.8px), because the reference stands for all of it."""
+        ref = (spec.token_refs.get("typography") or "").strip()
+        parsed = parse_token_ref(ref)
+        if parsed is None or parsed[0] != TYPOGRAPHY or parsed[1] not in self.levels:
+            return None
+        level = self.levels[parsed[1]]
+        props = spec.properties
+        size = parse_px(props.get("fontSize")) if props.get("fontSize") else None
+        if size is not None and abs(size - level.size_px) > TYPE_SIZE_TOLERANCE_PX:
+            return None
+        if props.get("fontWeight") and parse_font_weight(props["fontWeight"]) != level.weight:
+            return None
+        measured = parse_line_height(props.get("lineHeight"), size or level.size_px)
+        expected = level.line_height_px
+        if expected is None and level.line_height is not None:
+            expected = level.line_height * level.size_px
+        if (
+            measured is not None
+            and expected is not None
+            and abs(measured - expected) > LINE_HEIGHT_TOLERANCE_PX
+        ):
+            return None
+        return ref
 
     def flat_hex(self, value: str | None) -> str | None:
         """Opaque "#rrggbb" a translucent color shows over the canvas; None for opaque, fully
@@ -414,7 +465,8 @@ class DesignFacts:
         """Front-matter entries pairing text with a raw translucent fill. Checkers that ignore
         alpha (the official DESIGN.md linter) read #f7f8f8 on #ffffff0d as 1.06:1; the fill
         really sits over the canvas, where the text reaches 17:1. The front matter keeps the
-        measured translucent value, so the prose documents both readings."""
+        measured translucent value, so the prose documents both readings — only when they
+        differ as printed (#ffffffa6 over a white canvas reads the same either way)."""
         result: list[AlphaBlindPair] = []
         for spec in self.components:
             base = self.component_props(spec)
@@ -436,6 +488,8 @@ class DesignFacts:
                 if measured is None:
                     continue
                 naive = contrast_ratio(foreground.with_alpha(1.0), color.with_alpha(1.0))
+                if fmt_ratio(measured) == fmt_ratio(naive):
+                    continue
                 result.append(AlphaBlindPair(spec.name, name, fill, measured, naive))
         return result
 
@@ -532,12 +586,13 @@ class DesignFacts:
     # ─── Derived facts ───────────────────────────────────────────────────────
 
     def action_colors(self) -> list[ActionColor]:
-        """Chromatic button backgrounds grouped into hue families, primary first.
+        """Chromatic button backgrounds grouped into hue families (accents), primary first.
 
         Two colors belong to the same family when they are within ΔE2000 3 or within
-        SAME_FAMILY_HUE_DEG of OKLCH hue (#635bff and #533afd are one indigo accent), unless
-        they reference two different color tokens: each token keeps its own family, so a
-        {colors.secondary} fill is never listed under {colors.primary}.
+        SAME_FAMILY_HUE_DEG of OKLCH hue (#635bff and #533afd are one indigo accent). Fills
+        of one token (or without a token) merge into one ActionColor; a fill referencing
+        another token of the same hue becomes a shade of that accent, so {colors.secondary}
+        keeps its own reference but two indigos never count as two signals.
         """
         families: list[_Family] = []
         for spec in self.components_of_kind(ComponentKind.BUTTON):
@@ -565,7 +620,14 @@ class DesignFacts:
             family.count += count
             if hex_value != family.hex and hex_value not in family.variants:
                 family.variants.append(hex_value)
-        return [family.freeze() for family in families]
+        groups: list[tuple[_Family, list[_Family]]] = []
+        for family in families:
+            group = next((g for g in groups if g[0].accepts(family.color, family.hue)), None)
+            if group is None:
+                groups.append((family, []))
+            else:
+                group[1].append(family)
+        return [lead.freeze(tuple(shade.freeze() for shade in shades)) for lead, shades in groups]
 
     def most_common_radius(self) -> ScaleStep | None:
         steps = [step for step in self.radii.values() if step.count > 0] or list(
@@ -591,10 +653,30 @@ class DesignFacts:
         return ShadowProfile(max(drop, default=0.0), bool(drop), rings)
 
     def weights(self) -> list[int]:
+        """Weights in use: the analyzer's weights_used plus every weight a family or a type
+        level lists, so no weight named in the Typography section is ever forbidden."""
         weights = set(self.analysis.typography.weights_used)
-        if not weights:
-            weights = {level.weight for level in self.levels.values()}
+        weights.update(weight for family in self.families.values() for weight in family.weights)
+        weights.update(level.weight for level in self.levels.values())
         return sorted(weights)
+
+    def family_weights(self, family: FontFamilyInfo) -> list[int]:
+        """Weights listed for a family: its own measured weights and those of its type levels.
+        A weight in use that no family lists (weights_used keeps any weight with >= 1% of all
+        text, families only those with >= 2% of their own text) goes to the main family — the
+        one holding most of the text — so the family lists add up to the weights in use."""
+        own: dict[str, set[int]] = {
+            name: set(info.weights)
+            | {level.weight for level in self.levels.values() if level.font_family == name}
+            for name, info in self.families.items()
+        }
+        main = self.family_with_role(FontRole.PRIMARY) or max(
+            self.families.values(), key=lambda info: info.share, default=None
+        )
+        if main is not None:
+            listed = {weight for weights in own.values() for weight in weights}
+            own[main.name].update(set(self.weights()) - listed)
+        return sorted(own.get(family.name, set(family.weights)))
 
     def family_with_role(self, *roles: FontRole) -> FontFamilyInfo | None:
         for role in roles:
@@ -640,6 +722,66 @@ class DesignFacts:
         ]
         return max(candidates, key=lambda level: level.size_px, default=body)
 
+    def lead_color(self, level: TypeLevel) -> str | None:
+        """Secondary text token (role TEXT_MUTED) for supporting copy set in `level`.
+
+        analysis.json keeps no color per type-level sample, so the token is the secondary
+        text tier measured most often as running text of the same WCAG size class (normal or
+        large) on the canvas or a surface, then as running text of any size, then in any
+        measured pair on those backgrounds; the first secondary text token only when no pair
+        was measured. A tier that reaches WCAG AA on the canvas at that size always wins over
+        one that does not, so the brief never prescribes a failing pair. Never chosen by token
+        name: linear.app's hero copy is {colors.faint} (#8a8f98, 257 measured body-text pairs
+        on the canvas), while its brighter {colors.muted} mostly sets large section leads.
+        """
+        tiers = [name for name, token in self.colors.items() if token.role == ColorRole.TEXT_MUTED]
+        if not tiers:
+            return None
+        large = is_large_text(level.size_px, level.weight)
+        same_size: dict[str, int] = dict.fromkeys(tiers, 0)
+        any_size: dict[str, int] = dict.fromkeys(tiers, 0)
+        any_context: dict[str, int] = dict.fromkeys(tiers, 0)
+        for pair in self.analysis.colors.contrast_pairs:
+            name = pair.foreground_token
+            background = self.colors.get(pair.background_token or "")
+            if name not in same_size or not self._canvas_like(background):
+                continue
+            any_context[name] += pair.occurrences
+            context = pair.context.strip().lower()
+            if not context.startswith(BODY_TEXT_CONTEXT):
+                continue
+            any_size[name] += pair.occurrences
+            if context.endswith(LARGE_CONTEXT_SUFFIX) == large:
+                same_size[name] += pair.occurrences
+        minimum = AA_LARGE if large else AA_NORMAL
+        canvas = self.colors["canvas"].value if "canvas" in self.colors else self.canvas.css_hex
+
+        def rank(name: str) -> tuple[bool, int, int, int, int]:
+            ratio = self.contrast_on(self.colors[name].value, canvas)
+            passes = ratio is not None and ratio >= minimum
+            return (passes, same_size[name], any_size[name], any_context[name], -tiers.index(name))
+
+        return max(tiers, key=rank)
+
+    def _canvas_like(self, token: ColorToken | None) -> bool:
+        """A canvas/surface token on the same side of mid lightness as the canvas (a dark
+        footer band on a light page is not where hero copy sits)."""
+        if token is None or token.role not in SURFACE_ROLES:
+            return False
+        color = parse_color(token.value)
+        if color is None:
+            return False
+        lightness = to_oklch(flatten(color, self.canvas)).lightness
+        return (lightness < 0.5) == (to_oklch(self.canvas).lightness < 0.5)
+
+    def token_share(self, name: str) -> float | None:
+        """Share of its usage channel held by the cluster behind a color token."""
+        token = self.colors.get(name)
+        if token is None or token.cluster_id is None:
+            return None
+        cluster = next((c for c in self.analysis.colors.clusters if c.id == token.cluster_id), None)
+        return None if cluster is None else cluster.share
+
     def body_level(self) -> TypeLevel | None:
         for name in ("body", "body-lg", "body-sm"):
             if name in self.levels:
@@ -664,17 +806,31 @@ class DesignFacts:
 
         return [token for _, token in sorted(enumerate(tokens), key=distance)]
 
+    def component_colors(self) -> list[RGBA]:
+        """Every visible color a component documents (base properties and states)."""
+        colors: list[RGBA] = []
+        for spec in self.components:
+            values = [spec.properties, *spec.states.values()]
+            for props in values:
+                for key, value in props.items():
+                    color = parse_color(value) if key in COLOR_VALUE_KEYS else None
+                    if color is not None and not color.is_transparent:
+                        colors.append(color)
+        return colors
+
     def decorative_clusters(self) -> list[ColorCluster]:
         """Decorative-only colors (heaviest first, one per hex), excluding any color that
-        matches a palette token or a structural (non-decorative) cluster of any channel — a
-        gradient stop equal to the canvas, or to a measured secondary text color, is not an
-        accent to keep away from text."""
+        matches a palette token, a structural (non-decorative) cluster of any channel or a
+        color a component documents — a gradient stop equal to the canvas, to a measured
+        secondary text color or to the top-nav fill taken from that same gradient
+        (#0b0b0bc2 next to a #0b0b0bcc bar) is not an accent to keep away from surfaces."""
         tokens = list(self.colors.values())
         structural = [
             color
             for cluster in self.analysis.colors.clusters
             if not cluster.decorative and (color := parse_color(cluster.hex)) is not None
         ]
+        structural.extend(self.component_colors())
         result: list[ColorCluster] = []
         seen: set[str] = set()
         for cluster in sorted(

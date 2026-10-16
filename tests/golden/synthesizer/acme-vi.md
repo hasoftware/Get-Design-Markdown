@@ -205,6 +205,13 @@ Token màu ngữ nghĩa: 10 (2 màu có sắc độ, 8 màu trung tính); bảng
 
 - **success** `{colors.success}` — #16a34a: xanh lá — trạng thái thành công; bằng chứng đo được: positive inline note; biến CSS `--color-success`.
 
+### Token chưa được component tham chiếu
+
+Không component nào trong front matter tham chiếu các token màu này, nên bước kiểm tra token mồ côi (như linter DESIGN.md) có thể cảnh báo:
+
+- `hairline`: chỉ được dùng qua thuộc tính component mà spec DESIGN.md không có khóa (màu viền hoặc màu placeholder) — xem phần Components
+- `success`: đo được trên phần tử của trang nằm ngoài các component đã nhận diện
+
 ### Độ tương phản
 
 Độ tương phản WCAG 2.x của các cặp chữ/nền đo được (chữ cỡ thường cần 4.5:1 để đạt AA và 7:1 để đạt AAA):

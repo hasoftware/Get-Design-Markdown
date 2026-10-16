@@ -15,6 +15,7 @@ from get_design_markdown.models.analysis import (
 )
 from get_design_markdown.synthesizer.facts import DesignFacts
 from get_design_markdown.synthesizer.render import render_design_md
+from get_design_markdown.synthesizer.traits import compute_traits
 from get_design_markdown.synthesizer.validate import validate_design_md
 from tests.fixture_data import load_analysis_sample
 
@@ -48,14 +49,35 @@ def _two_indigo_tokens() -> DesignAnalysis:
 def test_each_color_token_keeps_its_own_action_family() -> None:
     analysis = _two_indigo_tokens()
     actions = DesignFacts(analysis).action_colors()
-    assert [(action.token, action.hex, action.variants) for action in actions[:2]] == [
-        ("primary", "#4f46e5", ()),
-        ("secondary", "#6366f1", ()),
+    assert [(action.token, action.hex, action.variants) for action in actions] == [
+        ("primary", "#4f46e5", ())
+    ]
+    shades = actions[0].shades
+    assert [(shade.token, shade.hex, shade.variants) for shade in shades] == [
+        ("secondary", "#6366f1", ())
     ]
     text = render_design_md(analysis)
     assert "#4f46e5 / #6366f1" not in text
     assert "`{colors.secondary}` — #6366f1" in text
     assert not _errors(text)
+
+
+def test_two_tokens_of_one_hue_are_one_accent_with_a_variant_shade() -> None:
+    # stripe.com: {colors.primary} #533afd and {colors.secondary} #635bff are both indigo.
+    analysis = _two_indigo_tokens()
+    traits = compute_traits(DesignFacts(analysis))
+    assert traits.accent == "single"
+    # button-primary (2 instances) + its shade on button-secondary (1).
+    assert traits.actions[0].count == 2 and traits.actions[0].total == 3
+    text = _flat(render_design_md(analysis))
+    assert "two-signal" not in text
+    assert "a single indigo accent (#4f46e5 plus a variant shade #6366f1)" in text
+    assert (
+        "Actions use a single accent: indigo `{colors.primary}` — #4f46e5 on button-primary" in text
+    )
+    assert "plus a variant shade `{colors.secondary}` — #6366f1 on button-secondary." in text
+    vi = _flat(render_design_md(analysis, lang="vi"))
+    assert "kèm một sắc độ biến thể `{colors.secondary}` — #6366f1" in vi
 
 
 def test_untokenized_shades_still_join_the_family() -> None:

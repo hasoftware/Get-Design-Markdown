@@ -7,7 +7,8 @@ Thresholds of the rule-based synthesizer:
 - every weight >= 600 -> "heavy weights only — no regular 400";
 - chromatic button backgrounds grouped into hue families; families with at least 15% of the
   chromatic button instances count: 0 monochrome, 1 single accent, 2 two-signal, 3+ multi
-  (rarer families are reported as minor accents);
+  (rarer families are reported as minor accents); two tokens of one hue (#533afd primary,
+  #635bff secondary) are one accent with a variant shade, never two signals;
 - most common radius >= 16px or pill -> soft, rounded (pill: with pill-shaped controls);
   <= 4px -> sharp, precise;
 - no shadow -> depth from tonal surface steps; only rings/inset highlights -> "rings";
@@ -117,11 +118,11 @@ def compute_traits(facts: DesignFacts) -> Traits:
     if facts.colors:
         theme = "dark" if to_oklch(facts.canvas).lightness < 0.5 else "light"
     families = facts.action_colors()
-    total = sum(family.count for family in families)
+    total = sum(family.total for family in families)
     actions = tuple(
         family
         for index, family in enumerate(families)
-        if index == 0 or family.count >= MINOR_ACCENT_SHARE * total
+        if index == 0 or family.total >= MINOR_ACCENT_SHARE * total
     )
     minor = tuple(family for family in families if family not in actions)
     accent: AccentKey | None = None
@@ -179,9 +180,18 @@ def canvas_words(traits: Traits, phrases: Phrases) -> str | None:
     return name
 
 
-def family_hexes(action: ActionColor) -> str:
-    """ "#635bff" or "#635bff / #533afd" for a family with variants."""
-    return " / ".join([action.hex, *action.variants])
+def family_hexes(action: ActionColor, phrases: Phrases) -> str:
+    """ "#635bff", "#635bff / #533afd" for a family with variants, "#533afd plus a variant
+    shade #635bff" for an accent whose shade has its own color token."""
+    values = " / ".join([action.hex, *action.variants])
+    if not action.shades:
+        return values
+    shades = [" / ".join([shade.hex, *shade.variants]) for shade in action.shades]
+    return phrases.get(
+        "trait.shades.one" if len(shades) == 1 else "trait.shades.many",
+        hex=values,
+        shades=phrases.join(shades),
+    )
 
 
 def action_words(traits: Traits, facts: DesignFacts, phrases: Phrases) -> str | None:
@@ -190,7 +200,9 @@ def action_words(traits: Traits, facts: DesignFacts, phrases: Phrases) -> str | 
         return None
     colors = [
         phrases.get(
-            "trait.named_color", name=color_name(action.hex, phrases), hex=family_hexes(action)
+            "trait.named_color",
+            name=color_name(action.hex, phrases),
+            hex=family_hexes(action, phrases),
         )
         for action in traits.actions
     ]
@@ -198,7 +210,7 @@ def action_words(traits: Traits, facts: DesignFacts, phrases: Phrases) -> str | 
     return phrases.get(
         f"trait.accent.{traits.accent}",
         name=color_name(first.hex, phrases) if first else "",
-        hex=family_hexes(first) if first else "",
+        hex=family_hexes(first, phrases) if first else "",
         colors=phrases.join(colors),
         count=len(colors),
     )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from get_design_markdown.analyzer.css_values import parse_color
-from get_design_markdown.analyzer.naming import TYPOGRAPHY, token_ref
+from get_design_markdown.analyzer.naming import COLORS, TYPOGRAPHY, parse_token_ref, token_ref
 from get_design_markdown.models.analysis import (
     ColorRole,
     ColorToken,
@@ -90,16 +90,34 @@ def _accent_sentence(ctx: Context) -> str | None:
     return sentence
 
 
-def _action_text(ctx: Context, action: ActionColor) -> str:
+def _action_value(ctx: Context, action: ActionColor) -> str:
     value = ctx.facts.color_display(action.hex, action.token)
     if action.variants:
         value += " / " + " / ".join(action.variants)
-    return ctx.p(
+    return value
+
+
+def _action_text(ctx: Context, action: ActionColor) -> str:
+    """ "indigo `{colors.primary}` — #533afd on button-primary", followed by the variant
+    shades of the same hue that carry their own token."""
+    text = ctx.p(
         "overview.accent.color",
         name=ctx.color_name(action.hex),
-        value=value,
+        value=_action_value(ctx, action),
         components=ctx.phrases.join(list(action.components)),
     )
+    if not action.shades:
+        return text
+    shades = [
+        ctx.p(
+            "overview.accent.shade_color",
+            value=_action_value(ctx, shade),
+            components=ctx.phrases.join(list(shade.components)),
+        )
+        for shade in action.shades
+    ]
+    key = "overview.accent.shades.one" if len(shades) == 1 else "overview.accent.shades.many"
+    return ctx.p(key, lead=text, shades=ctx.phrases.join(shades))
 
 
 def _type_sentence(ctx: Context) -> str | None:
@@ -354,6 +372,41 @@ def _decorative(ctx: Context) -> str | None:
     )
 
 
+def _unreferenced(ctx: Context) -> str | None:
+    """Palette tokens no front-matter component references, with the reason, so the
+    orphaned-token warnings of DESIGN.md linters are documented: a token a component uses
+    only as a border or placeholder color (no spec key) vs. one measured outside components."""
+    if not ctx.components:
+        return None
+    used: set[str] = set()
+    for props in ctx.components.values():
+        for value in props.values():
+            parsed = parse_token_ref(value)
+            if parsed is not None and parsed[0] == COLORS:
+                used.add(parsed[1])
+    orphans = [name for name in ctx.facts.colors if name not in used]
+    if not orphans:
+        return None
+    usage = ctx.facts.color_usage()
+    indirect = [name for name in orphans if usage.get(name)]
+    outside = [name for name in orphans if not usage.get(name)]
+    items = [
+        ctx.p(key, tokens=ctx.phrases.join([f"`{name}`" for name in names]))
+        for key, names in (
+            ("colors.unreferenced.indirect", indirect),
+            ("colors.unreferenced.outside", outside),
+        )
+        if names
+    ]
+    return "\n\n".join(
+        [
+            f"### {ctx.p('heading.colors.unreferenced')}",
+            ctx.p("colors.unreferenced.intro"),
+            bullets(items),
+        ]
+    )
+
+
 def _dark_theme(ctx: Context) -> str | None:
     dark = ctx.facts.analysis.dark
     if dark is None or not dark.colors.tokens:
@@ -418,6 +471,9 @@ def colors(ctx: Context) -> str | None:
     for group in _COLOR_GROUPS:
         if grouped[group]:
             parts.append(f"### {ctx.p(f'heading.colors.{group}')}\n\n{bullets(grouped[group])}")
+    unreferenced = _unreferenced(ctx)
+    if unreferenced:
+        parts.append(unreferenced)
     for extra in (_contrast_table(ctx), _decorative(ctx), _dark_theme(ctx)):
         if extra:
             parts.append(extra)
@@ -432,10 +488,9 @@ def _family_line(ctx: Context, family: FontFamilyInfo) -> str:
     details.append(ctx.p(f"typography.category.{family.category.replace('-', '_')}"))
     if family.stack:
         details.append(ctx.p("typography.stack", stack=md_code(", ".join(family.stack))))
-    if family.weights:
-        details.append(
-            ctx.p("typography.family_weights", weights=_weights(ctx, sorted(family.weights)))
-        )
+    weights = ctx.facts.family_weights(family)
+    if weights:
+        details.append(ctx.p("typography.family_weights", weights=_weights(ctx, weights)))
     details.append(ctx.p("typography.google" if family.is_google_font else "typography.not_google"))
     return f"**{md_text(family.name)}** — " + "; ".join(details) + "."
 

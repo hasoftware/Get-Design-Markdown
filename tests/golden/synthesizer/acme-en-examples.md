@@ -228,6 +228,13 @@ Semantic color tokens: 10 (2 chromatic, 8 neutral); the palette reads as light. 
 
 - **success** `{colors.success}` — #16a34a: green — success status; evidence: positive inline note; CSS variable `--color-success`.
 
+### Tokens Without a Component Reference
+
+No front-matter component references these palette tokens, so orphaned-token checks (such as the DESIGN.md linter) may flag them:
+
+- `hairline`: used only through component properties the DESIGN.md spec has no key for (border or placeholder colors) — see Components
+- `success`: measured on page elements outside the detected components
+
 ### Contrast
 
 WCAG 2.x contrast of measured text/background pairs (normal-size text needs 4.5:1 for AA and 7:1 for AAA):

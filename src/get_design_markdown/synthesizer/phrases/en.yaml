@@ -40,6 +40,7 @@ heading:
     text: "Text"
     borders: "Borders"
     status: "Status"
+    unreferenced: "Tokens Without a Component Reference"
 
 color_name:
   deep: "deep {hue}"
@@ -80,6 +81,9 @@ trait:
     single: "a single {name} accent ({hex})"
     two: "a two-signal action system ({colors})"
     multi: "{count} accent colors for actions ({colors})"
+  shades:
+    one: "{hex} plus a variant shade {shades}"
+    many: "{hex} plus variant shades {shades}"
   type:
     pair: "{heading} headings with {body} text"
     single: "{family} throughout"
@@ -109,6 +113,10 @@ overview:
     two: "Actions follow a two-signal system: {colors}."
     multi: "Actions use several accent colors (count: {count}): {colors}."
     minor: "Rarely used extra action colors: {colors}."
+    shade_color: "{value} on {components}"
+    shades:
+      one: "{lead}, plus a variant shade {shades}"
+      many: "{lead}, plus variant shades {shades}"
   weights:
     heavy_only: "Heavy weights only — no regular 400 ({weights})."
     no_bold: "No bold weights are used ({weights})."
@@ -156,6 +164,10 @@ colors:
   evidence: "evidence: {evidence}"
   css_variable: "CSS variable {variable}"
   used_by: "used by {components}"
+  unreferenced:
+    intro: "No front-matter component references these palette tokens, so orphaned-token checks (such as the DESIGN.md linter) may flag them:"
+    indirect: "{tokens}: used only through component properties the DESIGN.md spec has no key for (border or placeholder colors) — see Components"
+    outside: "{tokens}: measured on page elements outside the detected components"
   role:
     background: "page canvas (largest background area)"
     surface: "surface / section background"
