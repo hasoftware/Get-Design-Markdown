@@ -125,7 +125,10 @@ SCRIPT_PROG = "gdm-ui"
 #: Title of the native message boxes of the windowed exe.
 MESSAGE_BOX_TITLE = "Get Design Markdown"
 WEBVIEW2_DOWNLOAD_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
-PYWEBVIEW_MISSING = 'chưa cài gói pywebview (cài bằng: pip install "get-design-markdown[gui]")'
+PYWEBVIEW_MISSING = (
+    "chưa cài gói pywebview (từ mã nguồn: uv sync --extra gui; "
+    'từ file wheel: pip install "<file wheel>[gui]")'
+)
 WEBVIEW2_MISSING = (
     f"máy chưa có Microsoft Edge WebView2 Runtime (tải miễn phí tại {WEBVIEW2_DOWNLOAD_URL})"
 )

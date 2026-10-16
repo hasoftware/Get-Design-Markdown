@@ -391,7 +391,8 @@ def ui(
             "--window",
             help=(
                 "Mở trong cửa sổ riêng thay vì tab trình duyệt "
-                '(cần gói pywebview: pip install "get-design-markdown\\[gui]").'
+                "(cần extra gui: uv sync --extra gui từ mã nguồn, hoặc "
+                'pip install "<file wheel>\\[gui]").'
             ),
         ),
     ] = False,

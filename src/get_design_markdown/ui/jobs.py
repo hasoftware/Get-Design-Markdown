@@ -283,7 +283,7 @@ _ERROR_CODES: tuple[tuple[type[BaseException], ErrorCode], ...] = (
 
 UNEXPECTED_HINT = (
     "Hãy thử lại. Nếu lỗi lặp lại, gửi kèm file nhật ký ui.log (hoặc kết quả của lệnh "
-    "'gdm get <url> --debug') khi báo lỗi."
+    "'gdm --debug get <url>') khi báo lỗi."
 )
 
 

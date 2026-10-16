@@ -64,7 +64,7 @@ class CollectError(GdmError):
 BROWSER_INSTALL_HINT = (
     "Cài Microsoft Edge hoặc Google Chrome (công cụ tự dùng nếu có), hoặc bấm nút "
     '"Tải Chromium" trong giao diện (gdm ui), hoặc chạy: '
-    "python -m uv run playwright install chromium"
+    "python -m playwright install chromium (từ mã nguồn: uv run playwright install chromium)"
 )
 
 

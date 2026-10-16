@@ -44,7 +44,9 @@ from get_design_markdown.resources import resource_text
 
 logger = logging.getLogger(__name__)
 
-INSTALL_HINT = "Chạy: python -m uv run playwright install chromium"
+INSTALL_HINT = (
+    "Chạy: python -m playwright install chromium (từ mã nguồn: uv run playwright install chromium)"
+)
 TIMEOUT_HINT = (
     "Tăng thời gian chờ bằng biến môi trường GDM_TIMEOUT (ví dụ GDM_TIMEOUT=90) "
     "hoặc kiểm tra kết nối mạng."
@@ -174,7 +176,8 @@ _MISSING_FORCED: dict[LaunchTarget, tuple[str, str]] = {
     "chromium": (
         "Chưa tải Chromium của Playwright (trình duyệt đã chọn: chromium).",
         'Bấm nút "Tải Chromium" trong giao diện (gdm ui) hoặc chạy: '
-        f"python -m uv run playwright install chromium. {_AUTO_HINT}",
+        "python -m playwright install chromium (từ mã nguồn: uv run playwright install "
+        f"chromium). {_AUTO_HINT}",
     ),
     "msedge": (
         "Không tìm thấy Microsoft Edge trên máy này (trình duyệt đã chọn: msedge).",
