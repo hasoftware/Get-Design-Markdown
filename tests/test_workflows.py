@@ -17,8 +17,9 @@ WORKFLOWS_DIR = GITHUB_DIR / "workflows"
 CI_FILE = WORKFLOWS_DIR / "ci.yml"
 RELEASE_FILE = WORKFLOWS_DIR / "release.yml"
 
-#: owner/repo[/path]@vN, or a local reusable workflow.
-PINNED_ACTION_RE = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@v\d+$")
+#: owner/repo[/path]@vN (or a full vN.N.N tag for actions without a moving major tag), or a
+#: local reusable workflow.
+PINNED_ACTION_RE = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@v\d+(\.\d+\.\d+)?$")
 LOCAL_WORKFLOW_RE = re.compile(r"^\./\.github/workflows/[\w.-]+\.ya?ml$")
 #: The official DESIGN.md linter at an exact version.
 LINTER_PACKAGE_RE = re.compile(r"@google/design\.md@\d+\.\d+\.\d+")
@@ -231,14 +232,6 @@ def test_project_version_matches_release_rule() -> None:
     assert __version__ == version
     script = "\n".join(runs(load_workflow(RELEASE_FILE)["jobs"]["release"]))
     assert "src/get_design_markdown/__init__.py" in script
-
-
-def test_dependabot_updates_actions_weekly() -> None:
-    config = yaml.safe_load((GITHUB_DIR / "dependabot.yml").read_text(encoding="utf-8"))
-    assert config["version"] == 2
-    update = config["updates"][0]
-    assert update["package-ecosystem"] == "github-actions"
-    assert update["schedule"]["interval"] == "weekly"
 
 
 def test_pull_request_template_checklist() -> None:

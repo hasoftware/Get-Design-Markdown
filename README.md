@@ -514,7 +514,7 @@ viết tiếng Việt có dấu.
 - **`.github/workflows/release.yml`** (CD): khi push tag `v*`, chạy lại toàn bộ CI, kiểm tra tag
   khớp version trong `pyproject.toml` và `__version__`, build rồi tạo GitHub Release kèm wheel và
   sdist. Không publish lên PyPI.
-- Dependabot cập nhật các GitHub Action hằng tuần.
+- Các GitHub Action được ghim theo phiên bản và cập nhật thủ công.
 
 Phát hành phiên bản mới:
 
