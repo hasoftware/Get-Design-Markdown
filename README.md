@@ -142,7 +142,8 @@ vào bản phát hành sau khi bài tự kiểm tra của exe đạt.
    `Get-Design-Markdown-<phiên-bản>-windows-x64.zip` để tải về.
 2. Chuột phải file zip → **Extract All…** (**Giải nén tất cả…**) → chọn nơi đặt chương trình, ví
    dụ `Documents\Apps`. Đừng chạy exe ngay bên trong file zip: chương trình cần cả thư mục
-   `_internal` nằm cạnh nó.
+   `_internal` nằm cạnh nó. Chọn chỗ có đường dẫn ngắn: đường dẫn quá dài (khoảng 200 ký tự trở
+   lên) khiến Windows không nạp được thư viện và chương trình báo không khởi động được.
 3. Mở thư mục `Get-Design-Markdown` vừa giải nén và bấm đúp **`Get-Design-Markdown.exe`**. Giao
    diện mở trong một cửa sổ riêng; đóng cửa sổ là thoát chương trình.
 
@@ -173,8 +174,8 @@ mã độc (false positive). Khi gặp cảnh báo:
   máy thiếu WebView2, chương trình tự mở giao diện trong trình duyệt mặc định.
 - **Trình duyệt để mở trang cần phân tích**: chương trình tự dùng Microsoft Edge (có sẵn trên
   Windows) hoặc Google Chrome, chạy ẩn. Nếu máy không có cả hai, giao diện báo "Chưa có trình
-  duyệt để mở trang" kèm nút **Tải Chromium** (khoảng 150 MB, tải một lần). Xem
-  [Trình duyệt](#trình-duyệt).
+  duyệt để mở trang" kèm nút **Tải Chromium** (một lần: tải về khoảng 125 MB, chiếm khoảng 300 MB
+  trên ổ đĩa). Xem [Trình duyệt](#trình-duyệt).
 - **Kết quả** được lưu ở `Documents\Get-Design-Markdown\<tên-miền>\`. Đổi thư mục này trong
   **Tùy chọn nâng cao** → **Thư mục lưu kết quả**; nút **Mở thư mục** ở tab **Tệp** mở thẳng thư
   mục kết quả trong File Explorer.
@@ -317,6 +318,7 @@ GDM_BROWSER=chrome gdm get https://stripe.com
 | Kết quả của bản exe | `Documents\Get-Design-Markdown\<tên-miền>\` | — | — |
 | Kết quả của `gdm` và `gdm ui` | `GDM_OUTPUT_DIR`, mặc định `output\` trong thư mục chạy lệnh (với `gdm ui`, đổi được trong giao diện hoặc bằng `--out`) | như Windows | như Windows |
 | Cấu hình giao diện | `%APPDATA%\get-design-markdown\ui-settings.json` | `~/Library/Application Support/get-design-markdown/ui-settings.json` | `~/.config/get-design-markdown/ui-settings.json` |
+| Dữ liệu của cửa sổ giao diện (lựa chọn sáng/tối, đã đọc hướng dẫn) | `%APPDATA%\get-design-markdown\webview\` | `~/Library/Application Support/get-design-markdown/webview/` | `~/.config/get-design-markdown/webview/` |
 | Nhật ký `ui.log` của bản exe, báo cáo `self-test.json` | `%LOCALAPPDATA%\get-design-markdown\logs\` | `~/Library/Logs/get-design-markdown/` | `~/.local/state/get-design-markdown/logs/` |
 | Chromium tải bằng nút **Tải Chromium** | `%LOCALAPPDATA%\ms-playwright\` | `~/Library/Caches/ms-playwright/` | `~/.cache/ms-playwright/` |
 
@@ -774,7 +776,8 @@ Lỗi được in bằng tiếng Việt kèm gợi ý; thêm `--debug` (`gdm --d
 - Trước khi mở trang, công cụ đọc `robots.txt` (theo RFC 9309) với tên bot `get-design-markdown`.
   Nếu trang không cho phép, công cụ **in cảnh báo** và vẫn tiếp tục vì đây là một lần truy cập phục
   vụ tham khảo, giống một người dùng mở trang. Hãy tôn trọng điều khoản sử dụng của trang và dừng
-  lại nếu trang không muốn bị phân tích.
+  lại nếu trang không muốn bị phân tích. Khi không tải được `robots.txt` (mạng chậm, máy chủ không
+  trả lời), công cụ chỉ ghi một dòng thông tin rồi tiếp tục.
 - Công cụ chỉ tải các trang bạn chỉ định (và tối đa 10 trang con với `--pages`), không crawl hàng
   loạt và không vượt qua cơ chế chống bot hay trang đăng nhập.
 - Kết quả chỉ chứa thông số style và ảnh chụp màn hình phục vụ phân tích, không chứa logo, hình ảnh
@@ -907,6 +910,10 @@ Mọi dependency mới phải có giấy phép tương thích GPLv3 (MIT, BSD, A
 Phát hành theo [GNU General Public License v3.0 hoặc mới hơn](LICENSE) (`GPL-3.0-or-later`).
 Bạn được tự do dùng, sửa và phân phối lại; bản phân phối có chỉnh sửa phải giữ cùng giấy phép và
 công khai mã nguồn.
+
+Bản exe cho Windows kèm `THIRD-PARTY-NOTICES.txt`: tên, giấy phép và thông báo bản quyền của mọi
+thành phần mã nguồn mở được đóng gói (Python, OpenSSL, pywebview, pythonnet, Playwright, WebView2
+SDK…).
 
 "DESIGN.md" là định dạng do Google Labs công bố; các tên thương hiệu nhắc trong tài liệu này
 (Stripe, Linear…) chỉ dùng làm ví dụ và thuộc về chủ sở hữu tương ứng.
