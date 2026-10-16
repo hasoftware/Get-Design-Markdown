@@ -62,7 +62,7 @@ Endpoints (all /api/* require X-GDM-Token)
 ==========================================
 GET  /api/health
      200 HealthResponse
-         {"ok": true, "app": "get-design-markdown", "version": "0.1.0", "api": 1,
+         {"ok": true, "app": "get-design-markdown", "version": "0.2.0", "api": 1,
           "mode": "browser" | "window" | "none", "output_root": "...", "busy": false,
           "job_id": null | "<id of the queued/running job>"}
 

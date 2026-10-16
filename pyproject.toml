@@ -1,6 +1,6 @@
 [project]
 name = "get-design-markdown"
-version = "0.1.0"
+version = "0.2.0"
 description = "Trích xuất ngôn ngữ thiết kế của một trang web thành DESIGN.md cho AI coding agent."
 readme = "README.md"
 requires-python = ">=3.11"

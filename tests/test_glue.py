@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from get_design_markdown import cli, pipeline
+from get_design_markdown import __version__, cli, pipeline
 from get_design_markdown.analyzer import (
     analyze,
     breakpoints,
@@ -104,7 +104,9 @@ def sample_analyzers(monkeypatch: pytest.MonkeyPatch) -> DesignAnalysis:
 def test_analyze_capture_assembles_sample(sample_analyzers: DesignAnalysis) -> None:
     raw = load_raw_sample()
     result = analyze.analyze_capture(raw, now=sample_analyzers.analyzed_at)
-    assert result == sample_analyzers
+    # The sample was written by an earlier release; the analysis records the running one.
+    assert result.tool_version == __version__
+    assert result == sample_analyzers.model_copy(update={"tool_version": __version__})
 
 
 @pytest.mark.parametrize(
