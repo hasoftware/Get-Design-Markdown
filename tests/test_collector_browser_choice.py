@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from playwright.async_api import Error as PlaywrightError
@@ -333,6 +333,56 @@ def test_open_browser_without_any_browser(plan: LauncherPlan) -> None:
     with pytest.raises(BrowserNotInstalledError):
         asyncio.run(run())
     assert plan.made[0].calls == ["chromium", "msedge", "chrome"]
+
+
+class StuckBrowser(FakeBrowser):
+    """A browser that launched but never opens a page (no renderer starts)."""
+
+    async def new_page(self) -> FakePage:
+        self.pages += 1
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+def test_probe_user_agent_gives_up_on_a_browser_that_opens_no_page() -> None:
+    stuck = StuckBrowser("chromium")
+
+    async def run() -> str:
+        return await browser.probe_user_agent(cast(Any, stuck), "msedge", timeout_s=0.05)
+
+    with pytest.raises(CollectError) as caught:
+        asyncio.run(run())
+    assert "Microsoft Edge đã chạy nhưng không mở được trang nào trong 0.05 giây" in str(
+        caught.value
+    )
+    assert caught.value.hint is not None and "--browser" in caught.value.hint
+    assert stuck.pages == 1
+
+
+def test_open_browser_closes_a_browser_that_opens_no_page(
+    plan: LauncherPlan, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan.errors, plan.available = ALL_MISSING, ("chromium",)
+    monkeypatch.setattr(browser, "BROWSER_START_TIMEOUT_S", 0.05)
+    launched: list[FakeBrowser] = []
+    original = FakeLauncher.__call__
+
+    async def stuck_launch(self: FakeLauncher, name: LaunchTarget) -> Any:
+        await original(self, name)
+        fake = StuckBrowser(name)
+        self.launched[-1] = fake
+        launched.append(fake)
+        return fake
+
+    monkeypatch.setattr(FakeLauncher, "__call__", stuck_launch)
+
+    async def run() -> None:
+        async with open_browser("chromium"):
+            pytest.fail("the session must not be yielded")
+
+    with pytest.raises(CollectError):
+        asyncio.run(run())
+    assert launched and launched[0].closed
 
 
 # ─── Real browsers (marker: browser) ─────────────────────────────────────────

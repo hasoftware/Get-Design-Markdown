@@ -108,6 +108,12 @@ LOGIN_HOST_RE = re.compile(r"^(?:login|signin|auth|sso|accounts?|id)\.", re.IGNO
 
 _NET_ERROR_RE = re.compile(r"net::(ERR_[A-Z0-9_]+)")
 _LOAD_SETTLE_TIMEOUT_S = 5.0
+#: Upper bound for opening the first page of a freshly launched browser (seconds). Playwright's
+#: launch has its own timeout, but new_page() has none: a browser that never starts a renderer
+#: would otherwise leave the job at "Mở trình duyệt…" forever.
+BROWSER_START_TIMEOUT_S = 60.0
+#: Upper bound for closing the browser (seconds); the driver kills it when it stops anyway.
+BROWSER_CLOSE_TIMEOUT_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -301,6 +307,37 @@ def session_label(name: str, version: str) -> str:
     return f"{name} {version}".strip()
 
 
+async def probe_user_agent(
+    browser: Browser, name: LaunchTarget, *, timeout_s: float | None = None
+) -> str:
+    """The browser's default user agent, read from a throwaway page.
+
+    Raises CollectError when the page cannot be opened within `timeout_s` seconds
+    (default BROWSER_START_TIMEOUT_S).
+    """
+    limit = BROWSER_START_TIMEOUT_S if timeout_s is None else timeout_s
+
+    async def read() -> str:
+        probe = await browser.new_page()
+        try:
+            return str(await probe.evaluate("navigator.userAgent"))
+        finally:
+            with suppress(PlaywrightError):
+                await probe.close()
+
+    try:
+        return await asyncio.wait_for(read(), timeout=limit)
+    except TimeoutError:
+        display = BROWSER_DISPLAY_NAMES[name]
+        raise CollectError(
+            f"{display} đã chạy nhưng không mở được trang nào trong {limit:g} giây.",
+            hint=(
+                "Đóng bớt các chương trình đang chạy nặng rồi thử lại, hoặc chọn trình duyệt "
+                "khác (Tùy chọn nâng cao trong giao diện, hoặc --browser)."
+            ),
+        ) from None
+
+
 def _fallback_warning(name: LaunchTarget, failures: Sequence[LaunchFailure]) -> str | None:
     """Warning shown when "auto" skipped a browser that exists but did not start."""
     broken = [failure for failure in failures if failure.kind == "failed"]
@@ -332,19 +369,15 @@ async def open_browser(choice: BrowserChoice = "chromium") -> AsyncIterator[Brow
             warning = _fallback_warning(name, failures)
             if warning is not None:
                 print_warning(warning)
-            probe = await browser.new_page()
-            try:
-                default_agent = str(await probe.evaluate("navigator.userAgent"))
-            finally:
-                await probe.close()
+            default_agent = await probe_user_agent(browser, name)
             yield BrowserSession(
                 browser=browser,
                 user_agent=browser_user_agent(default_agent),
                 label=session_label(name, browser.version),
             )
         finally:
-            with suppress(PlaywrightError):
-                await browser.close()
+            with suppress(PlaywrightError, TimeoutError):
+                await asyncio.wait_for(browser.close(), timeout=BROWSER_CLOSE_TIMEOUT_S)
 
 
 async def new_context(
