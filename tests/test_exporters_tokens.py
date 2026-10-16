@@ -433,3 +433,24 @@ def test_validator_rejects(mutate: Any, message: str) -> None:
     mutate(document)
     problems = validate_tokens(document)
     assert any(message in problem for problem in problems), problems
+
+
+def test_uneven_corner_radii_become_one_token_per_corner() -> None:
+    # stripe.com's pricing tab badge: rounded on top only, so no {rounded.*} step applies.
+    analysis = load_analysis_sample()
+    badge = next(spec for spec in analysis.components if spec.name == "badge")
+    badge.properties["rounded"] = "4px 4px 0px 0px"
+    badge.token_refs.pop("rounded", None)
+    document = build_tokens(analysis)
+    assert validate_tokens(document) == []
+    tokens = document["component"]["badge"]
+    assert "border-radius" not in tokens
+    assert {
+        corner: tokens[f"border-{corner}-radius"]["$value"]
+        for corner in ("top-left", "top-right", "bottom-right", "bottom-left")
+    } == {
+        "top-left": {"value": 4, "unit": "px"},
+        "top-right": {"value": 4, "unit": "px"},
+        "bottom-right": {"value": 0, "unit": "px"},
+        "bottom-left": {"value": 0, "unit": "px"},
+    }

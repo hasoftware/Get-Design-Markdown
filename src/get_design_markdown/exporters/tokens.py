@@ -96,6 +96,8 @@ COMPONENT_EXTRAS: dict[str, str] = {
     "backdropFilter": "backdropFilter",
 }
 _SIDES = ("top", "right", "bottom", "left")
+#: border-radius shorthand order.
+_CORNERS = ("top-left", "top-right", "bottom-right", "bottom-left")
 
 
 def _ext(**fields: Any) -> dict[str, Any]:
@@ -410,6 +412,8 @@ class _Builder:
             if reference is not None:
                 group[name] = _token(reference, kind="dimension")
                 continue
+            if key == "rounded" and self.corner_radii(properties.get(key), group):
+                continue
             px = length_px(properties.get(key))
             if px is not None and px >= 0:
                 group[name] = _token(dimension(px), kind="dimension")
@@ -433,6 +437,19 @@ class _Builder:
         return {
             extra: properties[key] for key, extra in COMPONENT_EXTRAS.items() if properties.get(key)
         }
+
+    @staticmethod
+    def corner_radii(value: str | None, group: Group) -> bool:
+        """A 2-4 value `rounded` shorthand (corners differ) -> one dimension token per corner,
+        in border-radius order; True when the corners were written."""
+        if value is None or len(value.split()) < 2:
+            return False
+        corners = sides_px(value)
+        if corners is None:
+            return False
+        for corner, px in zip(_CORNERS, corners, strict=True):
+            group[f"border-{corner}-radius"] = _token(dimension(max(px, 0.0)), kind="dimension")
+        return True
 
     @staticmethod
     def border_width(value: str | None, group: Group) -> None:

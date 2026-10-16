@@ -239,6 +239,12 @@ def _color_decl(value: str | None, reference: str | None, context: ComponentCont
 
 
 def _radius_decl(value: str | None, reference: str | None, context: ComponentContext) -> str | None:
+    if value is not None and len(value.split()) > 1:
+        # Corners differ ("4px 4px 0px 0px"): a border-radius shorthand, never a scale step.
+        corners = css_sides(value)
+        if corners is None:
+            return None
+        return " ".join(radius_css(parse_px(corner) or 0.0) for corner in corners.split())
     raw = css_length(value, allow_negative=False)
     if raw is not None and not raw.endswith("%"):
         px = parse_px(raw)

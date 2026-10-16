@@ -382,3 +382,14 @@ def test_only_an_email_input_gets_an_email_placeholder() -> None:
     field.samples = ["input[type=text]"]
     html = render_preview(analysis)
     assert 'type="text" placeholder="Text"' in html and "you@example.com" not in html
+
+
+def test_preview_keeps_uneven_corner_radii() -> None:
+    analysis = load_analysis_sample()
+    badge = next(spec for spec in analysis.components if spec.name == "badge")
+    badge.properties["rounded"] = "4px 4px 0px 0px"
+    badge.token_refs.pop("rounded", None)
+    html = render_preview(analysis)
+    assert "border-radius:4px 4px 0px 0px" in html
+    badge.properties["rounded"] = "9999px 9999px 0px 0px"
+    assert "border-radius:9999px 9999px 0px 0px" in render_preview(analysis)
