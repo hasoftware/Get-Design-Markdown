@@ -30,7 +30,8 @@ Security
    header, when present, must be `http://127.0.0.1:<port>` or `http://localhost:<port>`
    (else 403 "bad_origin").
 3. CORS. No Access-Control-* header is ever sent. OPTIONS on any path -> 405
-   "method_not_allowed" without CORS headers.
+   "method_not_allowed" without CORS headers. Every 405 carries an `Allow` header; HEAD is
+   accepted for /, /static and /files only (405 on /api/*).
 4. Files. /files/{site}/{path} only serves regular files inside <output root>/<site>/:
    `site` must pass history.is_valid_site_name; each path segment must be non-empty, not "." or
    "..", not start with ".", and contain no "\\", ":" or NUL; the resolved real path (symlinks
@@ -43,7 +44,9 @@ Security
    allow-same-origin) and rendered Markdown in `<iframe sandbox srcdoc=...>` (no scripts), so
    site-derived content can neither run in the UI's origin nor read the token.
 6. Errors never include stack traces; unexpected exceptions -> 500 "internal" with a
-   Vietnamese message, the traceback goes to the log.
+   Vietnamese message, the traceback goes to the log. Malformed HTTP (bad request line,
+   unsupported version) also gets the error envelope with code "invalid"; a request line or
+   header block that is too long (414 / 431) gets "too_large".
 
 Error envelope (every 4xx/5xx)
 ==============================
@@ -87,7 +90,7 @@ POST /api/jobs
      message/hint.
      202 JobResponse {"job": JobSnapshot}   (status "queued" or "running", no events)
      409 "busy" when a job is queued or running (details.job_id).
-GET  /api/jobs/current?since=N
+GET  /api/jobs/current?since=N      (N: an integer, else 422 "invalid", field "since")
      200 CurrentJobResponse {"job": JobSnapshot | null} — the queued/running job, else the
      last finished one (lets a reloaded page resume), else null.
 GET  /api/jobs/{id}?since=N
@@ -105,7 +108,8 @@ GET  /api/results/{site}
      200 ResultsResponse:
          {"site": "stripe.com", "entry": HistoryEntry, "folder": "<absolute path>",
           "files": [ResultFile...],          # every regular file of the site folder and of
-                                             # screenshots/ and prompt-images/, sorted by path
+                                             # screenshots/ and prompt-images/, sorted by
+                                             # path case-insensitively (same on every OS)
           "design": RenderedDocument | null, # DESIGN.md (render_md.render_markdown)
           "prompt": RenderedDocument | null, # prompt.md
           "preview_url": "/files/stripe.com/preview.html" | null,
@@ -148,7 +152,10 @@ GET  /files/{site}/{path}
      No token (iframes and <img> cannot send headers); the Host check still applies.
 GET  /                 ui/static/index.html (with INDEX_CSP).
 GET  /static/{path}    files of ui/static (the frontend references /static/app.js,
-                       /static/app.css...). GET and HEAD. No token.
+                       /static/app.css...). GET and HEAD. No token. Besides the /files
+                       types: .js/.mjs text/javascript, .svg image/svg+xml, .ico, .gif,
+                       .woff/.woff2 fonts, .map application/json. (Under /files an .svg is
+                       an attachment: site output is never rendered as a document there.)
 
 Lifetime
 ========
@@ -158,6 +165,7 @@ Lifetime
 - mode "none" (`gdm ui --no-open`): no idle shutdown; Ctrl+C stops it.
 - POST /api/shutdown stops any mode. stop() cancels a running job and waits for it (up to
   10 s) before closing the socket.
+- /api/health and /api/shutdown read the queued/running job from JobManager.active_job_id.
 """
 
 from __future__ import annotations
