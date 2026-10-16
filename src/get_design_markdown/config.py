@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from get_design_markdown import __version__
 from get_design_markdown.errors import ConfigError
+from get_design_markdown.models.raw import BROWSER_CHOICES, BrowserChoice
 
 #: Product token used for robots.txt matching and the HTTP User-Agent.
 ROBOTS_AGENT = "get-design-markdown"
@@ -19,6 +20,7 @@ USER_AGENT = f"{ROBOTS_AGENT}/{__version__} (+design reference tool)"
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_MAX_ELEMENTS = 3000
 DEFAULT_TIMEOUT_S = 45.0
+DEFAULT_BROWSER: BrowserChoice = "auto"
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,8 @@ class Settings:
     output_dir: Path = DEFAULT_OUTPUT_DIR
     max_elements: int = DEFAULT_MAX_ELEMENTS
     timeout_s: float = DEFAULT_TIMEOUT_S
+    #: GDM_BROWSER: auto | chromium | msedge | chrome.
+    browser: BrowserChoice = DEFAULT_BROWSER
 
 
 def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -62,6 +66,20 @@ def _positive_float(env: Mapping[str, str], name: str, default: float) -> float:
     return value
 
 
+def _browser_choice(env: Mapping[str, str], name: str, default: BrowserChoice) -> BrowserChoice:
+    raw = env.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    value = raw.strip().lower()
+    for choice in BROWSER_CHOICES:
+        if value == choice:
+            return choice
+    raise ConfigError(
+        f"Biến {name}={raw!r} không phải trình duyệt được hỗ trợ.",
+        hint=f"Dùng một trong: {', '.join(BROWSER_CHOICES)} (ví dụ: {name}={default}).",
+    )
+
+
 def load_settings(env: Mapping[str, str] | None = None, *, use_dotenv: bool = True) -> Settings:
     """Build settings; values already in the environment win over .env."""
     if env is None:
@@ -73,4 +91,5 @@ def load_settings(env: Mapping[str, str] | None = None, *, use_dotenv: bool = Tr
         output_dir=Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR,
         max_elements=_positive_int(env, "GDM_MAX_ELEMENTS", DEFAULT_MAX_ELEMENTS),
         timeout_s=_positive_float(env, "GDM_TIMEOUT", DEFAULT_TIMEOUT_S),
+        browser=_browser_choice(env, "GDM_BROWSER", DEFAULT_BROWSER),
     )

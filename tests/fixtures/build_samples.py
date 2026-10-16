@@ -86,6 +86,8 @@ TOOL_VERSION = "0.1.0"
 SOURCE_URL = "https://acme.example/"
 DOMAIN = "acme.example"
 COLLECTED_AT = datetime(2026, 10, 15, 8, 0, tzinfo=UTC)
+#: RawCapture.browser of the sample: the engine and version the capture was made with.
+BROWSER_LABEL = "chromium 141.0.7390.37"
 ANALYZED_AT = datetime(2026, 10, 15, 8, 5, tzinfo=UTC)
 
 SANS = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif'
@@ -1105,6 +1107,7 @@ def build_raw() -> RawCapture:
         domain=DOMAIN,
         collected_at=COLLECTED_AT,
         options=CaptureOptions(dark=True),
+        browser=BROWSER_LABEL,
         robots=RobotsCheck(
             robots_url="https://acme.example/robots.txt",
             allowed=True,

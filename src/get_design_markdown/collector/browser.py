@@ -29,6 +29,7 @@ from playwright.async_api import (
 )
 
 from get_design_markdown.errors import (
+    BROWSER_INSTALL_HINT,
     BotBlockedError,
     BrowserNotInstalledError,
     CollectError,
@@ -36,7 +37,7 @@ from get_design_markdown.errors import (
     NavigationError,
     PageTimeoutError,
 )
-from get_design_markdown.models.raw import CaptureOptions, ColorScheme, LoadState
+from get_design_markdown.models.raw import BrowserChoice, CaptureOptions, ColorScheme, LoadState
 from get_design_markdown.resources import resource_text
 
 INSTALL_HINT = "Chạy: python -m uv run playwright install chromium"
@@ -124,10 +125,16 @@ class PageProbe:
 
 @dataclass
 class BrowserSession:
-    """A launched Chromium plus the user agent every context uses."""
+    """A launched browser plus the user agent every context uses.
+
+    `label` names the browser actually launched and its version, e.g.
+    "chromium 141.0.7390.37" or "msedge 141.0.3537.71"; collect_site() stores it in
+    RawCapture.browser so a capture can be reproduced with the same engine.
+    """
 
     browser: Browser
     user_agent: str
+    label: str
     contexts: list[BrowserContext] = field(default_factory=list)
 
 
@@ -138,7 +145,7 @@ def _launch_error(error: Exception) -> CollectError:
     text = str(error)
     if "Executable doesn't exist" in text or "playwright install" in text:
         return BrowserNotInstalledError(
-            "Chưa cài trình duyệt Chromium cho Playwright.", hint=INSTALL_HINT
+            "Chưa cài trình duyệt Chromium cho Playwright.", hint=BROWSER_INSTALL_HINT
         )
     first_line = text.strip().splitlines()[0] if text.strip() else type(error).__name__
     return CollectError(
@@ -152,9 +159,26 @@ def browser_user_agent(default: str) -> str:
     return default.replace("HeadlessChrome", "Chrome")
 
 
+def session_label(name: str, version: str) -> str:
+    """RawCapture.browser value: "<name> <version>" ("chromium 141.0.7390.37")."""
+    return f"{name} {version}".strip()
+
+
 @asynccontextmanager
-async def open_browser() -> AsyncIterator[BrowserSession]:
-    """Launch headless Chromium; always closes it (and its contexts) on exit."""
+async def open_browser(choice: BrowserChoice = "chromium") -> AsyncIterator[BrowserSession]:
+    """Launch a headless browser for `choice`; always closes it (and its contexts) on exit.
+
+    Contract (CaptureOptions.browser, `--browser`, GDM_BROWSER):
+    - "chromium": Playwright's bundled Chromium.
+    - "msedge" / "chrome": the installed Microsoft Edge / Google Chrome (Playwright channel).
+    - "auto": the first that launches of Playwright's Chromium -> Edge -> Chrome.
+    - Nothing usable: BrowserNotInstalledError (hint: Edge/Chrome, the UI button or
+      `playwright install chromium`); any other launch failure: CollectError.
+    The yielded session's `label` names the browser really used ("msedge 141.0.3537.71").
+
+    Current behaviour: every choice launches Playwright's Chromium (the Edge / Chrome
+    fallback chain is not implemented yet).
+    """
     async with async_playwright() as playwright:
         try:
             browser = await playwright.chromium.launch(headless=True)
@@ -166,7 +190,11 @@ async def open_browser() -> AsyncIterator[BrowserSession]:
                 default_agent = str(await probe.evaluate("navigator.userAgent"))
             finally:
                 await probe.close()
-            yield BrowserSession(browser=browser, user_agent=browser_user_agent(default_agent))
+            yield BrowserSession(
+                browser=browser,
+                user_agent=browser_user_agent(default_agent),
+                label=session_label("chromium", browser.version),
+            )
         finally:
             with suppress(PlaywrightError):
                 await browser.close()

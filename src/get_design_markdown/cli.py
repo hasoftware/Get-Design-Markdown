@@ -122,6 +122,15 @@ class Lang(StrEnum):
     VI = "vi"
 
 
+class Browser(StrEnum):
+    """--browser values (models.raw.BrowserChoice)."""
+
+    AUTO = "auto"
+    CHROMIUM = "chromium"
+    MSEDGE = "msedge"
+    CHROME = "chrome"
+
+
 class _State:
     debug = False
 
@@ -167,13 +176,19 @@ def _main_options(
 
 
 def capture_options(
-    settings: Settings, *, dark: bool, pages: int, max_elements: int | None
+    settings: Settings,
+    *,
+    dark: bool,
+    pages: int,
+    max_elements: int | None,
+    browser: Browser | None = None,
 ) -> CaptureOptions:
     return CaptureOptions(
         max_elements=max_elements or settings.max_elements,
         dark=dark,
         pages=pages,
         timeout_s=settings.timeout_s,
+        browser=browser.value if browser is not None else settings.browser,
     )
 
 
@@ -181,6 +196,7 @@ def capture_options(
 URL_METAVAR = "URL"
 FOLDER_METAVAR = "THƯ_MỤC"
 NUMBER_METAVAR = "SỐ"
+BROWSER_METAVAR = "TRÌNH_DUYỆT"
 
 TargetArgument = Annotated[
     str,
@@ -235,6 +251,18 @@ ExamplesOption = Annotated[
 OpenOption = Annotated[
     bool, typer.Option("--open", help="Mở preview.html (hoặc DESIGN.md) trong trình duyệt.")
 ]
+BrowserOption = Annotated[
+    Browser | None,
+    typer.Option(
+        "--browser",
+        metavar=BROWSER_METAVAR,
+        help=(
+            "Trình duyệt dùng để mở trang: auto (Chromium của Playwright → Edge → Chrome), "
+            "chromium, msedge hoặc chrome (mặc định: biến GDM_BROWSER, nếu không có thì auto)."
+        ),
+        show_default=False,
+    ),
+]
 DeltaEOption = Annotated[
     float,
     typer.Option(
@@ -262,10 +290,13 @@ def collect(
     dark: DarkOption = False,
     pages: PagesOption = 0,
     max_elements: MaxElementsOption = None,
+    browser: BrowserOption = None,
 ) -> None:
     """Tầng 1: mở trang bằng trình duyệt, thu thập style → output/<domain>/raw.json."""
     settings = load_settings()
-    options = capture_options(settings, dark=dark, pages=pages, max_elements=max_elements)
+    options = capture_options(
+        settings, dark=dark, pages=pages, max_elements=max_elements, browser=browser
+    )
     run_collect(url, out_root=out or settings.output_dir, options=options)
 
 
@@ -317,10 +348,13 @@ def get(
     prompt_only: PromptOnlyOption = False,
     examples: ExamplesOption = False,
     max_elements: MaxElementsOption = None,
+    browser: BrowserOption = None,
 ) -> None:
     """Chạy trọn gói collect → analyze → synthesize → tokens.json + preview.html."""
     settings = load_settings()
-    options = capture_options(settings, dark=dark, pages=pages, max_elements=max_elements)
+    options = capture_options(
+        settings, dark=dark, pages=pages, max_elements=max_elements, browser=browser
+    )
     run_get(
         url,
         out_root=out or settings.output_dir,

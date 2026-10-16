@@ -105,6 +105,10 @@ def test_main_page_basics(full: tuple[RawCapture, Path], home: PageCapture, site
     assert raw.source_url == site_url
     assert raw.domain.startswith("127.0.0.1_")
     assert raw.options is not None and raw.options.dark and raw.options.pages == 3
+    # Default choice "auto" starts with Playwright's Chromium (installed wherever tests run).
+    assert raw.options.browser == "auto"
+    assert raw.browser is not None and raw.browser.startswith("chromium ")
+    assert raw.browser.split(" ", 1)[1][:1].isdigit()
     assert home.name == "home" and home.status_code == 200
     assert home.load_state == "networkidle"
     assert home.title == "Acme Cloud — Ship cloud apps without the ops"

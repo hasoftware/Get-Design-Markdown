@@ -37,3 +37,41 @@ def test_non_positive_values_suggest_the_default() -> None:
     with pytest.raises(ConfigError) as info:
         load_settings({"GDM_TIMEOUT": "0"})
     assert info.value.hint == "Ví dụ: GDM_TIMEOUT=45"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("", "auto"),
+        ("auto", "auto"),
+        ("chromium", "chromium"),
+        (" MSEdge ", "msedge"),
+        ("Chrome", "chrome"),
+    ],
+)
+def test_browser_choice_from_environment(value: str, expected: str) -> None:
+    assert load_settings({"GDM_BROWSER": value}).browser == expected
+
+
+def test_default_browser_is_auto() -> None:
+    assert Settings().browser == "auto"
+
+
+def test_unknown_browser_raises_config_error_with_choices() -> None:
+    with pytest.raises(ConfigError) as info:
+        load_settings({"GDM_BROWSER": "firefox"})
+    assert "GDM_BROWSER" in info.value.message
+    assert info.value.hint is not None
+    for choice in ("auto", "chromium", "msedge", "chrome"):
+        assert choice in info.value.hint
+
+
+def test_env_example_documents_every_variable_with_its_default() -> None:
+    example = Path(__file__).resolve().parents[1] / ".env.example"
+    values = dict(
+        line.split("=", 1)
+        for line in example.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    )
+    assert set(values) == {"GDM_OUTPUT_DIR", "GDM_MAX_ELEMENTS", "GDM_TIMEOUT", "GDM_BROWSER"}
+    assert load_settings(values) == Settings()

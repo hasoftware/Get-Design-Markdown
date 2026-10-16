@@ -20,6 +20,10 @@ Sides = tuple[str, str, str, str]
 Landmark = Literal["header", "nav", "main", "footer", "aside", "form", "dialog"]
 #: How far page loading got before the collector moved on.
 LoadState = Literal["networkidle", "load", "domcontentloaded"]
+#: Browser the collector launches (--browser, GDM_BROWSER): "auto" tries Playwright's Chromium,
+#: then Microsoft Edge, then Google Chrome; the others force one engine.
+BrowserChoice = Literal["auto", "chromium", "msedge", "chrome"]
+BROWSER_CHOICES: tuple[BrowserChoice, ...] = ("auto", "chromium", "msedge", "chrome")
 
 #: Separator used when a four-sided value is stored as one string (hover diffs).
 SIDES_SEPARATOR = " | "
@@ -258,6 +262,8 @@ class CaptureOptions(GdmModel):
     screenshot_widths: list[int] = Field(default_factory=lambda: list(DEFAULT_SCREENSHOT_WIDTHS))
     hover_buttons: int = 10
     hover_links: int = 10
+    #: Browser requested by the user; RawCapture.browser records the one actually used.
+    browser: BrowserChoice = "auto"
 
 
 class RawCapture(GdmModel):
@@ -267,6 +273,9 @@ class RawCapture(GdmModel):
     domain: str
     collected_at: datetime
     options: CaptureOptions | None = None
+    #: Browser actually used, name and version: "chromium 141.0.7390.37",
+    #: "msedge 141.0.3537.71" (None in captures made before the field existed).
+    browser: str | None = None
     robots: RobotsCheck | None = None
     #: pages[0] is always the main page.
     pages: list[PageCapture] = Field(default_factory=list)

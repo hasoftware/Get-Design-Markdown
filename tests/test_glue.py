@@ -419,6 +419,32 @@ def test_cli_collect_passes_options(
     assert fake_collect[1].max_elements == 50
 
 
+def test_cli_browser_choice_from_option_and_environment(
+    fake_collect: list[CaptureOptions], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GDM_BROWSER", raising=False)
+    base = ["collect", "acme.example", "--out", str(tmp_path)]
+    assert runner.invoke(cli.app, base).exit_code == 0
+    assert runner.invoke(cli.app, [*base, "--browser", "msedge"]).exit_code == 0
+    monkeypatch.setenv("GDM_BROWSER", "chrome")
+    assert runner.invoke(cli.app, base).exit_code == 0
+    # The option wins over the environment.
+    assert runner.invoke(cli.app, [*base, "--browser", "chromium"]).exit_code == 0
+    assert [options.browser for options in fake_collect] == ["auto", "msedge", "chrome", "chromium"]
+
+
+def test_cli_get_passes_the_browser_choice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[CaptureOptions] = []
+
+    def fake_run_get(url: str, *, options: CaptureOptions, **_: Any) -> None:
+        seen.append(options)
+
+    monkeypatch.setattr(cli, "run_get", fake_run_get)
+    result = runner.invoke(cli.app, ["get", "acme.example", "--browser", "chrome"])
+    assert result.exit_code == 0, result.output
+    assert seen[0].browser == "chrome"
+
+
 def test_cli_analyze_synthesize_export(
     sample_analyzers: DesignAnalysis, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

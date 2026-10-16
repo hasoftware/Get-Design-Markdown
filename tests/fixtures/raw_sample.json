@@ -17,8 +17,10 @@
       390
     ],
     "hover_buttons": 10,
-    "hover_links": 10
+    "hover_links": 10,
+    "browser": "auto"
   },
+  "browser": "chromium 141.0.7390.37",
   "robots": {
     "robots_url": "https://acme.example/robots.txt",
     "allowed": true,

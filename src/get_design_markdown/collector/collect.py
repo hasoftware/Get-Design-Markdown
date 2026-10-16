@@ -311,7 +311,7 @@ async def collect_site(
     options: CaptureOptions,
     progress: ProgressCallback | None = None,
 ) -> RawCapture:
-    """Capture `url` with Playwright Chromium and return the RawCapture.
+    """Capture `url` with the browser chosen by options.browser and return the RawCapture.
 
     - `url` is already normalized (storage.normalize_url) and robots.txt for it was already
       checked by the caller; the caller also fills RawCapture.robots and writes raw.json.
@@ -320,16 +320,19 @@ async def collect_site(
     - pages[0] is the main page; options.pages > 0 adds sub-pages found by
       discovery.discover_pages(); options.dark adds RawCapture.dark (main page re-captured with
       prefers-color-scheme: dark).
+    - Opens the browser with browser.open_browser(options.browser) and records the session's
+      label (name + version actually used) in RawCapture.browser.
     - Calls progress(message) with short Vietnamese status texts.
     - Raises CollectError subclasses (errors.py) with Vietnamese messages for timeouts,
-      bot blocks, login walls, navigation failures and a missing Chromium install.
+      bot blocks, login walls, navigation failures and a missing browser.
     """
     notify = progress or silent_progress
     warnings: list[str] = []
     registry = StylesheetRegistry()
     main_name = page_slug(url)
     notify("Mở trình duyệt…")
-    async with open_browser() as session:
+    async with open_browser(options.browser) as session:
+        browser_label = session.label
         context = await new_context(session, options, color_scheme="light")
         try:
             main = await capture_page(
@@ -388,6 +391,7 @@ async def collect_site(
         domain=domain_of(url),
         collected_at=datetime.now(UTC),
         options=options,
+        browser=browser_label,
         pages=[main, *subpages],
         dark=dark,
         stylesheets=registry.sheets,
