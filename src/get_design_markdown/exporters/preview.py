@@ -65,7 +65,10 @@ from get_design_markdown.models.analysis import (
     ResponsiveChangeKind,
     TypeLevel,
 )
+from get_design_markdown.models.raw import MAX_TEXT_LENGTH
 from get_design_markdown.resources import render_template
+from get_design_markdown.synthesizer.facts import DesignFacts
+from get_design_markdown.synthesizer.formatting import fmt_ratio
 
 TEMPLATE = "preview.html.j2"
 DISCLAIMER_EN = "Reference only — not the official design system of this site."
@@ -119,6 +122,32 @@ CHANGE_TITLES: dict[ResponsiveChangeKind, str] = {
     ResponsiveChangeKind.HORIZONTAL_SCROLL_APPEARS: "Horizontal scrolling appears",
     ResponsiveChangeKind.TAP_TARGETS_SMALL: "Tap targets below 44px",
 }
+#: Size keys of button-primary the nav demo does not reuse: they were measured on the large
+#: page buttons, not on the header call to action (same rule as the DESIGN.md nav prompt).
+NAV_CTA_DROPPED_KEYS = frozenset(
+    {
+        "padding",
+        "height",
+        "width",
+        "gap",
+        "fontFamily",
+        "fontSize",
+        "fontWeight",
+        "lineHeight",
+        "letterSpacing",
+        "typography",
+    }
+)
+#: nav-link keys the nav demo's call to action takes instead (measured inside the header).
+NAV_LINK_SIZE_KEYS = (
+    "height",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "lineHeight",
+    "letterSpacing",
+)
+NAV_CTA_CLASS = "cx-nav-cta"
 TEXT_ROLES = frozenset({ColorRole.TEXT, ColorRole.TEXT_MUTED})
 SURFACE_ROLES = frozenset({ColorRole.BACKGROUND, ColorRole.SURFACE})
 _SCREENSHOT_PATH_RE = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)*\.(?:png|jpe?g|webp)$")
@@ -160,6 +189,8 @@ class Swatch:
     evidence: str
     css_variable: str | None
     values: list[SwatchValue]
+    #: Translucent in some theme: the chip shows it over the canvas, not a checkerboard.
+    translucent: bool = False
 
 
 @dataclass(frozen=True)
@@ -324,9 +355,26 @@ class _Css:
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
+def _ellipsis(text: str) -> str:
+    """Cut at the last word boundary (when one is in the second half) and add an ellipsis."""
+    space = text.rfind(" ")
+    if space >= len(text) // 2:
+        text = text[:space]
+    return text.rstrip(" ,;:-–—") + "…"
+
+
 def _text(value: str | None, limit: int = MAX_TEXT) -> str:
     text = " ".join((value or "").split())
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+    return text if len(text) <= limit else _ellipsis(text[: limit - 1])
+
+
+def _sample_text(value: str | None, limit: int = MAX_TEXT) -> str:
+    """A page text sample. The collector cuts texts at MAX_TEXT_LENGTH characters, so a sample
+    of that length usually ends mid-word: it is trimmed back to a word boundary."""
+    text = " ".join((value or "").split())
+    if MAX_TEXT_LENGTH <= len(text) <= limit:
+        return _ellipsis(text)
+    return _text(text, limit)
 
 
 def _contrast(
@@ -458,7 +506,13 @@ class _PreviewBuilder:
                     SwatchValue(theme.id, None if color is None else color.css_hex, checks)
                 )
             role, evidence, css_variable = info[name]
-            swatches.append(Swatch(name, css_class, role, evidence, css_variable, values))
+            translucent = any(
+                (color := theme_colors[theme.id].get(name)) is not None and not color.is_opaque
+                for theme in self.themes
+            )
+            swatches.append(
+                Swatch(name, css_class, role, evidence, css_variable, values, translucent)
+            )
         return swatches
 
     def theme_colors(self) -> list[ThemeColors]:
@@ -562,7 +616,7 @@ class _PreviewBuilder:
                 LevelView(
                     name=level.name,
                     css_class=css_class,
-                    sample=_text(sample, 90),
+                    sample=_sample_text(sample, 90),
                     family=font_label(level.font_family),
                     size=format_px(level.size_px),
                     weight=level.weight,
@@ -665,6 +719,12 @@ class _PreviewBuilder:
             (s for s in specs if s.name == "button-primary"),
             next((s for s in specs if s.kind is ComponentKind.BUTTON), None),
         )
+        nav_button_class: str | None = None
+        if button is not None and any(s.kind is ComponentKind.NAVIGATION for s in specs):
+            cta = _nav_cta_spec(button, nav_link)
+            self.css.add(*component_rules(cta, f".{NAV_CTA_CLASS}", context))
+            nav_button_class = NAV_CTA_CLASS
+        facts = DesignFacts(analysis)
         title_class = self._level_class(("title", "subtitle", "heading"))
         body_class = self._level_class(("body", "body-sm", "body-lg"))
         views: list[ComponentView] = []
@@ -689,15 +749,13 @@ class _PreviewBuilder:
                         for state, changes in spec.states.items()
                     ],
                     hover="hover" in spec.states,
-                    contrast=None
-                    if spec.contrast_ratio is None
-                    else f"{spec.contrast_ratio:.2f}:1",
+                    contrast=_component_contrast(facts, spec),
                     class_hints=_join(spec.class_hints[:6]),
                     title_class=title_class,
                     body_class=body_class,
                     nav_links=nav_links,
                     nav_link_class=None if nav_link is None else classes[id(nav_link)],
-                    nav_button_class=None if button is None else classes[id(button)],
+                    nav_button_class=nav_button_class,
                     nav_button_label=_component_label(button) if button is not None else "",
                     gutter=_needs_gutter(spec),
                 )
@@ -974,14 +1032,78 @@ def _spec_rows(properties: dict[str, str], refs: dict[str, str]) -> list[SpecRow
 
 
 def _screenshot_links(analysis: DesignAnalysis) -> list[LinkView]:
+    """Screenshot links; dark captures only when the analysis kept the dark theme (the
+    analyzer discards a dark capture that does not really switch appearance)."""
     links: list[LinkView] = []
     for shot in analysis.screenshots:
+        if shot.color_scheme == "dark" and analysis.dark is None:
+            continue
         path = shot.path.replace("\\", "/")
         if ".." in path.split("/") or not _SCREENSHOT_PATH_RE.match(path):
             continue
         scheme = " dark" if shot.color_scheme == "dark" else ""
         links.append(LinkView(f"{shot.viewport_width}px{scheme}", path))
     return links
+
+
+def _component_contrast(facts: DesignFacts, spec: ComponentSpec) -> str | None:
+    """Text contrast as DESIGN.md prints it: recomputed from the colors written for the
+    component (on each surface it was measured on when it has no fill); else the measured
+    ratio."""
+    checks = facts.component_contrasts(spec)
+    if checks:
+        return " / ".join(fmt_ratio(check.ratio) for check in checks)
+    return None if spec.contrast_ratio is None else fmt_ratio(spec.contrast_ratio)
+
+
+def _nav_cta_padding(nav_padding: str | None, button_padding: str | None) -> str | None:
+    """The nav link's padding; its horizontal sides come from the button when the link has
+    none (a filled call to action needs room around its label)."""
+    link = sides_px(nav_padding)
+    if link is None:
+        return None
+    top, right, bottom, left = link
+    if right <= 0 and left <= 0:
+        button = sides_px(button_padding)
+        if button is not None:
+            right, left = button[1], button[3]
+    sides = [format_px(max(side, 0.0)) for side in (top, right, bottom, left)]
+    if sides[1] == sides[3]:
+        sides = sides[:3] if sides[0] != sides[2] else sides[:2]
+        if len(sides) == 2 and sides[0] == sides[1]:
+            sides = sides[:1]
+    return " ".join(sides)
+
+
+def _nav_cta_spec(button: ComponentSpec, nav_link: ComponentSpec | None) -> ComponentSpec:
+    """button-primary as the header call to action: its colors, border, radius and shadow,
+    with the nav link's measured height, padding and text style instead of the sizes measured
+    on the large page buttons."""
+    properties = {
+        key: value for key, value in button.properties.items() if key not in NAV_CTA_DROPPED_KEYS
+    }
+    refs = {
+        key: value for key, value in button.token_refs.items() if key not in NAV_CTA_DROPPED_KEYS
+    }
+    if nav_link is not None:
+        for key in NAV_LINK_SIZE_KEYS:
+            if nav_link.properties.get(key):
+                properties[key] = nav_link.properties[key]
+        padding = _nav_cta_padding(
+            nav_link.properties.get("padding"), button.properties.get("padding")
+        )
+        if padding is not None:
+            properties["padding"] = padding
+        typography = nav_link.token_refs.get("typography")
+        if typography:
+            refs["typography"] = typography
+    states = {
+        state: {key: value for key, value in changes.items() if key not in NAV_CTA_DROPPED_KEYS}
+        for state, changes in button.states.items()
+    }
+    return button.model_copy(
+        update={"properties": properties, "token_refs": refs, "states": states}
+    )
 
 
 def render_preview(analysis: DesignAnalysis) -> str:

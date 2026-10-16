@@ -27,6 +27,7 @@ from get_design_markdown.models.analysis import (
     SiteInfo,
     TypeLevel,
 )
+from get_design_markdown.synthesizer.facts import DesignFacts
 from tests.conftest import FIXED_TIME
 from tests.fixture_data import load_analysis_sample
 
@@ -393,3 +394,69 @@ def test_preview_keeps_uneven_corner_radii() -> None:
     assert "border-radius:4px 4px 0px 0px" in html
     badge.properties["rounded"] = "9999px 9999px 0px 0px"
     assert "border-radius:9999px 9999px 0px 0px" in render_preview(analysis)
+
+
+def test_preview_hides_a_discarded_dark_capture() -> None:
+    # The analyzer drops a dark capture that does not switch appearance; its screenshots stay
+    # on disk but the preview must not link them as a dark theme.
+    analysis = load_analysis_sample()
+    analysis.dark = None
+    html = render_preview(analysis)
+    assert "home-dark-1440.png" not in html
+    assert ">1440px dark<" not in html
+    assert 'href="screenshots/home-1440.png"' in html
+
+
+def test_preview_trims_collector_cut_samples_at_a_word_boundary() -> None:
+    analysis = load_analysis_sample()
+    level = analysis.typography.levels[0]
+    level.samples = ["Accept and optimize payments globally—online and i"]
+    assert len(level.samples[0]) == 50
+    html = render_preview(analysis)
+    assert "Accept and optimize payments globally—online and…" in html
+    assert "online and i<" not in html
+
+
+def test_preview_nav_call_to_action_uses_the_header_sizes() -> None:
+    # linear.app: button-primary was measured on the 44px hero buttons; the header CTA has the
+    # nav link's 32px height, 13px text and 0 12px padding.
+    analysis = load_analysis_sample()
+    specs = {spec.name: spec for spec in analysis.components}
+    specs["button-primary"].properties.update(
+        {"height": "44px", "padding": "0px 20px", "fontSize": "16px"}
+    )
+    specs["nav-link"].properties.update(
+        {"height": "32px", "padding": "0px 12px", "fontSize": "13px", "lineHeight": "19.5px"}
+    )
+    html = render_preview(analysis)
+    rule = re.search(r"\.cx-nav-cta\{([^}]*)\}", html)
+    assert rule is not None
+    assert "min-height:32px" in rule.group(1)
+    assert "padding:0px 12px" in rule.group(1)
+    assert "font-size:13px" in rule.group(1)
+    assert "background-color:var(--color-primary, #4f46e5)" in rule.group(1)
+    assert 'class="cmp ck-button cx-nav-cta"' in html
+    # A nav link without side padding borrows the button's, so the fill has room.
+    specs["nav-link"].properties["padding"] = "12px 0px"
+    html = render_preview(analysis)
+    assert "padding:12px 20px" in html.split(".cx-nav-cta{", 1)[1].split("}", 1)[0]
+
+
+def test_preview_component_contrast_matches_design_md() -> None:
+    analysis = load_analysis_sample()
+    facts = DesignFacts(analysis)
+    html = render_preview(analysis)
+    for spec in analysis.components:
+        checks = facts.component_contrasts(spec)
+        if checks:
+            text = " / ".join(f"{check.ratio:.2f}:1" for check in checks)
+            assert f"contrast {text}</span>" in html, spec.name
+
+
+def test_preview_translucent_swatch_sits_on_the_canvas() -> None:
+    analysis = load_analysis_sample()
+    hairline = next(token for token in analysis.colors.tokens if token.name == "hairline")
+    hairline.value = "#ffffff14"
+    html = render_preview(analysis)
+    assert '<div class="pv-chip pv-chip-canvas">' in html
+    assert html.count("pv-chip-canvas") == 2  # the CSS rule and the hairline chip
