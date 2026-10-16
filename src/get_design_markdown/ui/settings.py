@@ -2,7 +2,6 @@
 
 Frozen interface: UiSettings and its bounds, the folder helpers (implemented here) and the
 signatures of load_ui_settings / save_ui_settings.
-To implement (the stubs raise NotImplementedYetError): load_ui_settings, save_ui_settings.
 
 Folders (every helper returns an absolute path and creates nothing):
 
@@ -27,19 +26,25 @@ the fields below; output_dir is stored as an absolute path string.
 
 from __future__ import annotations
 
+import contextlib
+import json
+import logging
 import os
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from get_design_markdown.analyzer.colors import DEFAULT_DELTA_E
 from get_design_markdown.config import Settings, load_settings
-from get_design_markdown.errors import NotImplementedYetError
+from get_design_markdown.errors import ConfigError
 from get_design_markdown.models.base import GdmModel
 from get_design_markdown.models.raw import BrowserChoice
 from get_design_markdown.resources import is_frozen
+from get_design_markdown.storage import save_model
+
+logger = logging.getLogger("get_design_markdown.ui")
 
 APP_DIR_NAME = "get-design-markdown"
 SETTINGS_FILE = "ui-settings.json"
@@ -220,7 +225,23 @@ def default_output_dir(config: Settings | None = None, *, frozen: bool | None = 
     return config.output_dir.expanduser().resolve()
 
 
-# ─── Persistence (to implement) ──────────────────────────────────────────────
+# ─── Persistence ─────────────────────────────────────────────────────────────
+
+
+def absolute_output_dir(path: Path | str) -> Path:
+    """`path` with "~" expanded, made absolute against the user's home folder (not the current
+    directory, which is arbitrary for the exe) and normalised ("a/../b" -> "b")."""
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = _home() / candidate
+    return Path(os.path.normpath(candidate))
+
+
+def _output_dir_value(value: Any) -> Path | None:
+    """A usable output_dir from the saved file, or None (blank or not a path string)."""
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        return None
+    return absolute_output_dir(value)
 
 
 def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
@@ -233,7 +254,52 @@ def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
       validation keeps its default (other keys still apply); schema_version is not trusted.
     - A relative output_dir is resolved against the user's home folder.
     """
-    raise NotImplementedYetError("Chưa đọc được cấu hình giao diện.")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return defaults
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        logger.warning(
+            "Không đọc được cấu hình giao diện %s (%s); dùng giá trị mặc định.", path, error
+        )
+        return defaults
+    try:
+        data = json.loads(text)
+    except (ValueError, RecursionError) as error:
+        logger.warning(
+            "File cấu hình giao diện %s không phải JSON hợp lệ (%s); dùng giá trị mặc định.",
+            path,
+            error,
+        )
+        return defaults
+    if not isinstance(data, dict):
+        logger.warning(
+            "File cấu hình giao diện %s không chứa một đối tượng JSON; dùng giá trị mặc định.",
+            path,
+        )
+        return defaults
+
+    merged: dict[str, Any] = defaults.model_dump()
+    for key, value in data.items():
+        if key == "schema_version" or key not in UiSettings.model_fields:
+            continue
+        if key == "output_dir":
+            value = _output_dir_value(value)
+            if value is None:
+                logger.warning(
+                    "Bỏ qua output_dir không hợp lệ trong %s; dùng giá trị mặc định.", path
+                )
+                continue
+        try:
+            UiSettings.model_validate({**merged, key: value})
+        except ValidationError:
+            logger.warning(
+                "Bỏ qua giá trị không hợp lệ của '%s' trong %s; dùng giá trị mặc định.", key, path
+            )
+            continue
+        merged[key] = value
+    merged["schema_version"] = UI_SETTINGS_SCHEMA_VERSION
+    return UiSettings.model_validate(merged)
 
 
 def save_ui_settings(settings: UiSettings, path: Path) -> Path:
@@ -242,4 +308,27 @@ def save_ui_settings(settings: UiSettings, path: Path) -> Path:
     output_dir is written as an absolute path. Returns `path`. An OSError becomes a
     ConfigError with a Vietnamese message naming the file and a hint.
     """
-    raise NotImplementedYetError("Chưa lưu được cấu hình giao diện.")
+    stored = settings.model_copy(
+        update={
+            "schema_version": UI_SETTINGS_SCHEMA_VERSION,
+            "output_dir": absolute_output_dir(settings.output_dir),
+        }
+    )
+    try:
+        save_model(stored, path)
+    except OSError as error:
+        _remove_quietly(path.with_name(path.name + ".tmp"))
+        reason = error.strerror or type(error).__name__
+        raise ConfigError(
+            f"Không lưu được cấu hình giao diện vào {path}: {reason}.",
+            hint=(
+                "Kiểm tra quyền ghi và dung lượng trống của thư mục đó, hoặc chọn một thư mục "
+                f"cấu hình khác bằng biến môi trường {CONFIG_DIR_ENV}."
+            ),
+        ) from None
+    return path
+
+
+def _remove_quietly(path: Path) -> None:
+    with contextlib.suppress(OSError):
+        path.unlink(missing_ok=True)

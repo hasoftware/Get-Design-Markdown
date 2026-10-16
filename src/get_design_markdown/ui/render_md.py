@@ -1,7 +1,6 @@
 """Safe Markdown rendering of DESIGN.md / prompt.md for the UI.
 
 Frozen interface: the signatures below.
-To implement (the stubs raise NotImplementedYetError): split_front_matter, render_markdown.
 
 Rules:
 - markdown-it-py, "commonmark" preset with tables enabled ("table"), `html=False`: raw HTML in
@@ -19,7 +18,44 @@ Rules:
 
 from __future__ import annotations
 
-from get_design_markdown.errors import NotImplementedYetError
+from collections.abc import MutableMapping, Sequence
+from functools import lru_cache
+
+from markdown_it import MarkdownIt
+from markdown_it.renderer import RendererHTML
+from markdown_it.token import Token
+from markdown_it.utils import OptionsDict
+
+#: Line that opens and closes the YAML front matter.
+FRONT_MATTER_FENCE = "---"
+#: rel attribute of every rendered link.
+LINK_REL = "noopener noreferrer"
+_BOM = "﻿"
+
+
+def _link_open(
+    self: RendererHTML,
+    tokens: Sequence[Token],
+    idx: int,
+    options: OptionsDict,
+    env: MutableMapping[str, object],
+) -> str:
+    """Render <a ...> like markdown-it does, plus rel="noopener noreferrer"."""
+    tokens[idx].attrSet("rel", LINK_REL)
+    return self.renderToken(tokens, idx, options, env)
+
+
+@lru_cache(maxsize=1)
+def _markdown() -> MarkdownIt:
+    """The shared parser (rendering keeps no state between calls, so threads can share it)."""
+    parser = MarkdownIt("commonmark", {"html": False}).enable("table")
+    parser.add_render_rule("link_open", _link_open)
+    return parser
+
+
+def _is_fence(line: str) -> bool:
+    """True for a line that is exactly "---" (its line ending and trailing blanks ignored)."""
+    return line.rstrip() == FRONT_MATTER_FENCE
 
 
 def split_front_matter(text: str) -> tuple[str | None, str]:
@@ -28,9 +64,16 @@ def split_front_matter(text: str) -> tuple[str | None, str]:
     Only a block that starts on the very first line ("---") and ends at the next line that is
     exactly "---" counts; otherwise (None, text).
     """
-    raise NotImplementedYetError("Chưa hiển thị được Markdown.")
+    lines = text.removeprefix(_BOM).splitlines(keepends=True)
+    if not lines or not _is_fence(lines[0]):
+        return None, text
+    for index in range(1, len(lines)):
+        if _is_fence(lines[index]):
+            return "".join(lines[1:index]), "".join(lines[index + 1 :])
+    return None, text
 
 
 def render_markdown(text: str) -> tuple[str | None, str]:
     """(front matter YAML or None, HTML fragment of the Markdown body)."""
-    raise NotImplementedYetError("Chưa hiển thị được Markdown.")
+    front_matter, body = split_front_matter(text)
+    return front_matter, _markdown().render(body)

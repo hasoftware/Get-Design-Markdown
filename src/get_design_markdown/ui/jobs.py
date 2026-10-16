@@ -2,8 +2,7 @@
 
 Frozen interface (implemented here): JobRequest, JobEvent, JobStatus, JobError, JobSnapshot,
 JobRunner, capture_options_for(), run_pipeline() (the default runner), error_code(),
-job_error(), JobBusyError, JobNotFoundError and the constants.
-To implement (the stubs raise NotImplementedYetError): JobManager.
+job_error(), JobBusyError, JobNotFoundError, the constants and JobManager's signatures.
 
 Life of a job
 -------------
@@ -37,8 +36,13 @@ status still "running".
 
 from __future__ import annotations
 
+import bisect
+import logging
 import re
+import secrets
+import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -60,13 +64,22 @@ from get_design_markdown.errors import (
     JobCancelledError,
     LoginRequiredError,
     NavigationError,
-    NotImplementedYetError,
     OutputNotFoundError,
     PageTimeoutError,
     SynthesisValidationError,
 )
 from get_design_markdown.models.base import GdmModel
 from get_design_markdown.models.raw import BrowserChoice, CaptureOptions
+from get_design_markdown.storage import (
+    ANALYSIS_FILE,
+    DESIGN_FILE,
+    PREVIEW_FILE,
+    PROMPT_FILE,
+    RAW_FILE,
+    SYNTHESIS_FILE,
+    TOKENS_FILE,
+    domain_of,
+)
 from get_design_markdown.ui.settings import (
     MAX_DELTA_E,
     MAX_MAX_ELEMENTS,
@@ -316,7 +329,57 @@ class JobNotFoundError(GdmError):
         self.job_id = job_id
 
 
-# ─── To implement ────────────────────────────────────────────────────────────
+# ─── JobManager ──────────────────────────────────────────────────────────────
+
+logger = logging.getLogger("get_design_markdown.ui")
+
+#: Result files listed in JobSnapshot.files after a success, in this order.
+RESULT_FILES = (
+    DESIGN_FILE,
+    PREVIEW_FILE,
+    TOKENS_FILE,
+    PROMPT_FILE,
+    ANALYSIS_FILE,
+    SYNTHESIS_FILE,
+    RAW_FILE,
+)
+
+
+@dataclass(eq=False)
+class _Job:
+    """Mutable state of one job; only touched with JobManager._lock held."""
+
+    id: str
+    request: JobRequest
+    settings: UiSettings
+    site: str
+    created_at: datetime
+    status: JobStatus = "queued"
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    cancel_requested: bool = False
+    step: int | None = None
+    total: int | None = PIPELINE_STEPS
+    step_message: str | None = None
+    events: list[JobEvent] = field(default_factory=list)
+    last_seq: int = 0
+    #: Every event before this index is known not to be a "progress" event (see _trim).
+    progress_scan_from: int = 0
+    error: JobError | None = None
+    files: list[str] = field(default_factory=list)
+    thread: threading.Thread | None = None
+    done: threading.Event = field(default_factory=threading.Event)
+
+
+def _result_files(folder: Path) -> list[str]:
+    files: list[str] = []
+    for name in RESULT_FILES:
+        try:
+            if (folder / name).is_file():
+                files.append(name)
+        except OSError:
+            continue
+    return files
 
 
 class JobManager:
@@ -335,38 +398,249 @@ class JobManager:
     ) -> None:
         self.runner = runner
         self.clock = clock
-        self.max_jobs = max_jobs
-        self.max_events = max_events
+        self.max_jobs = max(1, max_jobs)
+        self.max_events = max(1, max_events)
+        self._lock = threading.RLock()
+        #: Jobs by id, oldest first (dicts keep insertion order).
+        self._jobs: dict[str, _Job] = {}
+
+    # queries -------------------------------------------------------------------
+
+    def _newest(self) -> _Job | None:
+        return next(reversed(self._jobs.values()), None)
+
+    def _active(self) -> _Job | None:
+        """The queued or running job (always the newest one), or None."""
+        newest = self._newest()
+        return newest if newest is not None and newest.status not in FINISHED_STATUSES else None
 
     @property
     def busy(self) -> bool:
         """True while a job is queued or running."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+        with self._lock:
+            return self._active() is not None
+
+    @property
+    def active_job_id(self) -> str | None:
+        """Id of the queued or running job, or None."""
+        with self._lock:
+            active = self._active()
+            return active.id if active is not None else None
+
+    def _find(self, job_id: str) -> _Job:
+        job = self._jobs.get(job_id)
+        if job is None:
+            raise JobNotFoundError(job_id)
+        return job
+
+    def _snapshot(self, job: _Job, since: int | None, *, limit: int | None) -> JobSnapshot:
+        """JobSnapshot of `job` with the events whose seq > since (None: no events), at most
+        `limit` of them (None: all)."""
+        events: list[JobEvent] = []
+        if since is not None:
+            start = bisect.bisect_right(job.events, max(since, 0), key=lambda event: event.seq)
+            stop = len(job.events) if limit is None else start + limit
+            events = job.events[start:stop]
+        return JobSnapshot(
+            id=job.id,
+            url=job.request.url,
+            status=job.status,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+            cancel_requested=job.cancel_requested,
+            step=job.step,
+            total=job.total,
+            step_message=job.step_message,
+            events=events,
+            last_seq=job.last_seq,
+            settings=job.settings,
+            site=job.site,
+            error=job.error,
+            files=list(job.files),
+        )
+
+    def get(self, job_id: str, since: int = 0) -> JobSnapshot:
+        """Snapshot with the events whose seq > since; JobNotFoundError for an unknown id."""
+        with self._lock:
+            return self._snapshot(self._find(job_id), since, limit=MAX_EVENTS_PER_RESPONSE)
+
+    def current(self, since: int = 0) -> JobSnapshot | None:
+        """The queued/running job, else the most recent finished one, else None."""
+        with self._lock:
+            newest = self._newest()
+            if newest is None:
+                return None
+            return self._snapshot(newest, since, limit=MAX_EVENTS_PER_RESPONSE)
+
+    # starting ------------------------------------------------------------------
+
+    def _new_id(self) -> str:
+        while True:
+            job_id = secrets.token_hex(6)
+            if job_id not in self._jobs:
+                return job_id
 
     def start(self, request: JobRequest, settings: UiSettings) -> JobSnapshot:
         """Create and start a job with the already-resolved `settings`; returns its first
         snapshot (status "queued" or "running", no events). Raises JobBusyError when a job is
         queued or running, InvalidUrlError when request.url cannot be normalized."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+        site = domain_of(request.url)  # InvalidUrlError for an unusable URL
+        with self._lock:
+            active = self._active()
+            if active is not None:
+                raise JobBusyError(active.id)
+            job = _Job(
+                id=self._new_id(),
+                request=request,
+                settings=settings,
+                site=site,
+                created_at=self.clock(),
+            )
+            self._jobs[job.id] = job
+            while len(self._jobs) > self.max_jobs:  # the new job is the newest: never dropped
+                del self._jobs[next(iter(self._jobs))]
+            job.thread = threading.Thread(
+                target=self._run, args=(job,), name=f"gdm-job-{job.id}", daemon=True
+            )
+            snapshot = self._snapshot(job, None, limit=None)
+            job.thread.start()
+            return snapshot
 
-    def get(self, job_id: str, since: int = 0) -> JobSnapshot:
-        """Snapshot with the events whose seq > since; JobNotFoundError for an unknown id."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+    # the job thread ------------------------------------------------------------
 
-    def current(self, since: int = 0) -> JobSnapshot | None:
-        """The queued/running job, else the most recent finished one, else None."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+    def _append(self, job: _Job, event: ConsoleEvent) -> None:
+        """Record `event` as the job's next JobEvent (lock held)."""
+        job.last_seq += 1
+        job.events.append(JobEvent.from_console(event, seq=job.last_seq, at=self.clock()))
+        if event.kind == "step":
+            job.step = event.step
+            if event.total is not None:
+                job.total = event.total
+            job.step_message = event.message
+        if len(job.events) > self.max_events:
+            self._trim(job)
+
+    def _trim(self, job: _Job) -> None:
+        """Drop the oldest "progress" event, or the oldest event when none is left.
+
+        Events before job.progress_scan_from are known to be of other kinds, so each scan
+        resumes where the previous one stopped and trimming stays cheap on long jobs."""
+        events = job.events
+        index = job.progress_scan_from
+        while index < len(events) and events[index].kind != "progress":
+            index += 1
+        if index < len(events):
+            del events[index]
+            job.progress_scan_from = index
+        else:
+            del events[0]
+            job.progress_scan_from = len(events)
+
+    def _sink_for(self, job: _Job) -> MessageSink:
+        def sink(event: ConsoleEvent) -> None:
+            with self._lock:
+                if job.cancel_requested:
+                    raise JobCancelledError()
+                self._append(job, event)
+
+        return sink
+
+    def _run(self, job: _Job) -> None:
+        """Body of the job thread "gdm-job-<id>"."""
+        with self._lock:
+            if job.cancel_requested:  # cancelled before the thread got going
+                self._finish_cancelled(job, JobCancelledError())
+                return
+            job.status = "running"
+            job.started_at = self.clock()
+        sink = self._sink_for(job)
+        try:
+            with use_sink(sink):
+                folder = self.runner(job.request, job.settings, sink)
+        except Exception as error:
+            self._finish_failed(job, error)
+        except BaseException as error:  # SystemExit & co. must not leave the job "running"
+            self._finish_failed(job, error)
+            raise
+        else:
+            self._finish_succeeded(job, folder)
+
+    def _finish(self, job: _Job, status: JobStatus) -> None:
+        """Final status (lock held); wakes up wait()."""
+        job.status = status
+        job.finished_at = self.clock()
+        job.done.set()
+
+    def _finish_succeeded(self, job: _Job, folder: Path) -> None:
+        files = _result_files(Path(folder))
+        with self._lock:
+            job.files = files
+            self._append(job, ConsoleEvent("success", FINAL_SUCCESS_MESSAGE))
+            self._finish(job, "succeeded")
+
+    def _finish_cancelled(self, job: _Job, error: JobCancelledError) -> None:
+        with self._lock:
+            job.error = job_error(error)
+            self._append(job, ConsoleEvent("warning", error.message, hint=error.hint))
+            self._finish(job, "cancelled")
+
+    def _finish_failed(self, job: _Job, error: BaseException) -> None:
+        with self._lock:
+            cancelled = job.cancel_requested
+        if isinstance(error, JobCancelledError):
+            self._finish_cancelled(job, error)
+            return
+        if cancelled:
+            # Whatever the pipeline raised while unwinding after a cancel is the cancel.
+            logger.debug("Job %s raised after its cancellation", job.id, exc_info=error)
+            self._finish_cancelled(job, JobCancelledError())
+            return
+        if not isinstance(error, GdmError):
+            logger.error(
+                "Lỗi không mong muốn trong lượt phân tích %s (%s)",
+                job.id,
+                job.request.url,
+                exc_info=error,
+            )
+        failure = job_error(error)
+        with self._lock:
+            job.error = failure
+            self._append(job, ConsoleEvent("error", failure.message, hint=failure.hint))
+            self._finish(job, "failed")
+
+    # control -------------------------------------------------------------------
 
     def cancel(self, job_id: str) -> JobSnapshot:
         """Request cancellation (idempotent; no-op for a finished job); JobNotFoundError for an
         unknown id. Returns the snapshot without events."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+        with self._lock:
+            job = self._find(job_id)
+            if job.status not in FINISHED_STATUSES:
+                job.cancel_requested = True
+            return self._snapshot(job, None, limit=None)
 
     def wait(self, job_id: str, timeout: float | None = None) -> JobSnapshot:
         """Block until the job finished (or `timeout` seconds passed); returns its snapshot
         with all events. For tests and shutdown."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+        with self._lock:
+            job = self._find(job_id)
+        job.done.wait(timeout)
+        with self._lock:
+            return self._snapshot(job, 0, limit=None)
 
     def shutdown(self, timeout: float = 10.0) -> None:
         """Cancel the running job, if any, and wait up to `timeout` seconds for its thread."""
-        raise NotImplementedYetError("Chưa chạy được phân tích từ giao diện.")
+        with self._lock:
+            active = self._active()
+            if active is None:
+                return
+            active.cancel_requested = True
+            thread = active.thread
+        if thread is None or thread is threading.current_thread():
+            return
+        thread.join(timeout)
+        if thread.is_alive():
+            logger.warning(
+                "Lượt phân tích %s chưa dừng sau %.0f giây; vẫn tiếp tục tắt.", active.id, timeout
+            )
