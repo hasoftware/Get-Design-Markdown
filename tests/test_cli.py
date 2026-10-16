@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -68,10 +69,15 @@ def test_get_validates_pages_range() -> None:
 # ─── Vietnamese usage errors and help (cli.run) ──────────────────────────────
 
 
+#: Typer forces a styled terminal on CI (GITHUB_ACTIONS, FORCE_COLOR, PY_COLORS), and its
+#: color codes split the help text; the tests read the plain text.
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:
     code = cli.run(list(args))
     captured = capsys.readouterr()
-    return code, " ".join((captured.out + captured.err).split())
+    return code, " ".join(ANSI_ESCAPE_RE.sub("", captured.out + captured.err).split())
 
 
 @pytest.mark.parametrize(
