@@ -341,3 +341,50 @@ def test_damaged_folders_do_not_break_the_list(
     (broken / "analysis.json").write_bytes(b"\x00\xff garbage")
     sites = {entry.site for entry in list_history(tmp_path)}
     assert sites == {"good.example", "broken.example"}
+
+
+# ─── prompt.md of the latest synthesis ───────────────────────────────────────
+
+
+def _synthesis(folder: Path, data: object) -> None:
+    (folder / "synthesis.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_prompt_left_by_an_earlier_run_does_not_count(tmp_path: Path) -> None:
+    folder = _site(tmp_path, "x.example", files=("DESIGN.md", "prompt.md"))
+    entry = read_entry(folder)
+    assert entry is not None and entry.has_prompt  # no synthesis.json: by presence
+    _synthesis(folder, {"mode": "rules", "prompt_path": None, "image_paths": []})
+    entry = read_entry(folder)
+    assert entry is not None and not entry.has_prompt
+    _synthesis(
+        folder,
+        {
+            "mode": "prompt-only",
+            "prompt_path": "prompt.md",
+            "image_paths": ["prompt-images/desktop.png", 5, "prompt-images\\mobile.png"],
+        },
+    )
+    entry = read_entry(folder)
+    assert entry is not None and entry.has_prompt
+    assert history.recorded_prompt(folder) == (
+        "prompt.md",
+        ["prompt-images/desktop.png", "prompt-images/mobile.png"],
+    )
+
+
+@pytest.mark.parametrize("content", ["{broken", "[]", '{"prompt_path": 5}'])
+def test_unreadable_synthesis_record_falls_back_to_the_files(tmp_path: Path, content: str) -> None:
+    folder = _site(tmp_path, "x.example", files=("DESIGN.md", "prompt.md"))
+    (folder / "synthesis.json").write_text(content, encoding="utf-8")
+    assert history.recorded_prompt(folder) is None
+    entry = read_entry(folder)
+    assert entry is not None and entry.has_prompt
+
+
+def test_cache_follows_the_synthesis_record(tmp_path: Path) -> None:
+    folder = _site(tmp_path, "x.example", files=("DESIGN.md", "prompt.md"))
+    _synthesis(folder, {"prompt_path": "prompt.md", "image_paths": []})
+    assert [entry.has_prompt for entry in list_history(tmp_path)] == [True]
+    _synthesis(folder, {"prompt_path": None, "image_paths": [], "lang": "vi-VN"})
+    assert [entry.has_prompt for entry in list_history(tmp_path)] == [False]

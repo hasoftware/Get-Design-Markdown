@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from get_design_markdown.errors import ConfigError
 from get_design_markdown.ui import settings as ui_settings
@@ -16,7 +18,10 @@ from get_design_markdown.ui.settings import (
     UiSettings,
     absolute_output_dir,
     load_ui_settings,
+    output_dir_problem,
+    same_output_dir,
     save_ui_settings,
+    update_ui_settings,
 )
 
 UI_LOGGER = "get_design_markdown.ui"
@@ -256,3 +261,143 @@ def test_failed_replace_leaves_no_temp_file(
 
 def test_default_settings_path_is_the_isolated_test_folder(isolated_ui_folders: Path) -> None:
     assert ui_settings.settings_path().parent == isolated_ui_folders.resolve()
+
+
+# ─── update_ui_settings: only the user's own choices are stored ─────────────
+
+
+def _saved(path: Path) -> dict[str, object]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+def test_update_stores_only_the_changed_fields(tmp_path: Path, defaults: UiSettings) -> None:
+    path = tmp_path / "config" / "ui-settings.json"
+    updated = update_ui_settings(path, defaults, {"dark": True})
+    assert updated == defaults.model_copy(update={"dark": True})
+    assert _saved(path) == {"schema_version": UI_SETTINGS_SCHEMA_VERSION, "dark": True}
+    update_ui_settings(path, defaults, {"pages": 2, "browser": "msedge"})
+    assert _saved(path) == {"schema_version": 1, "pages": 2, "dark": True, "browser": "msedge"}
+    assert sorted(os.listdir(path.parent)) == ["ui-settings.json"]  # no temp file left
+
+
+def test_unchanged_fields_follow_new_defaults(tmp_path: Path, defaults: UiSettings) -> None:
+    path = tmp_path / "ui-settings.json"
+    update_ui_settings(path, defaults, {"dark": True})
+    elsewhere = defaults.model_copy(
+        update={
+            "output_dir": (tmp_path / "other").resolve(),
+            "browser": "msedge",
+            "timeout_s": 90.0,
+            "max_elements": 5000,
+        }
+    )
+    assert load_ui_settings(path, elsewhere) == elsewhere.model_copy(update={"dark": True})
+
+
+def test_a_field_set_back_to_its_default_leaves_the_file(
+    tmp_path: Path, defaults: UiSettings
+) -> None:
+    path = tmp_path / "ui-settings.json"
+    update_ui_settings(path, defaults, {"dark": True, "timeout_s": 90, "lang": "vi"})
+    updated = update_ui_settings(path, defaults, {"dark": False, "timeout_s": 30.0})
+    assert updated == defaults.model_copy(update={"lang": "vi"})
+    assert _saved(path) == {"schema_version": 1, "lang": "vi"}
+
+
+def test_output_dir_is_stored_only_when_chosen(
+    tmp_path: Path, defaults: UiSettings, home: Path
+) -> None:
+    path = tmp_path / "ui-settings.json"
+    update_ui_settings(path, defaults, {"pages": 1})
+    assert "output_dir" not in _saved(path)
+    update_ui_settings(path, defaults, {"output_dir": Path("Designs")})
+    assert _saved(path)["output_dir"] == str(home / "Designs")
+    # Choosing the default folder again (spelled differently) forgets the choice.
+    spelled = str(defaults.output_dir / "sub" / "..")
+    if os.name == "nt":
+        spelled = spelled.upper()
+    update_ui_settings(path, defaults, {"output_dir": spelled})
+    assert "output_dir" not in _saved(path)
+
+
+def test_update_keeps_what_it_does_not_change(tmp_path: Path, defaults: UiSettings) -> None:
+    path = _write(
+        tmp_path / "ui-settings.json",
+        {
+            "schema_version": 1,
+            "pages": 3,
+            "browser": "firefox",  # invalid: dropped
+            "theme": "dark",  # a newer version's setting: kept
+        },
+    )
+    updated = update_ui_settings(path, defaults, {"dark": True})
+    assert (updated.pages, updated.dark, updated.browser) == (3, True, defaults.browser)
+    assert _saved(path) == {"schema_version": 1, "pages": 3, "dark": True, "theme": "dark"}
+
+
+def test_update_over_a_damaged_file_starts_again(tmp_path: Path, defaults: UiSettings) -> None:
+    path = tmp_path / "ui-settings.json"
+    path.write_text("{not json", encoding="utf-8")
+    update_ui_settings(path, defaults, {"lang": "vi"})
+    assert _saved(path) == {"schema_version": 1, "lang": "vi"}
+
+
+def test_invalid_update_writes_nothing(tmp_path: Path, defaults: UiSettings) -> None:
+    path = tmp_path / "ui-settings.json"
+    update_ui_settings(path, defaults, {"dark": True})
+    before = path.read_text(encoding="utf-8")
+    with pytest.raises(ValidationError) as caught:
+        update_ui_settings(path, defaults, {"pages": 99, "lang": "vi"})
+    assert caught.value.errors()[0]["loc"] == ("pages",)
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_update_failure_is_a_vietnamese_config_error(tmp_path: Path, defaults: UiSettings) -> None:
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("x", encoding="utf-8")
+    with pytest.raises(ConfigError) as caught:
+        update_ui_settings(blocker / "ui-settings.json", defaults, {"dark": True})
+    assert caught.value.message.startswith("Không lưu được cấu hình giao diện vào")
+
+
+# ─── output_dir_problem ──────────────────────────────────────────────────────
+
+
+def test_usable_output_dirs(tmp_path: Path) -> None:
+    assert output_dir_problem(tmp_path) is None
+    assert output_dir_problem(tmp_path / "new" / "deeper") is None
+    assert sorted(os.listdir(tmp_path)) == []  # the creation test leaves nothing behind
+
+
+def test_output_dir_problems(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    file = tmp_path / "a-file.txt"
+    file.write_text("x", encoding="utf-8")
+    expected = f"'{file}' là một tệp, không phải thư mục; hãy chọn một thư mục."
+    assert output_dir_problem(file) == expected
+    inside = output_dir_problem(file / "out")
+    assert inside is not None and f"vì '{file}' là một tệp" in inside
+
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", refuse)
+    denied = output_dir_problem(tmp_path / "out")
+    assert denied == f"Không có quyền tạo thư mục trong '{tmp_path}' (Access is denied)."
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive letters exist only on Windows")
+def test_output_dir_on_a_missing_drive() -> None:
+    letters = "QZYXWVUTSRPONMLKJIHG"
+    drive = next((f"{c}:\\" for c in letters if not Path(f"{c}:\\").exists()), None)
+    if drive is None:
+        pytest.skip("every drive letter is in use")
+    problem = output_dir_problem(Path(f"{drive}khong-co-o-dia\\out"))
+    assert problem is not None and problem.startswith(f"Không tìm thấy ổ đĩa {drive}")
+
+
+def test_same_output_dir(tmp_path: Path) -> None:
+    assert same_output_dir(tmp_path / "a" / ".." / "b", tmp_path / "b")
+    assert not same_output_dir(tmp_path / "a", tmp_path / "b")
+    assert same_output_dir(str(tmp_path / "B"), tmp_path / "b") is (os.name == "nt")

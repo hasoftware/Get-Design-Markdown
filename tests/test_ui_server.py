@@ -18,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -35,6 +36,7 @@ from get_design_markdown.console import (
     print_success,
     print_warning,
     progress_status,
+    use_sink,
 )
 from get_design_markdown.errors import (
     BotBlockedError,
@@ -43,6 +45,7 @@ from get_design_markdown.errors import (
     NotImplementedYetError,
 )
 from get_design_markdown.storage import domain_of
+from get_design_markdown.synthesizer.synthesize import run_synthesize
 from get_design_markdown.ui import browser_install
 from get_design_markdown.ui import server as server_module
 from get_design_markdown.ui.browser_install import (
@@ -352,6 +355,14 @@ def start_job(client: httpx.Client, url: str, **body: Any) -> JobSnapshot:
     return JobResponse.model_validate_json(response.content).job
 
 
+def captured_before_the_results(folder: Path, seconds: float = 60.0) -> None:
+    """Date every screenshot `seconds` before DESIGN.md, as a complete run leaves them (a test
+    that adds screenshots must not look like an interrupted re-run)."""
+    reference = (folder / "DESIGN.md").stat().st_mtime - seconds
+    for shot in (folder / "screenshots").iterdir():
+        os.utime(shot, (reference, reference))
+
+
 def no_cors(headers: httpx.Headers | dict[str, str]) -> bool:
     return not [name for name in headers if name.lower().startswith("access-control")]
 
@@ -482,35 +493,55 @@ def test_a_bad_environment_fails_at_start(
 # ─── Idle shutdown and /api/shutdown ─────────────────────────────────────────
 
 
+# The idle clock runs from server.start(): a test that must reach a server with a short idle
+# timeout holds the shutdown off with the (fake) Chromium download or a held job until it is
+# connected, so it never depends on how fast a client starts on a busy machine.
+
+
 def test_browser_mode_stops_after_the_idle_timeout(harness: Harness) -> None:
+    server = harness.make(mode="browser", idle_timeout_s=0.3)
+    assert server.wait(WAIT_S) is True  # no page ever connected: the clock started at start()
+
+
+def test_heartbeat_reports_the_idle_timeout(harness: Harness) -> None:
+    harness.installer.start()  # holds the idle shutdown off while the client connects
     server = harness.make(mode="browser", idle_timeout_s=0.3)
     with api_client(server) as client:
         heartbeat = HeartbeatResponse.model_validate_json(client.post("/api/heartbeat").content)
     assert heartbeat.idle_shutdown_s == pytest.approx(0.3)
+    assert server.wait(0.6) is False  # the download still runs
+    harness.installer.finish()
     assert server.wait(WAIT_S) is True
 
 
 def test_heartbeats_keep_the_server_alive(harness: Harness) -> None:
-    server = harness.make(mode="browser", idle_timeout_s=1.0)
+    harness.installer.start()
+    server = harness.make(mode="browser", idle_timeout_s=1.5)
     with api_client(server) as client:
+        assert client.post("/api/heartbeat").status_code == 200
+        harness.installer.finish()  # from now on only the heartbeats keep it alive
         begin = time.monotonic()
-        while time.monotonic() - begin < 2.0:  # twice the timeout
+        while time.monotonic() - begin < 2.0:  # longer than the timeout
             assert client.post("/api/heartbeat").status_code == 200
-            time.sleep(0.15)
+            time.sleep(0.1)
         assert client.get("/api/health").status_code == 200
     assert server.wait(WAIT_S) is True  # once the heartbeats stop
 
 
 def test_a_running_job_or_install_postpones_the_idle_shutdown(harness: Harness) -> None:
-    server = harness.make(mode="browser", idle_timeout_s=0.2)
+    jobs = JobManager(harness.runner)
+    job = jobs.start(
+        JobRequest(url="https://hold.example"), UiSettings(output_dir=harness.output_root)
+    )
+    assert harness.runner.started.wait(WAIT_S)
+    server = harness.make(mode="browser", idle_timeout_s=0.2, jobs=jobs)
     with api_client(server) as client:
-        job = start_job(client, "https://hold.example")
-        assert harness.runner.started.wait(WAIT_S)
-        assert server.wait(1.0) is False
-        harness.installer.start()
-        harness.runner.release.set()
-        wait_job(client, job.id)
-        assert server.wait(0.8) is False  # the download still runs
+        assert client.get("/api/health").json()["job_id"] == job.id
+    assert server.wait(1.0) is False  # the job holds it
+    harness.installer.start()
+    harness.runner.release.set()
+    assert jobs.wait(job.id, WAIT_S).status == "succeeded"
+    assert server.wait(0.8) is False  # the download still runs
     harness.installer.finish()
     assert server.wait(WAIT_S) is True
 
@@ -1267,6 +1298,7 @@ def test_results_fallback_to_screenshot_files(
             ui_output_template / ACME_SITE / "screenshots" / "home-1440.png", shots / name
         )
     (shots / "notes.txt").write_text("x", encoding="utf-8")
+    captured_before_the_results(output_root / BETA_SITE)
     results = ResultsResponse.model_validate_json(client.get(f"/api/results/{BETA_SITE}").content)
     assert [
         (shot.page, shot.viewport_width, shot.color_scheme) for shot in results.screenshots
@@ -1318,6 +1350,8 @@ def test_results_survive_damaged_json_files(client: httpx.Client, output_root: P
     folder = output_root / ACME_SITE
     (folder / "analysis.json").write_text("{broken", encoding="utf-8")
     (folder / "synthesis.json").write_text('{"token_counts": "many"}', encoding="utf-8")
+    written = (folder / "DESIGN.md").stat().st_mtime
+    os.utime(folder / "analysis.json", (written, written))  # not a newer, unfinished run
     results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
     assert results.entry.name == ACME_SITE
     assert results.token_counts is None and results.warnings == []
@@ -1641,3 +1675,350 @@ def test_port_error_messages() -> None:
     other = server_module._port_error(0, OSError(errno.EINVAL, "Invalid argument"))
     assert other.message == "Không mở được máy chủ giao diện ở 127.0.0.1:0 (Invalid argument)."
     assert other.hint
+
+
+# ─── Saved settings follow the environment unless the user changed them ──────
+
+#: Fields the frontend's "Đặt lại" button sends with their default values.
+RESETTABLE = (
+    "pages",
+    "dark",
+    "lang",
+    "prompt_only",
+    "examples",
+    "max_elements",
+    "timeout_s",
+    "delta_e",
+    "browser",
+    "open_after",
+)
+ENV_DEFAULTS = ("GDM_OUTPUT_DIR", "GDM_BROWSER", "GDM_TIMEOUT", "GDM_MAX_ELEMENTS")
+
+
+def saved_file(harness: Harness) -> dict[str, Any]:
+    data = json.loads(harness.settings_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+def test_only_the_changed_settings_are_saved(harness: Harness, client: httpx.Client) -> None:
+    assert client.put("/api/settings", json={"dark": True}).status_code == 200
+    # Not output_dir (this session is locked to --out), nor any other default.
+    assert saved_file(harness) == {"schema_version": 1, "dark": True}
+    assert client.put("/api/settings", json={"pages": 3}).status_code == 200
+    assert saved_file(harness) == {"schema_version": 1, "pages": 3, "dark": True}
+
+
+def test_defaults_follow_the_environment_of_each_session(
+    harness: Harness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ENV_DEFAULTS:
+        monkeypatch.delenv(name, raising=False)
+    first_root = (tmp_path / "project-a" / "output").resolve()
+    monkeypatch.setenv("GDM_OUTPUT_DIR", str(first_root))
+    first = harness.make(out_root=None, defaults=None)
+    with api_client(first) as client:
+        view = SettingsResponse.model_validate_json(client.get("/api/settings").content)
+        assert view.output_root == str(first_root)
+        assert client.put("/api/settings", json={"dark": True}).status_code == 200
+    first.stop()
+    assert saved_file(harness) == {"schema_version": 1, "dark": True}
+
+    second_root = (tmp_path / "project-b" / "output").resolve()
+    monkeypatch.setenv("GDM_OUTPUT_DIR", str(second_root))
+    monkeypatch.setenv("GDM_BROWSER", "msedge")
+    monkeypatch.setenv("GDM_TIMEOUT", "90")
+    monkeypatch.setenv("GDM_MAX_ELEMENTS", "5000")
+    second = harness.make(out_root=None, defaults=None)
+    with api_client(second) as client:
+        view = SettingsResponse.model_validate_json(client.get("/api/settings").content)
+        job = start_job(client, "stripe.com")
+        wait_job(client, job.id)
+    assert view.settings == view.defaults.model_copy(update={"dark": True})
+    assert view.settings.output_dir == second_root and view.output_root == str(second_root)
+    assert (view.settings.browser, view.settings.timeout_s, view.settings.max_elements) == (
+        "msedge",
+        90.0,
+        5000,
+    )
+    _request, settings = harness.runner.calls[-1]
+    assert (settings.output_dir, settings.browser, settings.dark) == (second_root, "msedge", True)
+
+
+def test_a_chosen_output_folder_is_kept_across_sessions(
+    harness: Harness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GDM_OUTPUT_DIR", str(tmp_path / "env-output"))
+    chosen = (tmp_path / "Designs").resolve()
+    first = harness.make(out_root=None, defaults=None)
+    with api_client(first) as client:
+        assert client.put("/api/settings", json={"output_dir": str(chosen)}).status_code == 200
+    assert saved_file(harness)["output_dir"] == str(chosen)
+    monkeypatch.setenv("GDM_OUTPUT_DIR", str(tmp_path / "other-output"))
+    second = harness.make(out_root=None, defaults=None)
+    with api_client(second) as client:
+        assert client.get("/api/settings").json()["output_root"] == str(chosen)
+
+
+def test_resetting_to_the_defaults_empties_the_saved_settings(
+    harness: Harness, client: httpx.Client
+) -> None:
+    client.put("/api/settings", json={"pages": 3, "browser": "chrome", "timeout_s": 120})
+    view = SettingsResponse.model_validate_json(client.get("/api/settings").content)
+    assert view.settings.pages == 3
+    defaults = view.defaults.model_dump(mode="json")
+    response = client.put("/api/settings", json={name: defaults[name] for name in RESETTABLE})
+    assert response.status_code == 200
+    assert SettingsResponse.model_validate_json(response.content).settings == view.defaults
+    assert saved_file(harness) == {"schema_version": 1}
+
+
+def test_a_refused_change_writes_nothing(harness: Harness, client: httpx.Client) -> None:
+    client.put("/api/settings", json={"dark": True})
+    before = harness.settings_path.read_text(encoding="utf-8")
+    assert client.put("/api/settings", json={"dark": False, "pages": 99}).status_code == 422
+    assert harness.settings_path.read_text(encoding="utf-8") == before
+    assert client.get("/api/settings").json()["settings"]["dark"] is True
+
+
+# ─── Unusable output folders ─────────────────────────────────────────────────
+
+
+def missing_drive() -> str:
+    """A Windows drive root that does not exist on this machine (skips elsewhere)."""
+    if sys.platform != "win32":
+        pytest.skip("drive letters exist only on Windows")
+    for letter in "QZYXWVUTSRPONMLKJIHG":
+        root = f"{letter}:\\"
+        if not Path(root).exists():
+            return root
+    pytest.skip("every drive letter is in use")
+
+
+def assert_output_dir_refused(response: httpx.Response, *fragments: str) -> None:
+    assert response.status_code == 422, response.text
+    error = error_of(response).error
+    assert error.code == "invalid" and error.details == {"field": "output_dir"}
+    for fragment in fragments:
+        assert fragment in error.message
+    assert error.hint == server_module.OUTPUT_DIR_HINT
+
+
+def test_output_dir_on_a_missing_drive_is_refused(harness: Harness, client: httpx.Client) -> None:
+    drive = missing_drive()
+    response = client.put("/api/settings", json={"output_dir": f"{drive}khong-co-o-dia\\out"})
+    assert_output_dir_refused(response, drive, "Không tìm thấy ổ đĩa")
+    assert not harness.settings_path.exists()
+
+
+def test_output_dir_inside_a_file_is_refused(client: httpx.Client, tmp_path: Path) -> None:
+    file = tmp_path / "a-file.txt"
+    file.write_text("x", encoding="utf-8")
+    response = client.put("/api/settings", json={"output_dir": str(file / "sub" / "out")})
+    assert_output_dir_refused(response, str(file), "là một tệp")
+
+
+def test_output_dir_where_no_folder_can_be_created_is_refused(
+    client: httpx.Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", refuse)
+    response = client.put("/api/settings", json={"output_dir": str(tmp_path / "new" / "out")})
+    assert_output_dir_refused(response, "Không có quyền tạo thư mục", str(tmp_path))
+
+
+def test_checking_an_output_dir_leaves_no_trace(client: httpx.Client, tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    response = client.put("/api/settings", json={"output_dir": str(parent / "new" / "out")})
+    assert response.status_code == 200
+    assert os.listdir(parent) == []  # the test folder is gone, "new" is created by a job
+
+
+def test_out_root_that_is_a_file_is_refused_at_start(harness: Harness, tmp_path: Path) -> None:
+    file = tmp_path / "afile.txt"
+    file.write_text("x", encoding="utf-8")
+    server = UiServer(
+        mode="none",
+        out_root=file,
+        settings_path=harness.settings_path,
+        installer=harness.installer,
+        defaults=UiSettings(output_dir=harness.output_root),
+    )
+    with pytest.raises(GdmError) as caught:
+        server.start()
+    assert str(file.resolve()) in caught.value.message
+    assert caught.value.hint and "--out" in caught.value.hint
+    with pytest.raises(RuntimeError):
+        _ = server.port  # nothing was bound
+
+
+def test_out_root_on_a_missing_drive_is_refused_at_start(harness: Harness) -> None:
+    drive = missing_drive()
+    server = UiServer(
+        mode="none",
+        out_root=Path(f"{drive}out"),
+        settings_path=harness.settings_path,
+        installer=harness.installer,
+        defaults=UiSettings(output_dir=harness.output_root),
+    )
+    with pytest.raises(GdmError) as caught:
+        server.start()
+    assert drive in caught.value.message
+
+
+# ─── Results of the latest run only ──────────────────────────────────────────
+
+
+def date_inputs_before_the_results(folder: Path, seconds: float = 60.0) -> None:
+    """Screenshots, raw.json and analysis.json dated before DESIGN.md (a complete run)."""
+    reference = (folder / "DESIGN.md").stat().st_mtime - seconds
+    paths = [folder / "raw.json", folder / "analysis.json"]
+    paths.extend((folder / "screenshots").glob("*.png"))
+    for path in paths:
+        if path.exists():
+            os.utime(path, (reference, reference))
+
+
+def _quiet(event: Any) -> None:
+    """Message sink that drops the synthesizer's messages."""
+
+
+def test_prompt_of_an_earlier_run_is_not_offered(client: httpx.Client, output_root: Path) -> None:
+    folder = output_root / ACME_SITE
+    first = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert first.prompt is not None and first.entry.has_prompt
+    assert first.prompt_images  # the fixture was built with --prompt-only
+
+    with use_sink(_quiet):
+        run_synthesize(folder, lang="vi", prompt_only=False)
+    assert (folder / "prompt.md").is_file()  # still on disk, from the first run
+    second = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert second.prompt is None and second.prompt_images == []
+    assert not second.entry.has_prompt
+    assert "prompt.md" in [file.path for file in second.files]  # the Files tab lists it all
+    assert not [
+        entry
+        for entry in client.get("/api/history").json()["entries"]
+        if entry["site"] == ACME_SITE and entry["has_prompt"]
+    ]
+
+    with use_sink(_quiet):
+        run_synthesize(folder, lang="en", prompt_only=True)
+    third = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert third.prompt is not None and third.entry.has_prompt
+    synthesis = json.loads((folder / "synthesis.json").read_text(encoding="utf-8"))
+    assert third.prompt_images == [
+        f"/files/{ACME_SITE}/{path}" for path in synthesis["image_paths"]
+    ]
+
+
+def test_prompt_without_a_synthesis_record_is_offered_as_found(
+    client: httpx.Client, output_root: Path
+) -> None:
+    (output_root / ACME_SITE / "synthesis.json").unlink()
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert results.prompt is not None and results.prompt_images
+
+
+@pytest.mark.parametrize("prompt_only", [False, True])
+def test_job_files_list_prompt_md_only_when_the_job_wrote_it(
+    client: httpx.Client, output_root: Path, prompt_only: bool
+) -> None:
+    assert (output_root / ACME_SITE / "prompt.md").is_file()
+    job = start_job(client, f"https://{ACME_SITE}", prompt_only=prompt_only)
+    done = wait_job(client, job.id)
+    assert done.status == "succeeded"
+    assert ("prompt.md" in done.files) is prompt_only
+
+
+def test_results_show_the_screenshots_of_every_analysed_page(
+    client: httpx.Client, output_root: Path
+) -> None:
+    folder = output_root / ACME_SITE
+    analysis_path = folder / "analysis.json"
+    data = json.loads(analysis_path.read_text(encoding="utf-8"))
+    data["site"]["pages_analyzed"] = ["home", "pricing", "home-dark"]
+    analysis_path.write_text(json.dumps(data), encoding="utf-8")
+    shots = folder / "screenshots"
+    for name in ("pricing-1440.png", "pricing-768.png", "pricing-390.png", "blog-1440.png"):
+        shutil.copyfile(shots / "home-1440.png", shots / name)
+    shutil.copyfile(shots / "home-1440.png", shots / "home-dark-768.png")  # page "home-dark"
+    date_inputs_before_the_results(folder)
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert [
+        (shot.page, shot.viewport_width, shot.color_scheme) for shot in results.screenshots
+    ] == [
+        ("home", 1440, "light"),
+        ("home", 768, "light"),
+        ("home", 390, "light"),
+        ("home", 1440, "dark"),
+        ("pricing", 1440, "light"),
+        ("pricing", 390, "light"),
+        ("pricing", 768, "light"),
+        ("home-dark", 768, "light"),
+    ]
+    # "blog" was not analysed this time (a screenshot of an older run): not shown.
+    assert "screenshots/blog-1440.png" not in [shot.path for shot in results.screenshots]
+    assert results.screenshots[4].url == f"/files/{ACME_SITE}/screenshots/pricing-1440.png"
+    assert results.warnings == data["warnings"]
+
+
+def test_results_of_a_complete_run_carry_no_mixed_runs_note(
+    client: httpx.Client, output_root: Path
+) -> None:
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    assert server_module.mixed_runs_note(output_root / ACME_SITE) is None
+    assert not [warning for warning in results.warnings if "chưa đi hết" in warning]
+
+
+def test_results_say_when_an_unfinished_run_left_newer_screenshots(
+    client: httpx.Client, output_root: Path
+) -> None:
+    folder = output_root / ACME_SITE
+    analysis_warnings = json.loads((folder / "analysis.json").read_text(encoding="utf-8"))[
+        "warnings"
+    ]
+    later = (folder / "DESIGN.md").stat().st_mtime + 30
+    os.utime(folder / "screenshots" / "home-1440.png", (later, later))
+    results = ResultsResponse.model_validate_json(client.get(f"/api/results/{ACME_SITE}").content)
+    note = results.warnings[0]
+    assert "chưa đi hết các bước" in note and "ảnh chụp mới hơn" in note
+    assert "DESIGN.md" in note and "preview.html" in note and "tokens.json" in note
+    assert "raw.json" not in note
+    assert results.warnings[1:] == analysis_warnings
+
+
+def test_mixed_runs_note(tmp_path: Path) -> None:
+    folder = tmp_path / "site"
+    (folder / "screenshots").mkdir(parents=True)
+    names = ("screenshots/home-1440.png", "raw.json", "analysis.json")
+    outputs = ("DESIGN.md", "preview.html", "tokens.json")
+    for name in (*names, *outputs):
+        (folder / name).write_text("x", encoding="utf-8")
+
+    def date(name: str, when: float) -> None:
+        os.utime(folder / name, (when, when))
+
+    base = 1_800_000_000.0
+    for index, name in enumerate((*names, *outputs)):
+        date(name, base + index)  # the order a complete run writes them
+    assert server_module.mixed_runs_note(folder) is None
+    # Re-running only the export or the synthesis is fine.
+    date("preview.html", base + 500)
+    assert server_module.mixed_runs_note(folder) is None
+    # Within the tolerance of coarse file systems.
+    date("analysis.json", base + 3 + server_module.STALE_TOLERANCE_S)
+    assert server_module.mixed_runs_note(folder) is None
+    # analysis.json rewritten after the results (the synthesis did not finish).
+    date("analysis.json", base + 100)
+    note = server_module.mixed_runs_note(folder)
+    assert note is not None
+    assert "kết quả phân tích (analysis.json) mới hơn DESIGN.md và tokens.json" in note
+    assert "ảnh chụp" not in note.split("mới hơn")[0]
+    # Without results there is nothing to compare.
+    for name in outputs:
+        (folder / name).unlink()
+    assert server_module.mixed_runs_note(folder) is None

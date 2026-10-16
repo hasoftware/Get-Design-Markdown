@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import socket
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -11,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from get_design_markdown import pipeline
 from get_design_markdown.console import (
     ConsoleEvent,
     MessageSink,
@@ -32,7 +36,9 @@ from get_design_markdown.ui.jobs import (
     FINAL_SUCCESS_MESSAGE,
     JOB_ID_RE,
     MAX_EVENTS_PER_RESPONSE,
+    OUTPUT_DIR_JOB_HINT,
     PIPELINE_STEPS,
+    UNEXPECTED_HINT,
     JobBusyError,
     JobManager,
     JobNotFoundError,
@@ -586,3 +592,228 @@ def test_failed_snapshot_times(make: Callable[..., JobManager], settings: UiSett
     done = _finished(manager, manager.start(JobRequest(url="x.example"), settings).id)
     assert done.created_at.second == 0 and done.started_at is not None
     assert done.finished_at is not None and done.finished_at > done.started_at
+
+
+# ─── Result files of this run ────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("prompt_only", [False, True])
+def test_prompt_md_is_listed_only_when_the_job_wrote_it(
+    make: Callable[..., JobManager], settings: UiSettings, prompt_only: bool
+) -> None:
+    # The folder also holds a prompt.md from an earlier --prompt-only run.
+    manager = make(pipeline_like(("DESIGN.md", "prompt.md", "synthesis.json")))
+    request = JobRequest(url="x.example", prompt_only=prompt_only)
+    done = _finished(manager, manager.start(request, request.apply_to(settings)).id)
+    assert done.status == "succeeded"
+    if prompt_only:
+        assert done.files == ["DESIGN.md", "prompt.md", "synthesis.json"]
+    else:
+        assert done.files == ["DESIGN.md", "synthesis.json"]
+
+
+# ─── Cancelling a stage that waits in an event loop ──────────────────────────
+
+
+@pytest.fixture
+def thread_errors(monkeypatch: pytest.MonkeyPatch) -> list[BaseException]:
+    """Exceptions that escaped a thread (a job thread must never let one escape)."""
+    caught: list[BaseException] = []
+
+    def hook(args: threading.ExceptHookArgs) -> None:
+        if args.exc_value is not None:
+            caught.append(args.exc_value)
+
+    monkeypatch.setattr(threading, "excepthook", hook)
+    return caught
+
+
+class Hanging:
+    """Like the collector on a page that never answers: messages from inside an event loop,
+    then an await that does not return; cleanup that still awaits (Playwright closing the
+    browser in its `async with` blocks)."""
+
+    def __init__(self, *, sub_task: bool = False) -> None:
+        self.sub_task = sub_task
+        self.waiting = threading.Event()
+        self.cleaned_up = threading.Event()
+
+    async def _never(self) -> None:
+        await asyncio.sleep(3600)
+
+    async def _stage(self) -> None:
+        try:
+            print_info("Mở trình duyệt…")
+            print_info("Mở trang…")
+            self.waiting.set()
+            if self.sub_task:
+                await asyncio.gather(self._never(), self._never())
+            else:
+                await self._never()
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up.set()
+
+    def __call__(self, request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
+        print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+        asyncio.run(self._stage())
+        print_step(2, 4, "Phân tích thiết kế (Tầng 2)")  # never reached after a cancel
+        return settings.output_dir
+
+
+@pytest.mark.parametrize("sub_task", [False, True])
+def test_cancel_interrupts_a_stage_waiting_in_an_event_loop(
+    make: Callable[..., JobManager],
+    settings: UiSettings,
+    thread_errors: list[BaseException],
+    sub_task: bool,
+) -> None:
+    hanging = Hanging(sub_task=sub_task)
+    manager = make(hanging)
+    job = manager.start(JobRequest(url="hang.example"), settings)
+    assert hanging.waiting.wait(WAIT_S)
+    begin = time.monotonic()
+    manager.cancel(job.id)
+    done = _finished(manager, job.id)
+    assert time.monotonic() - begin < 5  # not when the await would have ended (an hour)
+    assert done.status == "cancelled" and done.error is not None
+    assert done.error.code == "cancelled"
+    assert done.error.message == JobCancelledError().message
+    assert hanging.cleaned_up.is_set()
+    assert [event.step for event in done.events if event.kind == "step"] == [1]
+    assert thread_errors == []
+
+
+def test_cancel_after_the_event_loop_closed_waits_for_the_next_message(
+    make: Callable[..., JobManager], settings: UiSettings, thread_errors: list[BaseException]
+) -> None:
+    looping = Looping()
+
+    async def collect() -> None:
+        print_info("Mở trình duyệt…")  # remembered: its loop is closed once collect() ends
+
+    def runner(request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
+        asyncio.run(collect())
+        return looping(request, settings, sink)
+
+    manager = make(runner)
+    job = manager.start(JobRequest(url="x.example"), settings)
+    assert looping.started.wait(WAIT_S)
+    manager.cancel(job.id)
+    done = _finished(manager, job.id)
+    assert done.status == "cancelled" and looping.cleaned_up.is_set()
+    assert thread_errors == []
+
+
+def test_a_cancelled_error_without_a_cancel_fails_the_job(
+    make: Callable[..., JobManager], settings: UiSettings, thread_errors: list[BaseException]
+) -> None:
+    def runner(request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
+        raise asyncio.CancelledError()
+
+    manager = make(runner)
+    done = _finished(manager, manager.start(JobRequest(url="x.example"), settings).id)
+    assert done.status == "failed" and done.error is not None
+    assert done.error.code == "unexpected"
+    assert thread_errors == []
+
+
+class _HangingSite:
+    """HTTP server on 127.0.0.1 that answers /robots.txt (404) at once and never answers any
+    other request (a site that hangs while loading)."""
+
+    def __init__(self) -> None:
+        self._socket = socket.create_server(("127.0.0.1", 0))
+        self.port = int(self._socket.getsockname()[1])
+        self.page_requested = threading.Event()
+        self._connections: list[socket.socket] = []
+        threading.Thread(target=self._serve, name="hanging-site", daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.port}/"
+
+    def _serve(self) -> None:
+        while True:
+            try:
+                connection, _ = self._socket.accept()
+            except OSError:
+                return
+            self._connections.append(connection)
+            threading.Thread(target=self._handle, args=(connection,), daemon=True).start()
+
+    def _handle(self, connection: socket.socket) -> None:
+        data = b""
+        try:
+            while b"\r\n\r\n" not in data:
+                chunk = connection.recv(4096)
+                if not chunk:
+                    return
+                data += chunk
+            if b" /robots.txt " in data.split(b"\r\n", 1)[0]:
+                connection.sendall(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                connection.close()
+                return
+            self.page_requested.set()  # and never answer
+        except OSError:
+            return
+
+    def close(self) -> None:
+        self._socket.close()
+        for connection in self._connections:
+            with contextlib.suppress(OSError):
+                connection.close()
+
+
+@pytest.mark.browser
+def test_cancel_abandons_a_page_that_never_answers(
+    make: Callable[..., JobManager], tmp_path: Path, thread_errors: list[BaseException]
+) -> None:
+    site = _HangingSite()
+    try:
+        manager = make(run_pipeline)
+        settings = UiSettings(output_dir=tmp_path / "output", timeout_s=60.0, browser="chromium")
+        job = manager.start(JobRequest(url=site.url), settings)
+        assert site.page_requested.wait(60)
+        time.sleep(0.5)  # the browser is waiting for the answer
+        begin = time.monotonic()
+        manager.cancel(job.id)
+        done = manager.wait(job.id, timeout=60)
+        elapsed = time.monotonic() - begin
+    finally:
+        site.close()
+    assert done.status == "cancelled", done.error
+    # Before, the page load ran to its end: up to twice timeout_s (2 minutes here).
+    assert elapsed < 15
+    assert thread_errors == []
+
+
+# ─── The default runner ──────────────────────────────────────────────────────
+
+
+def test_the_default_runner_refuses_an_unusable_output_folder(
+    make: Callable[..., JobManager], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def never(*args: object, **kwargs: object) -> object:
+        raise AssertionError("the pipeline must not start")
+
+    monkeypatch.setattr(pipeline, "run_get", never)
+    blocker = tmp_path / "a-file.txt"
+    blocker.write_text("x", encoding="utf-8")
+    manager = make(run_pipeline)
+    for folder in (blocker, blocker / "inside"):
+        job = manager.start(JobRequest(url="x.example"), UiSettings(output_dir=folder))
+        done = _finished(manager, job.id)
+        assert done.status == "failed" and done.error is not None
+        assert done.error.code == "config"
+        assert str(blocker) in done.error.message
+        assert done.error.message.startswith("Không dùng được thư mục lưu kết quả.")
+        assert done.error.hint == OUTPUT_DIR_JOB_HINT
+        assert "Thư mục lưu kết quả" in done.error.hint
+
+
+def test_unexpected_errors_point_to_the_log_not_to_a_command() -> None:
+    assert "ui.log" in UNEXPECTED_HINT
+    assert "gdm --debug" not in UNEXPECTED_HINT and "get <url>" not in UNEXPECTED_HINT

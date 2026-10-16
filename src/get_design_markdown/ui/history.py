@@ -30,6 +30,7 @@ from get_design_markdown.storage import (
     PROMPT_FILE,
     RAW_FILE,
     SCREENSHOTS_DIR,
+    SYNTHESIS_FILE,
     TOKENS_FILE,
 )
 
@@ -50,7 +51,15 @@ THUMBNAIL_PREFERENCE = (
 #: Files whose presence makes a folder a site folder.
 SITE_MARKERS = (RAW_FILE, ANALYSIS_FILE, DESIGN_FILE)
 #: Files whose presence or change alters an entry (the cache key watches them).
-_WATCHED_FILES = (RAW_FILE, ANALYSIS_FILE, DESIGN_FILE, PREVIEW_FILE, PROMPT_FILE, TOKENS_FILE)
+_WATCHED_FILES = (
+    RAW_FILE,
+    ANALYSIS_FILE,
+    DESIGN_FILE,
+    PREVIEW_FILE,
+    PROMPT_FILE,
+    TOKENS_FILE,
+    SYNTHESIS_FILE,
+)
 #: Entries kept by the list_history cache (one per site folder).
 _CACHE_LIMIT = 1024
 
@@ -146,6 +155,33 @@ def _newest_mtime(folder: Path, names: tuple[str, ...]) -> datetime | None:
     return datetime.fromtimestamp(newest, UTC) if newest is not None else None
 
 
+def recorded_prompt(folder: Path) -> tuple[str | None, list[str]] | None:
+    """What the latest synthesis wrote for an AI assistant, from synthesis.json: (prompt_path,
+    image_paths) relative to the folder with "/" separators ("prompt.md",
+    ["prompt-images/desktop.png"]); prompt_path is None when it ran without --prompt-only, so a
+    prompt.md left by an earlier run is not current. None when synthesis.json is missing or
+    unreadable (callers then go by the files present)."""
+    try:
+        data: Any = json.loads((folder / SYNTHESIS_FILE).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as error:
+        logger.debug("Unreadable %s: %s", folder / SYNTHESIS_FILE, error)
+        return None
+    if not isinstance(data, dict):
+        return None
+    prompt = data.get("prompt_path")
+    if prompt is not None and not isinstance(prompt, str):
+        return None
+    images = data.get("image_paths")
+    image_paths = (
+        [item.replace("\\", "/") for item in images if isinstance(item, str) and item]
+        if isinstance(images, list)
+        else []
+    )
+    return (prompt.replace("\\", "/") if prompt else None), image_paths
+
+
 def _thumbnail(folder: Path) -> str | None:
     for relative in THUMBNAIL_PREFERENCE:
         if _is_file(folder / relative):
@@ -182,6 +218,11 @@ def read_entry(folder: Path) -> HistoryEntry | None:
     if analyzed_at is None:
         analyzed_at = _newest_mtime(folder, markers)
     name = site.name.strip() if site is not None and site.name.strip() else folder.name
+    has_prompt = PROMPT_FILE in present
+    if has_prompt and SYNTHESIS_FILE in present:
+        # A prompt.md that the latest synthesis did not write belongs to an earlier run.
+        recorded = recorded_prompt(folder)
+        has_prompt = recorded is None or recorded[0] is not None
     return HistoryEntry(
         site=folder.name,
         name=name,
@@ -192,7 +233,7 @@ def read_entry(folder: Path) -> HistoryEntry | None:
         has_analysis=ANALYSIS_FILE in present,
         has_design=DESIGN_FILE in present,
         has_preview=PREVIEW_FILE in present,
-        has_prompt=PROMPT_FILE in present,
+        has_prompt=has_prompt,
         has_tokens=TOKENS_FILE in present,
         thumbnail=_thumbnail(folder),
     )

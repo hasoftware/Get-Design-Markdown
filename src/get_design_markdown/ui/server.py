@@ -78,9 +78,11 @@ GET  /api/settings
      does not move it for this session), else settings.output_dir.
 PUT  /api/settings
      body: a partial UiSettings object (any subset of its fields; unknown field -> 422
-     "invalid"); merged over the current settings, validated, saved with save_ui_settings.
-     output_dir is expanded (~) and made absolute; it must not be an existing file (422
-     "invalid", field "output_dir"); the folder is created only when a job writes to it.
+     "invalid"); merged over the current settings, validated, saved with
+     settings.update_ui_settings (only the fields the user changed away from their defaults
+     are stored). output_dir is expanded (~) and made absolute; it must not be an existing
+     file, its drive must exist and a folder must be creatable there (else 422 "invalid",
+     field "output_dir", with a hint); the folder is created only when a job writes to it.
      200 SettingsResponse (after the change). Allowed while a job runs (the job keeps its
      settings).
 
@@ -111,13 +113,18 @@ GET  /api/results/{site}
                                              # screenshots/ and prompt-images/, sorted by
                                              # path case-insensitively (same on every OS)
           "design": RenderedDocument | null, # DESIGN.md (render_md.render_markdown)
-          "prompt": RenderedDocument | null, # prompt.md
+          "prompt": RenderedDocument | null, # prompt.md, only when the latest synthesis
+                                             # wrote it (synthesis.json prompt_path)
           "preview_url": "/files/stripe.com/preview.html" | null,
-          "screenshots": [ScreenshotInfo...],  # from analysis.json screenshots whose file
-                                               # exists, else screenshots/*.png by name
+          "screenshots": [ScreenshotInfo...],  # analysis.json screenshots whose file exists
+                                               # (main page), then screenshots/*.png of the
+                                               # other analysed pages; without analysis.json
+                                               # screenshots/*.png by name
           "prompt_images": ["/files/stripe.com/prompt-images/desktop.png", ...],
+                                               # synthesis.json image_paths (with prompt)
           "token_counts": {"colors": 10, ...} | null,   # synthesis.json token_counts
-          "warnings": ["..."]}                           # analysis.json warnings
+          "warnings": ["..."]}   # analysis.json warnings, preceded by a note when the files
+                                 # come from two runs (server.mixed_runs_note)
      URLs are root-relative and percent-encoded. 404 "site_not_found" for an invalid or
      missing site.
 
@@ -229,6 +236,7 @@ from get_design_markdown.ui.history import (
     is_valid_site_name,
     list_history,
     read_entry,
+    recorded_prompt,
 )
 from get_design_markdown.ui.jobs import (
     JOB_ID_RE,
@@ -251,7 +259,8 @@ from get_design_markdown.ui.settings import (
     UiSettings,
     absolute_output_dir,
     load_ui_settings,
-    save_ui_settings,
+    output_dir_problem,
+    update_ui_settings,
 )
 from get_design_markdown.ui.settings import settings_path as default_settings_path
 
@@ -581,10 +590,13 @@ class UiServer:
 
     def update_settings(self, changes: Mapping[str, Any]) -> UiSettings:
         """Merge `changes` over the saved settings, validate and save them; ValidationError for
-        a bad value, ConfigError when the file cannot be written (nothing changes then)."""
+        a bad value, ConfigError when the file cannot be written (nothing changes then).
+
+        Only the user's own choices are written (settings.update_ui_settings): a field set back
+        to its default leaves the file, and the fields the user never changed keep following
+        this session's defaults (environment, current folder)."""
         with self._lock:
-            merged = UiSettings.model_validate({**self.settings.model_dump(), **changes})
-            save_ui_settings(merged, self.config_path)
+            merged = update_ui_settings(self.config_path, self.defaults, changes)
             self._settings = merged
             return merged
 
@@ -622,13 +634,17 @@ class UiServer:
 
     def start(self) -> None:
         """Bind 127.0.0.1:<port> and serve in a daemon thread; returns once listening.
-        Raises GdmError (Vietnamese) when the port is taken."""
+        Raises GdmError (Vietnamese) when the port is taken or `out_root` cannot hold results
+        (an existing file, a missing drive...)."""
         with self._lock:
             if self._started and not self._stop_started:
                 return
-            # Settings, defaults and the frontend folder are checked before binding, so a
-            # configuration problem is reported as such (GdmError) and not as a dead page.
+            # Settings, defaults, the --out folder and the frontend folder are checked before
+            # binding, so a configuration problem is reported as such (GdmError) and not as a
+            # dead page or a failed job.
             self._settings = self.settings
+            if self._locked_root is not None:
+                check_out_root(self._locked_root)
             self._static_dir = self.static_dir()
             httpd = _bind(self, self.requested_port)
             self._httpd = httpd
@@ -784,12 +800,23 @@ _KIND_BY_NAME: dict[str, ResultFileKind] = {
     RAW_FILE: "raw",
 }
 #: "home-1440", "home-dark-1440" (storage.screenshot_filename without the folder and suffix).
-_SCREENSHOT_STEM_RE = re.compile(r"^(?P<page>.+?)(?P<dark>-dark)?-(?P<width>\d{2,5})$")
+_SCREENSHOT_STEM_RE = re.compile(r"^(?P<page>.+?)(?P<dark>-dark)?-(?P<width>\d{2,5})$", re.ASCII)
+_WIDTH_RE = re.compile(r"\d{2,5}", re.ASCII)
+#: Seconds an input of a stage (screenshots, raw.json, analysis.json) may be newer than the
+#: results built from it before the folder counts as mixing two runs (coarse file systems
+#: such as FAT store modification times in 2-second steps).
+STALE_TOLERANCE_S = 2.0
 _UNSAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._ ()+-]")
 _WINDOWS_PORT_ERRORS = frozenset({10013, 10048})  # WSAEACCES, WSAEADDRINUSE
 
 _TOKEN_COUNTS = TypeAdapter(dict[str, int])
 _WARNINGS = TypeAdapter(list[str])
+
+#: Hint of a refused output_dir (PUT /api/settings), shown next to the field.
+OUTPUT_DIR_HINT = (
+    "Chọn một thư mục trên ổ đĩa đang có mà bạn được phép ghi, ví dụ một thư mục trong "
+    "Documents (chưa có cũng được: thư mục được tạo khi phân tích)."
+)
 
 UNEXPECTED_MESSAGE = "Máy chủ giao diện gặp lỗi không mong muốn."
 UNEXPECTED_HINT = (
@@ -989,8 +1016,23 @@ def _analysis_screenshots(
     return shots
 
 
-def _folder_screenshots(folder: Path, site: str) -> list[ScreenshotInfo]:
-    """screenshots/*.png by name (when analysis.json lists none)."""
+def _split_screenshot_stem(stem: str, pages: Sequence[str]) -> tuple[str, bool, int] | None:
+    """(page, dark, width) of "<page>-1440" / "<page>-dark-1440" for one of `pages` (the
+    longest page name that fits wins), else None."""
+    for page in sorted(pages, key=len, reverse=True):
+        if not page or not stem.startswith(f"{page}-"):
+            continue
+        rest = stem[len(page) + 1 :]
+        dark = rest.startswith("dark-")
+        width = rest[len("dark-") :] if dark else rest
+        if _WIDTH_RE.fullmatch(width):
+            return page, dark, int(width)
+    return None
+
+
+def _folder_screenshots(folder: Path, site: str, pages: Sequence[str] = ()) -> list[ScreenshotInfo]:
+    """screenshots/*.png by name. With `pages` (analysis.json site.pages_analyzed) only the
+    screenshots of those pages, in that page order; without, every screenshot."""
     try:
         names = sorted(
             entry.name
@@ -999,24 +1041,52 @@ def _folder_screenshots(folder: Path, site: str) -> list[ScreenshotInfo]:
         )
     except OSError:
         return []
-    shots: list[ScreenshotInfo] = []
+    order = {page: index for index, page in enumerate(pages)}
+    found: list[tuple[int, ScreenshotInfo]] = []
     for name in names:
         relative = f"{SCREENSHOTS_DIR}/{name}"
         real = safe_child(folder, [SCREENSHOTS_DIR, name])
         if real is None:
             continue
         stem = Path(name).stem
-        match = _SCREENSHOT_STEM_RE.fullmatch(stem)
-        shots.append(
-            ScreenshotInfo(
-                page=match.group("page") if match else stem,
-                viewport_width=int(match.group("width")) if match else _image_width(real),
-                color_scheme="dark" if match and match.group("dark") else "light",
-                path=relative,
-                url=files_url(site, relative),
+        if pages:
+            parts = _split_screenshot_stem(stem, pages)
+            if parts is None:
+                continue
+            page, dark, width = parts
+        else:
+            match = _SCREENSHOT_STEM_RE.fullmatch(stem)
+            page = match.group("page") if match else stem
+            dark = bool(match and match.group("dark"))
+            width = int(match.group("width")) if match else _image_width(real)
+        found.append(
+            (
+                order.get(page, 0),
+                ScreenshotInfo(
+                    page=page,
+                    viewport_width=width,
+                    color_scheme="dark" if dark else "light",
+                    path=relative,
+                    url=files_url(site, relative),
+                ),
             )
         )
-    return shots
+    found.sort(key=lambda item: item[0])  # stable: by name within a page
+    return [shot for _, shot in found]
+
+
+def _screenshots(
+    folder: Path, site: str, analysis: dict[str, Any] | None, pages: Sequence[str]
+) -> list[ScreenshotInfo]:
+    """analysis.json screenshots (the main page) followed by the screenshot files of the other
+    analysed pages (sub-pages of --pages), each path once; every screenshot file when
+    analysis.json lists none."""
+    listed = _analysis_screenshots(folder, site, analysis)
+    if not listed:
+        return _folder_screenshots(folder, site)
+    seen = {shot.path for shot in listed}
+    extra = [shot for shot in _folder_screenshots(folder, site, pages) if shot.path not in seen]
+    return listed + extra
 
 
 def _prompt_images(folder: Path, site: str) -> list[str]:
@@ -1033,6 +1103,94 @@ def _prompt_images(folder: Path, site: str) -> list[str]:
         for name in names
         if safe_child(folder, [PROMPT_IMAGES_DIR, name]) is not None
     ]
+
+
+def _recorded_prompt_images(folder: Path, site: str, paths: Sequence[str]) -> list[str]:
+    """URLs of synthesis.json image_paths that are images inside the folder."""
+    return [
+        files_url(site, relative)
+        for relative in paths
+        if relative.lower().endswith(IMAGE_SUFFIXES)
+        and safe_child(folder, relative.split("/")) is not None
+    ]
+
+
+def _current_prompt(folder: Path, site: str) -> tuple[Path | None, list[str]]:
+    """prompt.md and the prompt image URLs of the latest synthesis (synthesis.json); a
+    prompt.md left by an earlier --prompt-only run is not offered. Without a readable
+    synthesis.json, whatever prompt.md and prompt-images/ hold."""
+    recorded = recorded_prompt(folder)
+    if recorded is None:
+        return safe_child(folder, [PROMPT_FILE]), _prompt_images(folder, site)
+    prompt_path, image_paths = recorded
+    if prompt_path is None:
+        return None, []
+    prompt = safe_child(folder, prompt_path.split("/"))
+    if prompt is None:
+        return None, []
+    return prompt, _recorded_prompt_images(folder, site, image_paths)
+
+
+def _mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _newest_screenshot_mtime(folder: Path) -> float | None:
+    try:
+        times = [
+            entry.stat().st_mtime
+            for entry in os.scandir(folder / SCREENSHOTS_DIR)
+            if entry.name.lower().endswith(".png") and entry.is_file()
+        ]
+    except OSError:
+        return None
+    return max(times, default=None)
+
+
+def _join_vi(items: Sequence[str]) -> str:
+    """ "a", "a và b", "a, b và c"."""
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} và {items[-1]}"
+
+
+def mixed_runs_note(folder: Path) -> str | None:
+    """A Vietnamese note when the folder mixes two runs, else None.
+
+    The stages write in this order: screenshots, raw.json, analysis.json, then DESIGN.md,
+    preview.html and tokens.json (all built from analysis.json). An input newer than a result
+    built from it (beyond STALE_TOLERANCE_S) means the latest run stopped half-way (cancelled,
+    failed, or only some stages were run again), so the results shown are older than the
+    screenshots or data next to them.
+    """
+    inputs = [
+        ("ảnh chụp", _newest_screenshot_mtime(folder)),
+        ("dữ liệu thu thập (raw.json)", _mtime(folder / RAW_FILE)),
+        ("kết quả phân tích (analysis.json)", _mtime(folder / ANALYSIS_FILE)),
+    ]
+    outputs = [
+        ("DESIGN.md", _mtime(folder / DESIGN_FILE)),
+        ("trang xem trước (preview.html)", _mtime(folder / PREVIEW_FILE)),
+        ("tokens.json", _mtime(folder / TOKENS_FILE)),
+    ]
+    present_inputs = [(label, when) for label, when in inputs if when is not None]
+    present_outputs = [(label, when) for label, when in outputs if when is not None]
+    if not present_inputs or not present_outputs:
+        return None
+    oldest_output = min(when for _, when in present_outputs)
+    newest_input = max(when for _, when in present_inputs)
+    newer = [label for label, when in present_inputs if when > oldest_output + STALE_TOLERANCE_S]
+    older = [label for label, when in present_outputs if when < newest_input - STALE_TOLERANCE_S]
+    if not newer or not older:
+        return None
+    return (
+        "Lượt chạy gần nhất của trang này chưa đi hết các bước (bị hủy hoặc gặp lỗi giữa "
+        f"chừng), nên {_join_vi(newer)} mới hơn {_join_vi(older)} đang hiển thị. Hãy phân "
+        "tích lại trang này để mọi tệp khớp nhau."
+    )
 
 
 def _token_counts(folder: Path) -> dict[str, int] | None:
@@ -1061,10 +1219,14 @@ def build_results(output_root: Path, site: str) -> ResultsResponse | None:
     if folder is None or entry is None:
         return None
     analysis = _read_json_object(folder / ANALYSIS_FILE) if entry.has_analysis else None
-    screenshots = _analysis_screenshots(folder, site, analysis) or _folder_screenshots(folder, site)
+    screenshots = _screenshots(folder, site, analysis, entry.pages)
     preview = safe_child(folder, [PREVIEW_FILE])
     design = safe_child(folder, [DESIGN_FILE])
-    prompt = safe_child(folder, [PROMPT_FILE])
+    prompt, prompt_images = _current_prompt(folder, site)
+    warnings = _analysis_warnings(analysis)
+    mixed = mixed_runs_note(folder)
+    if mixed is not None:
+        warnings.insert(0, mixed)
     try:
         absolute = folder.resolve()
     except OSError:
@@ -1078,9 +1240,9 @@ def build_results(output_root: Path, site: str) -> ResultsResponse | None:
         prompt=_rendered(prompt) if prompt is not None else None,
         preview_url=files_url(site, PREVIEW_FILE) if preview is not None else None,
         screenshots=screenshots,
-        prompt_images=_prompt_images(folder, site),
+        prompt_images=prompt_images,
         token_counts=_token_counts(folder),
-        warnings=_analysis_warnings(analysis),
+        warnings=warnings,
     )
 
 
@@ -1808,20 +1970,31 @@ class _RequestHandler(BaseHTTPRequestHandler):
 
 
 def _checked_output_dir(value: Any) -> Path:
-    """output_dir of PUT /api/settings: "~" expanded, absolute, not an existing file."""
+    """output_dir of PUT /api/settings: "~" expanded, absolute and usable
+    (settings.output_dir_problem: not a file, on an existing drive, a folder can be created)."""
     if not isinstance(value, str) or not value.strip():
         raise invalid_field("output_dir", "Thư mục lưu kết quả đang để trống.")
     if "\x00" in value:
         raise invalid_field("output_dir", "Đường dẫn thư mục lưu kết quả không hợp lệ.")
     path = absolute_output_dir(value.strip())
-    try:
-        is_file = path.exists() and not path.is_dir()
-    except (OSError, ValueError):
-        raise invalid_field(
-            "output_dir", f"Không dùng được '{path}' làm thư mục lưu kết quả."
-        ) from None
-    if is_file:
-        raise invalid_field(
-            "output_dir", f"'{path}' là một tệp, không phải thư mục; hãy chọn một thư mục."
+    problem = output_dir_problem(path)
+    if problem is not None:
+        raise HttpError(
+            422, "invalid", problem, hint=OUTPUT_DIR_HINT, details={"field": "output_dir"}
         )
     return path
+
+
+def check_out_root(path: Path) -> None:
+    """The `--out` of `gdm ui` must be usable as the results folder (checked at start-up, with
+    the same rules as the output_dir setting); GdmError in Vietnamese otherwise."""
+    problem = output_dir_problem(path)
+    if problem is not None:
+        raise GdmError(
+            problem,
+            hint=(
+                "Chạy lại với --out là một thư mục (chưa có cũng được, sẽ được tạo khi phân "
+                "tích) trên một ổ đĩa đang có, hoặc bỏ --out để dùng thư mục đã chọn trong "
+                "giao diện."
+            ),
+        )

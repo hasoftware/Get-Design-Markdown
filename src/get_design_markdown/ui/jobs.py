@@ -18,8 +18,9 @@ Life of a job
    JobCancelledError when cancel() was requested, so the pipeline unwinds at its next message
    (Playwright closes the browser through its `async with` blocks).
 4. When the runner returns: status "succeeded", `files` = names of the files present in the
-   site folder among DESIGN.md, preview.html, tokens.json, prompt.md, analysis.json,
-   synthesis.json, raw.json, and a final "success" event with FINAL_SUCCESS_MESSAGE.
+   site folder among DESIGN.md, preview.html, tokens.json, prompt.md (only when the job ran
+   with prompt_only), analysis.json, synthesis.json, raw.json, and a final "success" event
+   with FINAL_SUCCESS_MESSAGE.
    JobCancelledError: status "cancelled", error code "cancelled" and a final "warning" event
    with the error's message and hint. Any other exception:
    status "failed", `error = job_error(exc)` and a final "error" event carrying the same
@@ -29,13 +30,19 @@ Life of a job
    MAX_EVENTS_PER_JOB events (the oldest "progress" events are dropped first; seq numbers are
    never reused). The manager remembers the last MAX_JOBS_KEPT jobs.
 
-Cancellation is cooperative: it takes effect at the next message of the pipeline (at worst
-after the page-load timeout); until then the snapshot shows cancel_requested = true with the
-status still "running".
+Cancellation: cancel() sets cancel_requested and, while the collector's event loop runs (the
+sink remembers the loop and the task that sent its first message from it), cancels that task
+through loop.call_soon_threadsafe, so a page that never answers is abandoned at once and
+Playwright closes the browser through its `async with` blocks; the asyncio.CancelledError that
+comes out of the runner counts as the cancel. Otherwise the sink stops the pipeline at its next
+message. Worst cases: the robots.txt check (no message, its own event loop, at most
+pipeline.ROBOTS_TIMEOUT_S = 15 s) and one analysis / synthesis / export stage (seconds). Until
+then the snapshot shows cancel_requested = true with the status still "running".
 """
 
 from __future__ import annotations
 
+import asyncio
 import bisect
 import logging
 import re
@@ -45,7 +52,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -91,6 +98,7 @@ from get_design_markdown.ui.settings import (
     MIN_TIMEOUT_S,
     UiLang,
     UiSettings,
+    output_dir_problem,
 )
 
 #: Steps of pipeline.run_get (print_step(i, 4, ...)): collect, analyze, DESIGN.md, export.
@@ -244,10 +252,21 @@ def capture_options_for(settings: UiSettings) -> CaptureOptions:
     )
 
 
+def check_output_root(root: Path) -> None:
+    """Refuse a job whose results folder cannot be used (a missing drive, a file, no right to
+    create folders there) before anything is collected: ConfigError naming the folder."""
+    problem = output_dir_problem(root)
+    if problem is not None:
+        raise ConfigError(
+            f"Không dùng được thư mục lưu kết quả. {problem}", hint=OUTPUT_DIR_JOB_HINT
+        )
+
+
 def run_pipeline(request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
     """Default runner: exactly `gdm get <url> --out <output_dir> ...` (same DESIGN.md as the
     CLI), never opening an external browser. Enters use_sink(sink) itself as well, so it also
-    works when called directly."""
+    works when called directly. The output folder is checked first (check_output_root)."""
+    check_output_root(settings.output_dir)
     with use_sink(sink):
         result = pipeline.run_get(
             request.url,
@@ -282,8 +301,13 @@ _ERROR_CODES: tuple[tuple[type[BaseException], ErrorCode], ...] = (
 )
 
 UNEXPECTED_HINT = (
-    "Hãy thử lại. Nếu lỗi lặp lại, gửi kèm file nhật ký ui.log (hoặc kết quả của lệnh "
-    "'gdm --debug get <url>') khi báo lỗi."
+    "Hãy thử lại. Nếu lỗi lặp lại, khi báo lỗi hãy gửi kèm tệp nhật ký ui.log của ứng dụng "
+    "(hoặc các dòng thông báo trong cửa sổ đang chạy giao diện)."
+)
+#: Hint of a job refused because its results folder cannot be used.
+OUTPUT_DIR_JOB_HINT = (
+    "Mở Tùy chọn nâng cao → Thư mục lưu kết quả và chọn một thư mục khác (ví dụ trong "
+    "Documents), hoặc cắm lại ổ đĩa chứa thư mục này, rồi phân tích lại."
 )
 
 
@@ -369,17 +393,60 @@ class _Job:
     files: list[str] = field(default_factory=list)
     thread: threading.Thread | None = None
     done: threading.Event = field(default_factory=threading.Event)
+    #: Event loop of the stage currently awaiting (the collector's asyncio.run) and the first
+    #: task that sent a message from it: a cancel interrupts that task right away.
+    loop: asyncio.AbstractEventLoop | None = None
+    task: asyncio.Task[Any] | None = None
 
 
-def _result_files(folder: Path) -> list[str]:
+def _result_files(folder: Path, *, prompt_only: bool) -> list[str]:
+    """RESULT_FILES present in `folder`; prompt.md only when this job asked for it (a
+    prompt.md of an earlier --prompt-only run is not part of this result)."""
     files: list[str] = []
     for name in RESULT_FILES:
+        if name == PROMPT_FILE and not prompt_only:
+            continue
         try:
             if (folder / name).is_file():
                 files.append(name)
         except OSError:
             continue
     return files
+
+
+def _remember_task(job: _Job) -> None:
+    """Called by the sink (lock held, in the job thread): when the message comes from a task
+    of an asyncio event loop (the collector's asyncio.run), remember the loop and the first
+    task that sent a message from it (the stage's main task), so a cancel can interrupt it."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # not inside an event loop
+        return
+    if loop is job.loop:
+        return
+    task = asyncio.current_task(loop)
+    if task is not None:
+        job.loop, job.task = loop, task
+
+
+def _request_cancel(job: _Job) -> None:
+    """Mark `job` cancelled (lock held) and interrupt the task it awaits in, if any: the
+    pipeline then unwinds at once (a page that never answers no longer holds it for up to
+    twice the page-load timeout); otherwise the sink stops it at its next message."""
+    job.cancel_requested = True
+    loop, task = job.loop, job.task
+    if loop is None or task is None:
+        return
+    try:
+        loop.call_soon_threadsafe(_cancel_task, task)
+    except RuntimeError:  # the loop is already closed: the stage has finished
+        logger.debug("Job %s: event loop closed before the cancel", job.id)
+
+
+def _cancel_task(task: asyncio.Task[Any]) -> None:
+    """Runs inside the job's event loop."""
+    if not task.done():
+        task.cancel("Người dùng đã hủy lượt phân tích.")
 
 
 class JobManager:
@@ -542,6 +609,7 @@ class JobManager:
             with self._lock:
                 if job.cancel_requested:
                     raise JobCancelledError()
+                _remember_task(job)
                 self._append(job, event)
 
         return sink
@@ -558,13 +626,17 @@ class JobManager:
         try:
             with use_sink(sink):
                 folder = self.runner(job.request, job.settings, sink)
-        except Exception as error:
+        except (Exception, asyncio.CancelledError) as error:
+            # CancelledError: a cancel interrupted the collector's event loop (_request_cancel).
             self._finish_failed(job, error)
         except BaseException as error:  # SystemExit & co. must not leave the job "running"
             self._finish_failed(job, error)
             raise
         else:
             self._finish_succeeded(job, folder)
+        finally:
+            with self._lock:
+                job.loop = job.task = None
 
     def _finish(self, job: _Job, status: JobStatus) -> None:
         """Final status (lock held); wakes up wait()."""
@@ -573,7 +645,7 @@ class JobManager:
         job.done.set()
 
     def _finish_succeeded(self, job: _Job, folder: Path) -> None:
-        files = _result_files(Path(folder))
+        files = _result_files(Path(folder), prompt_only=job.settings.prompt_only)
         with self._lock:
             job.files = files
             self._append(job, ConsoleEvent("success", FINAL_SUCCESS_MESSAGE))
@@ -617,7 +689,7 @@ class JobManager:
         with self._lock:
             job = self._find(job_id)
             if job.status not in FINISHED_STATUSES:
-                job.cancel_requested = True
+                _request_cancel(job)
             return self._snapshot(job, None, limit=None)
 
     def wait(self, job_id: str, timeout: float | None = None) -> JobSnapshot:
@@ -635,7 +707,7 @@ class JobManager:
             active = self._active()
             if active is None:
                 return
-            active.cancel_requested = True
+            _request_cancel(active)
             thread = active.thread
         if thread is None or thread is threading.current_thread():
             return

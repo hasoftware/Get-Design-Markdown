@@ -20,8 +20,12 @@ Folders (every helper returns an absolute path and creates nothing):
   Documents folder, also when it was moved, e.g. into OneDrive); `gdm ui` uses config.output_dir
   (GDM_OUTPUT_DIR, or ./output) made absolute against the current directory.
 
-ui-settings.json is UiSettings.model_dump_json(indent=2): a JSON object with schema_version and
-the fields below; output_dir is stored as an absolute path string.
+ui-settings.json is a JSON object with schema_version and UiSettings fields; output_dir is stored
+as an absolute path string. The UI writes it with update_ui_settings(): only the fields the user
+changed to a value other than its default are stored, so every other field keeps following the
+defaults of each session (GDM_OUTPUT_DIR / the current folder, GDM_BROWSER, GDM_TIMEOUT,
+GDM_MAX_ELEMENTS). save_ui_settings() writes every field (UiSettings.model_dump_json(indent=2)).
+load_ui_settings() reads both forms.
 """
 
 from __future__ import annotations
@@ -31,6 +35,8 @@ import json
 import logging
 import os
 import sys
+import tempfile
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -42,7 +48,7 @@ from get_design_markdown.errors import ConfigError
 from get_design_markdown.models.base import GdmModel
 from get_design_markdown.models.raw import BrowserChoice
 from get_design_markdown.resources import is_frozen
-from get_design_markdown.storage import save_model
+from get_design_markdown.storage import save_json, save_model
 
 logger = logging.getLogger("get_design_markdown.ui")
 
@@ -237,6 +243,44 @@ def absolute_output_dir(path: Path | str) -> Path:
     return Path(os.path.normpath(candidate))
 
 
+def same_output_dir(first: Path | str, second: Path | str) -> bool:
+    """True when two output folders name the same path (case-insensitive on Windows)."""
+    return os.path.normcase(os.path.normpath(first)) == os.path.normcase(os.path.normpath(second))
+
+
+def output_dir_problem(path: Path) -> str | None:
+    """Why `path` (absolute) cannot hold the results, as a Vietnamese sentence; None when it can.
+
+    The folder itself may not exist yet (jobs create it), but its drive must exist, its nearest
+    existing parent must be a folder, and a folder must be creatable there: a temporary folder
+    is created and removed again to find out (on Windows the access rights cannot be read
+    reliably otherwise).
+    """
+    try:
+        if path.exists() and not path.is_dir():
+            return f"'{path}' là một tệp, không phải thư mục; hãy chọn một thư mục."
+        anchor = path.anchor
+        if anchor and not Path(anchor).exists():
+            return f"Không tìm thấy ổ đĩa {anchor} trên máy này nên không lưu được vào '{path}'."
+        existing = path
+        while not existing.exists():
+            if existing.parent == existing:
+                return f"Không tìm thấy vị trí '{path}' trên máy này."
+            existing = existing.parent
+        if not existing.is_dir():
+            return f"Không tạo được thư mục '{path}' vì '{existing}' là một tệp."
+    except (OSError, ValueError):
+        return f"Không dùng được '{path}' làm thư mục lưu kết quả."
+    try:
+        probe = tempfile.mkdtemp(prefix=".gdm-write-check-", dir=existing)
+    except OSError as error:
+        reason = error.strerror or type(error).__name__
+        return f"Không có quyền tạo thư mục trong '{existing}' ({reason})."
+    with contextlib.suppress(OSError):
+        os.rmdir(probe)
+    return None
+
+
 def _output_dir_value(value: Any) -> Path | None:
     """A usable output_dir from the saved file, or None (blank or not a path string)."""
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
@@ -244,25 +288,18 @@ def _output_dir_value(value: Any) -> Path | None:
     return absolute_output_dir(value)
 
 
-def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
-    """The saved settings at `path` laid over `defaults`; never raises for file problems.
-
-    - Missing file: `defaults`.
-    - Not readable / not JSON / not an object: `defaults` (the file is left in place and a
-      warning is logged with the `logging` module).
-    - Unknown keys (written by a newer version) are ignored; a key whose value fails
-      validation keeps its default (other keys still apply); schema_version is not trusted.
-    - A relative output_dir is resolved against the user's home folder.
-    """
+def _read_document(path: Path) -> dict[str, Any] | None:
+    """The JSON object stored at `path`; None when the file is missing or unusable (a warning
+    is logged for an unusable one, which is left in place)."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return defaults
+        return None
     except (OSError, UnicodeDecodeError, ValueError) as error:
         logger.warning(
             "Không đọc được cấu hình giao diện %s (%s); dùng giá trị mặc định.", path, error
         )
-        return defaults
+        return None
     try:
         data = json.loads(text)
     except (ValueError, RecursionError) as error:
@@ -271,16 +308,22 @@ def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
             path,
             error,
         )
-        return defaults
+        return None
     if not isinstance(data, dict):
         logger.warning(
             "File cấu hình giao diện %s không chứa một đối tượng JSON; dùng giá trị mặc định.",
             path,
         )
-        return defaults
+        return None
+    return data
 
+
+def _saved_choices(document: Mapping[str, Any], defaults: UiSettings, path: Path) -> dict[str, Any]:
+    """The known fields of `document` whose value is valid over `defaults` (output_dir made
+    absolute); every other key is skipped, an invalid value with a logged warning."""
+    choices: dict[str, Any] = {}
     merged: dict[str, Any] = defaults.model_dump()
-    for key, value in data.items():
+    for key, value in document.items():
         if key == "schema_version" or key not in UiSettings.model_fields:
             continue
         if key == "output_dir":
@@ -298,8 +341,73 @@ def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
             )
             continue
         merged[key] = value
-    merged["schema_version"] = UI_SETTINGS_SCHEMA_VERSION
-    return UiSettings.model_validate(merged)
+        choices[key] = value
+    return choices
+
+
+def _over_defaults(defaults: UiSettings, choices: Mapping[str, Any]) -> UiSettings:
+    return UiSettings.model_validate(
+        {**defaults.model_dump(), **choices, "schema_version": UI_SETTINGS_SCHEMA_VERSION}
+    )
+
+
+def load_ui_settings(path: Path, defaults: UiSettings) -> UiSettings:
+    """The saved settings at `path` laid over `defaults`; never raises for file problems.
+
+    - Missing file: `defaults`.
+    - Not readable / not JSON / not an object: `defaults` (the file is left in place and a
+      warning is logged with the `logging` module).
+    - Unknown keys (written by a newer version) are ignored; a key whose value fails
+      validation keeps its default (other keys still apply); schema_version is not trusted.
+    - A relative output_dir is resolved against the user's home folder.
+    """
+    document = _read_document(path)
+    if document is None:
+        return defaults
+    return _over_defaults(defaults, _saved_choices(document, defaults, path))
+
+
+def _same_setting(name: str, first: Any, second: Any) -> bool:
+    if name == "output_dir":
+        return same_output_dir(first, second)
+    return bool(first == second)
+
+
+def update_ui_settings(path: Path, defaults: UiSettings, changes: Mapping[str, Any]) -> UiSettings:
+    """Apply the user's `changes` (UiSettings field -> value) to the file at `path` and return
+    the resulting settings (`defaults` + the stored choices).
+
+    A changed field equal to its default is removed from the file, any other changed field is
+    stored; the fields not in `changes` keep what the file says (keys of a newer version
+    included), so a default the user never changed is never written and keeps following the
+    environment. Raises pydantic.ValidationError for an invalid value (nothing is written) and
+    ConfigError when the file cannot be written.
+    """
+    document = _read_document(path) or {}
+    choices = _saved_choices(document, defaults, path)
+    updated = _over_defaults(defaults, {**choices, **changes})
+    stored = set(choices)
+    for name in changes:
+        if name not in UiSettings.model_fields or name == "schema_version":
+            continue
+        if _same_setting(name, getattr(updated, name), getattr(defaults, name)):
+            stored.discard(name)
+        else:
+            stored.add(name)
+    values = updated.model_dump(mode="json")
+    values["output_dir"] = str(absolute_output_dir(updated.output_dir))
+    content: dict[str, Any] = {"schema_version": UI_SETTINGS_SCHEMA_VERSION}
+    content.update({name: values[name] for name in UiSettings.model_fields if name in stored})
+    # Keys written by a newer version are kept for it.
+    content.update(
+        {
+            key: value
+            for key, value in document.items()
+            if key not in UiSettings.model_fields and key not in content
+        }
+    )
+    _write_config(lambda: save_json(content, path), path)
+    return updated
 
 
 def save_ui_settings(settings: UiSettings, path: Path) -> Path:
@@ -314,8 +422,14 @@ def save_ui_settings(settings: UiSettings, path: Path) -> Path:
             "output_dir": absolute_output_dir(settings.output_dir),
         }
     )
+    _write_config(lambda: save_model(stored, path), path)
+    return path
+
+
+def _write_config(write: Callable[[], Path], path: Path) -> None:
+    """Run `write` (an atomic storage.save_* call for `path`); OSError -> ConfigError."""
     try:
-        save_model(stored, path)
+        write()
     except OSError as error:
         _remove_quietly(path.with_name(path.name + ".tmp"))
         reason = error.strerror or type(error).__name__
@@ -326,7 +440,6 @@ def save_ui_settings(settings: UiSettings, path: Path) -> Path:
                 f"cấu hình khác bằng biến môi trường {CONFIG_DIR_ENV}."
             ),
         ) from None
-    return path
 
 
 def _remove_quietly(path: Path) -> None:
