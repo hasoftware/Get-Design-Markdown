@@ -261,6 +261,10 @@ def _color_entry(ctx: Context, name: str, token: ColorToken, usage: list[str]) -
     descriptive = ctx.color_name(token.value)
     if name.startswith("on-") and name[3:]:
         role = ctx.p("colors.on_role", base=name[3:])
+    elif token.role == ColorRole.BRAND and color is not None and not is_chromatic(color):
+        # A neutral fill named as the button background (linear.app's light-gray CTA) is the
+        # primary action, not a brand accent.
+        role = ctx.p("colors.role.brand_neutral")
     else:
         role = ctx.p(f"colors.role.{token.role.value}")
     details.append(f"{descriptive} — {role}" if descriptive else role)
@@ -292,7 +296,8 @@ def _contrast_table(ctx: Context) -> str | None:
     facts = ctx.facts
     pairs = list(facts.analysis.colors.contrast_pairs)
     failing = [pair for pair in pairs if not pair.passes_aa]
-    passing = sorted((pair for pair in pairs if pair.passes_aa), key=lambda pair: -pair.occurrences)
+    # contrast_pairs come ranked by page-weighted occurrences: the requested page leads.
+    passing = [pair for pair in pairs if pair.passes_aa]
     keep = {id(pair) for pair in failing}
     keep.update(id(pair) for pair in passing[: max(MAX_CONTRAST_ROWS - len(failing), 0)])
     rows = [

@@ -176,6 +176,7 @@ colors:
     text_muted: "chữ phụ"
     neutral: "trung tính"
     brand: "màu nhấn thương hiệu / hành động chính"
+    brand_neutral: "hành động chính (nền trung tính)"
     accent: "màu nhấn phụ"
     success: "trạng thái thành công"
     warning: "trạng thái cảnh báo"
@@ -453,6 +454,7 @@ components:
 
 dos:
   primary_action: "Nên dành {ref} cho nút kêu gọi hành động chính và các điểm nhấn ({components})."
+  primary_action_neutral: "Nên dành {ref} cho nút kêu gọi hành động chính ({components})."
   primary_color: "Nên dùng {ref} làm màu nhấn ở đúng những chỗ đã đo được ({components})."
   text_pair: "Nên đặt chữ nội dung bằng {fg} trên {bg} ({ratio})."
   type_pair: "Nên đặt tiêu đề bằng {heading} và chữ thân bài bằng {body}."
@@ -490,7 +492,7 @@ donts:
     large: "Chỉ chấp nhận được cho chữ lớn (≥ 24px, hoặc ≥ 18.66px khi in đậm)."
 
 guide:
-  intro: "Bản tóm tắt dùng ngay cho AI coding agent. Mọi giá trị bên dưới đều là token định nghĩa trong front matter: hãy tham chiếu token, không chép giá trị thô."
+  intro: "Bản tóm tắt dùng ngay cho AI coding agent. Giá trị nào đi kèm token trong front matter thì hãy tham chiếu token, không chép giá trị thô; giá trị không kèm token là số đo của component, không phải token mới."
   quick:
     action: "Hành động chính: nền {primary}, chữ {on_primary}"
     primary: "Màu nhấn chính: {primary}"

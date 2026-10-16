@@ -17,6 +17,7 @@ from get_design_markdown.models.analysis import (
 )
 from get_design_markdown.synthesizer.facts import DesignFacts
 from get_design_markdown.synthesizer.render import render_design_md
+from get_design_markdown.synthesizer.sections_style import MAX_CONTRAST_ROWS
 from get_design_markdown.synthesizer.validate import validate_design_md
 from tests.fixture_data import load_analysis_sample
 
@@ -349,3 +350,55 @@ def test_no_unreferenced_section_when_every_token_is_referenced_or_no_components
     assert "Tokens Without a Component Reference" not in text
     analysis.components = []
     assert "Tokens Without a Component Reference" not in render_design_md(analysis)
+
+
+# ─── Change requests of fix round 2 ──────────────────────────────────────────
+
+
+def test_neutral_primary_is_worded_as_an_action_fill() -> None:
+    # linear.app: the primary is the light-gray invert CTA #e5e5e6, not a brand accent.
+    analysis = load_analysis_sample()
+    primary = next(token for token in analysis.colors.tokens if token.name == "primary")
+    primary.value = "#e5e5e6"
+    _spec(analysis, "button-primary").properties["backgroundColor"] = "#e5e5e6"
+    text = render_design_md(analysis, lang="en")
+    entry = next(line for line in text.splitlines() if line.startswith("- **primary**"))
+    assert "primary action (neutral fill)" in entry
+    assert "brand accent" not in entry
+    do = next(line for line in text.splitlines() if "for the main call to action" in line)
+    assert "and accents" not in do
+    vi = render_design_md(analysis, lang="vi")
+    assert "hành động chính (nền trung tính)" in vi
+    assert "và các điểm nhấn" not in vi
+
+
+def test_chromatic_primary_keeps_the_brand_wording() -> None:
+    text = render_design_md(load_analysis_sample(), lang="en")
+    entry = next(line for line in text.splitlines() if line.startswith("- **primary**"))
+    assert "brand accent / primary action" in entry
+    assert any("main call to action and accents" in line for line in text.splitlines())
+
+
+def test_contrast_table_keeps_the_page_weighted_ranking() -> None:
+    # colors_contrast ranks pairs by page-weighted occurrences: a home-page pair seen 3 times
+    # leads sub-page pairs seen 50 times. When the table is full, the rows kept are the first
+    # ones of that ranking, not the most frequent raw counts.
+    analysis = load_analysis_sample()
+    sub_pages = [
+        _pair("#0f172a", "ink", 50 + index, f"pricing table cell {index}")
+        for index in range(MAX_CONTRAST_ROWS)
+    ]
+    analysis.colors.contrast_pairs = [_pair("#475569", "muted", 3, "home lead paragraph")]
+    analysis.colors.contrast_pairs += sub_pages
+    text = render_design_md(analysis, lang="en")
+    assert "home lead paragraph" in text
+    assert text.index("home lead paragraph") < text.index("pricing table cell 0")
+    assert f"pricing table cell {MAX_CONTRAST_ROWS - 1}" not in text
+
+
+def test_guide_intro_does_not_claim_every_value_is_a_token() -> None:
+    # Prompts quote measured paddings, heights and translucent fills that have no token.
+    text = render_design_md(load_analysis_sample(), lang="en")
+    guide = _section(text, "Agent Prompt Guide")
+    assert "Every value below is a token" not in guide
+    assert "values given without a token are measured component values" in _flat(guide)

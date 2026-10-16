@@ -574,7 +574,7 @@ Illustrative `ex-*` surfaces (enabled with --examples) built only from the token
 
 ## Agent Prompt Guide
 
-A ready-made brief for AI coding agents. Every value below is a token defined in the front matter: reference the token, not a raw value.
+A ready-made brief for AI coding agents. Where a value is given with its front-matter token, reference the token rather than the raw value; values given without a token are measured component values, not new tokens.
 
 ### Quick Reference
 

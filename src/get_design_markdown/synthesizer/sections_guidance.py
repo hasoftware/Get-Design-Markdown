@@ -8,6 +8,7 @@ from get_design_markdown.analyzer.css_values import (
     AA_NORMAL,
     GENERIC_FONT_FAMILIES,
     is_generic_family,
+    parse_color,
     parse_sides_px,
 )
 from get_design_markdown.analyzer.naming import (
@@ -23,6 +24,7 @@ from get_design_markdown.models.analysis import (
     ComponentSpec,
     TypeLevel,
 )
+from get_design_markdown.synthesizer.colornames import is_chromatic
 from get_design_markdown.synthesizer.context import Context
 from get_design_markdown.synthesizer.examples import ExampleSurface
 from get_design_markdown.synthesizer.facts import STATUS_ROLES, PairCheck, is_transparent_value
@@ -377,8 +379,10 @@ def _dos(ctx: Context) -> list[str]:
         if primary_button is not None and primary_button.token_refs.get(
             "backgroundColor"
         ) == token_ref(COLORS, "primary"):
+            primary = parse_color(facts.colors["primary"].value)
+            neutral = primary is not None and not is_chromatic(primary)
             line = ctx.p(
-                "dos.primary_action",
+                "dos.primary_action_neutral" if neutral else "dos.primary_action",
                 ref=ctx.color_ref("primary"),
                 components=name_list(ctx, users),
             )

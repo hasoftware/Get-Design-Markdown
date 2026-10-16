@@ -175,6 +175,7 @@ colors:
     text_muted: "secondary text"
     neutral: "neutral"
     brand: "brand accent / primary action"
+    brand_neutral: "primary action (neutral fill)"
     accent: "secondary accent"
     success: "success status"
     warning: "warning status"
@@ -452,6 +453,7 @@ components:
 
 dos:
   primary_action: "Do reserve {ref} for the main call to action and accents ({components})."
+  primary_action_neutral: "Do reserve {ref} for the main call to action ({components})."
   primary_color: "Do use {ref} as the accent where it was measured ({components})."
   text_pair: "Do set running text in {fg} on {bg} ({ratio})."
   type_pair: "Do set headlines in {heading} and body copy in {body}."
@@ -489,7 +491,7 @@ donts:
     large: "Acceptable only for large text (≥ 24px, or ≥ 18.66px bold)."
 
 guide:
-  intro: "A ready-made brief for AI coding agents. Every value below is a token defined in the front matter: reference the token, not a raw value."
+  intro: "A ready-made brief for AI coding agents. Where a value is given with its front-matter token, reference the token rather than the raw value; values given without a token are measured component values, not new tokens."
   quick:
     action: "Primary action: background {primary}, text {on_primary}"
     primary: "Primary accent: {primary}"

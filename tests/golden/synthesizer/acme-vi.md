@@ -542,7 +542,7 @@ Chân trang. Số lần xuất hiện: 1.
 
 ## Agent Prompt Guide
 
-Bản tóm tắt dùng ngay cho AI coding agent. Mọi giá trị bên dưới đều là token định nghĩa trong front matter: hãy tham chiếu token, không chép giá trị thô.
+Bản tóm tắt dùng ngay cho AI coding agent. Giá trị nào đi kèm token trong front matter thì hãy tham chiếu token, không chép giá trị thô; giá trị không kèm token là số đo của component, không phải token mới.
 
 ### Tra cứu nhanh
 
