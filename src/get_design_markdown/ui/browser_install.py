@@ -425,12 +425,45 @@ def _write_line(stream: IO[str] | None, text: str) -> None:
         pass
 
 
+def has_std_handles() -> bool:
+    """True when this process has OS-level stdout and stderr (a console, a pipe or a file).
+
+    A windowed exe started from Explorer or `Start-Process` without redirection has none, and a
+    child process that inherits none (the Node driver) fails before printing anything.
+    """
+    try:
+        os.fstat(1)
+        os.fstat(2)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _output_target() -> IO[str] | int | None:
+    """Where the driver writes: None (inherit) when this process has standard handles (the
+    pipe of BrowserInstaller, or the console), else sys.stdout when it is a real file (ui.log in
+    the windowed exe), else nowhere."""
+    if has_std_handles():
+        return None
+    stream = sys.stdout
+    if stream is None:
+        return subprocess.DEVNULL
+    try:
+        stream.flush()
+        stream.fileno()
+    except (OSError, ValueError, AttributeError):
+        return subprocess.DEVNULL
+    return stream
+
+
 def run_install_cli(argv: Sequence[str] = ()) -> int:
     """The exe's hidden `install-browser` sub-command; returns the installer's exit code.
 
     Runs `<driver node> <driver cli.js> install --only-shell [argv...] chromium` with the
     driver's environment. The driver writes straight to this process's standard output (the pipe
-    of BrowserInstaller, or the console), so its progress lines reach the caller unchanged.
+    of BrowserInstaller, or the console), so its progress lines reach the caller unchanged; a
+    windowed exe started without standard handles gives the driver ui.log instead, and the exit
+    code is logged either way.
     """
     ensure_user_browsers_path()
     try:
@@ -448,11 +481,14 @@ def run_install_cli(argv: Sequence[str] = ()) -> int:
         return 1
     _write_line(sys.stdout, f"Đang tải Chromium cho Playwright vào {playwright_browsers_dir()}…")
     command = [str(node), str(cli), "install", ONLY_SHELL_OPTION, *argv, "chromium"]
+    target = _output_target()
     try:
         completed = subprocess.run(
             command,
             env=get_driver_env(),
             stdin=subprocess.DEVNULL,
+            stdout=target,
+            stderr=None if target is None else subprocess.STDOUT,
             creationflags=_creation_flags(),
             check=False,
         )
@@ -461,6 +497,12 @@ def run_install_cli(argv: Sequence[str] = ()) -> int:
         return 1
     except KeyboardInterrupt:
         return 130
+    if completed.returncode != 0:
+        _write_line(
+            sys.stderr,
+            f"Lỗi: trình cài Chromium kết thúc với mã lỗi {completed.returncode}.",
+        )
+    logger.info("Chromium installer exited with code %s", completed.returncode)
     return completed.returncode
 
 
@@ -544,7 +586,6 @@ class BrowserInstaller:
         self._finished = threading.Event()
         self._finished.set()
         self._part = 0
-        self._title = "Chromium"
 
     def start(self) -> InstallStatus:
         """Start the install in the background (no-op while one is running)."""
@@ -554,7 +595,6 @@ class BrowserInstaller:
             command = list(self.command) if self.command is not None else install_command()
             self._tail.clear()
             self._part = 0
-            self._title = "Chromium"
             self._status = InstallStatus(
                 state="running", message=INSTALL_STARTING, started_at=_now()
             )
@@ -657,17 +697,15 @@ class BrowserInstaller:
     def _on_line(self, line: str) -> None:
         with self._lock:
             self._tail.append(line)
-            title = download_title(line)
-            if title is not None:
+            if download_title(line) is not None:
                 self._part += 1
-                self._title = title
                 self._status = self._status.model_copy(
                     update={"percent": 0.0, "message": self._progress_message(0.0)}
                 )
                 return
             if _DOWNLOADED_RE.search(line):
                 self._status = self._status.model_copy(
-                    update={"percent": 100.0, "message": f"Đã tải xong {self._title}."}
+                    update={"percent": 100.0, "message": f"Đã tải xong {self._part_label()}."}
                 )
                 return
             percent = parse_progress(line)
@@ -676,6 +714,10 @@ class BrowserInstaller:
                     update={"percent": percent, "message": self._progress_message(percent)}
                 )
 
+    def _part_label(self) -> str:
+        """ "Chromium", then "Chromium (phần 2)"...: Playwright's own download names (Chrome
+        Headless Shell, FFmpeg, Winldd) mean nothing to most users; the log tail keeps them."""
+        return f"Chromium (phần {self._part})" if self._part > 1 else "Chromium"
+
     def _progress_message(self, percent: float) -> str:
-        part = f" (phần {self._part})" if self._part > 1 else ""
-        return f"Đang tải {self._title}{part}… {percent:.0f}%"
+        return f"Đang tải {self._part_label()}… {percent:.0f}%"

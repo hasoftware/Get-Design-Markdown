@@ -363,6 +363,40 @@ def test_run_install_cli_runs_the_driver(
     assert run_install_cli() == 7
 
 
+def test_run_install_cli_without_standard_handles_writes_to_the_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A windowed exe started without redirection has no stdout/stderr handles: the driver
+    gets ui.log (sys.stdout there) instead of inheriting nothing and failing silently."""
+    fake_cli = _script(
+        tmp_path,
+        "cli.py",
+        """
+        import sys
+        print("DRIVER OUT")
+        print("DRIVER ERR", file=sys.stderr)
+        sys.exit(3)
+        """,
+    )
+    monkeypatch.setattr(
+        browser_install, "driver_executable", lambda: (Path(sys.executable), fake_cli)
+    )
+    monkeypatch.setattr(browser_install, "has_std_handles", lambda: False)
+    log_path = tmp_path / "ui.log"
+    with log_path.open("a", encoding="utf-8") as log:
+        monkeypatch.setattr(sys, "stdout", log)
+        monkeypatch.setattr(sys, "stderr", log)
+        assert run_install_cli() == 3
+    text = log_path.read_text(encoding="utf-8")
+    assert "Đang tải Chromium cho Playwright" in text
+    assert "DRIVER OUT" in text and "DRIVER ERR" in text
+    assert "kết thúc với mã lỗi 3" in text
+
+
+def test_has_std_handles_in_a_normal_process() -> None:
+    assert browser_install.has_std_handles() is True
+
+
 def test_run_install_cli_without_a_driver(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -526,7 +560,7 @@ def test_installer_reports_progress_and_success(
     _wait_for(lambda: installer.status().percent == 40.0)
     running = installer.status()
     assert running.state == "running"
-    assert running.message == "Đang tải Chrome for Testing… 40%"
+    assert running.message == "Đang tải Chromium… 40%"
     assert any("\u25a0" in line for line in running.log_tail)  # UTF-8 progress bar kept
     gate.write_text("go", encoding="utf-8")
     done = installer.wait(30)
@@ -549,10 +583,12 @@ def test_installer_progress_messages_per_part(fake_installer: list[str]) -> None
     installer._on_line = record  # type: ignore[method-assign]
     installer.start()
     assert installer.wait(30).state == "succeeded"
-    assert "Đang tải Chrome for Testing… 0%" in seen
-    assert "Đang tải Chrome for Testing… 80%" in seen
-    assert "Đã tải xong Chrome for Testing." in seen
-    assert "Đang tải Chrome Headless Shell (phần 2)… 10%" in seen
+    assert "Đang tải Chromium… 0%" in seen
+    assert "Đang tải Chromium… 80%" in seen
+    assert "Đã tải xong Chromium." in seen
+    assert "Đang tải Chromium (phần 2)… 10%" in seen
+    # Playwright's download names stay in the log tail only.
+    assert not any("Headless" in message or "Testing" in message for message in seen)
 
 
 def test_installer_failure_has_a_vietnamese_message_and_hint(
