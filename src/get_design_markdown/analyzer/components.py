@@ -10,10 +10,13 @@ How it works:
    filled/outline, ghost-shaped, nav links, inline text links, inputs, cards, badges) and finds
    the page chrome (top nav, sidebar, footer). Overlays, decorative subtrees (illustrations,
    app mock-ups built from DOM) and elements mostly outside the viewport are skipped.
-2. Pools are grouped by visual signature (colors merged within ΔE2000 < 3). A group's
-   representative is its most prominent member (visible area, x2 in the first two screens,
-   x page weight) among those with the group's most common background; it gives the raw
-   properties. The most common hover change set gives the "hover" state.
+2. Pools are grouped by visual signature (colors merged within ΔE2000 < 3). Single-spec pools
+   (links, inputs, badges) keep the group with the most members counted at their page weight,
+   so the requested page leads and sub-pages only add evidence. A group's representative is
+   its most prominent member (visible area, x2 in the first two screens, x page weight) among
+   those with the group's most common background; it gives the raw properties, with uneven
+   corners kept as a border-radius shorthand. The "hover" state keeps the changes shared by
+   most hovered members.
 3. Filled button groups become primary/secondary/tertiary from the palette tokens, else from
    the header CTA, chroma and emphasis; outline and ghost groups keep their own variant.
 4. Cards are read from their painted surface (components_surface), which may come from
@@ -39,6 +42,7 @@ from get_design_markdown.analyzer.components_context import (
     is_pill,
     padding_px,
     radius_px,
+    rounded_value,
     same_color,
     text_color,
     visible_border,
@@ -199,10 +203,11 @@ def _same_colors(first: Key, second: Key, positions: Sequence[int]) -> bool:
 
 
 def _pick(groups: Sequence[Group]) -> Group | None:
-    """Most common signature; ties go to the most prominent group."""
+    """Most common signature, members counted at their page weight (the requested page
+    leads; a sub-page only adds evidence); ties go to the most prominent group."""
     if not groups:
         return None
-    return max(groups, key=lambda group: (group.count, group.prominence))
+    return max(groups, key=lambda group: (round(group.weight, 6), group.prominence))
 
 
 # ─── Builder ─────────────────────────────────────────────────────────────────
@@ -605,7 +610,8 @@ class _Builder:
         radius: float | None = None,
     ) -> dict[str, str]:
         refs: dict[str, str] = {}
-        if "rounded" in properties:
+        # A radius step stands for four equal corners: a tab ("4px 4px 0px 0px") has none.
+        if "rounded" in properties and " " not in properties["rounded"].strip():
             ref = radius_ref(element, self.tokens, radius)
             if ref is not None:
                 refs["rounded"] = ref
@@ -674,8 +680,9 @@ def _surface_properties(
         color, widths = surface.border
         properties["borderColor"] = css_color(color)
         properties["borderWidth"] = format_sides_px(widths)
-    if surface.radius > 0:
-        properties["rounded"] = format_px(surface.radius)
+    rounded = rounded_value(surface.corners)
+    if rounded is not None:
+        properties["rounded"] = rounded
     padding = padding_px(padding_from)
     if any(side > 0 for side in padding):
         properties["padding"] = format_sides_px(padding)

@@ -15,11 +15,12 @@ from dataclasses import dataclass
 from get_design_markdown.analyzer.common import is_rendered, own_background
 from get_design_markdown.analyzer.components_context import (
     DISTINCT_FILL_DELTA_E,
+    Corners,
     PageContext,
     backdrop,
+    corner_radii,
     has_text,
     padding_px,
-    radius_px,
     shadow_layers,
     shadow_strength,
     visible_border,
@@ -51,8 +52,15 @@ class Surface:
     background: RGBA | None
     #: (color, four widths) of a real border or of a framing fill.
     border: tuple[RGBA, tuple[float, float, float, float]] | None
-    radius: float
+    #: Per-corner radii (top-left, top-right, bottom-right, bottom-left): the largest of the
+    #: layers at each corner.
+    corners: Corners
     shadow: tuple[ShadowLayer, ...]
+
+    @property
+    def radius(self) -> float:
+        """Largest corner radius."""
+        return max(self.corners)
 
     @property
     def strength(self) -> float:
@@ -88,7 +96,8 @@ def hugging_chain(ctx: PageContext, element: ElementSample) -> list[ElementSampl
 
 def resolve_surface(ctx: PageContext, element: ElementSample) -> Surface:
     chain = hugging_chain(ctx, element)
-    radius = max(radius_px(node) for node in chain)
+    radii = [corner_radii(node) for node in chain]
+    tl, tr, br, bl = (max(node[corner] for node in radii) for corner in range(4))
     shadow: tuple[ShadowLayer, ...] = ()
     for node in chain:
         layers = shadow_layers(node)
@@ -104,7 +113,7 @@ def resolve_surface(ctx: PageContext, element: ElementSample) -> Surface:
     background = fills[-1][1] if fills else None
     if border is None and len(fills) >= 2:
         border = _frame_border(fills[0], fills[-1])
-    return Surface(background=background, border=border, radius=radius, shadow=shadow)
+    return Surface(background=background, border=border, corners=(tl, tr, br, bl), shadow=shadow)
 
 
 def _frame_border(

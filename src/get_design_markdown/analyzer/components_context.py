@@ -24,6 +24,8 @@ from get_design_markdown.analyzer.css_values import (
     composite,
     delta_e_2000,
     flatten,
+    format_px,
+    format_sides_px,
     gradient_colors,
     parse_color,
     parse_number,
@@ -46,6 +48,11 @@ DISTINCT_FILL_DELTA_E = 2.0
 OPAQUE_ENOUGH = 0.5
 VIEWPORT_HEIGHT = 900.0
 HIDDEN_BORDER_STYLES = frozenset({"none", "hidden"})
+#: Corner radii closer than this (px) are one radius.
+CORNER_TOLERANCE_PX = 0.5
+
+#: (top-left, top-right, bottom-right, bottom-left) in px.
+Corners = tuple[float, float, float, float]
 
 
 # ─── Page context & members ──────────────────────────────────────────────────
@@ -160,6 +167,12 @@ class Group:
     @property
     def count(self) -> int:
         return len(self.members)
+
+    @property
+    def weight(self) -> float:
+        """Members counted at their page weight (see common.page_weights): a long sub-page
+        listing 18 links of one style weighs less than the 5 inline links of the main page."""
+        return sum(member.ctx.weight for member in self.members)
 
     def merge(self, other: Group) -> None:
         self.members = by_prominence([*self.members, *other.members])
@@ -295,29 +308,52 @@ def first_visible_side(element: ElementSample) -> int:
 # ─── Geometry ────────────────────────────────────────────────────────────────
 
 
-def radius_px(element: ElementSample) -> float:
-    """Largest corner radius in px; pills/circles (>= 500px or >= 50%) give 9999."""
+def _corner_px(corner: str, shortest: float) -> float:
+    token = corner.strip().split(" ")[0] if corner.strip() else ""
+    if token.endswith("%"):
+        percent = parse_number(token[:-1]) or 0.0
+        if percent >= 50:
+            return FULL_RADIUS_PX
+        value = percent / 100.0 * shortest
+    else:
+        value = parse_px(token) or 0.0
+    return FULL_RADIUS_PX if value >= PILL_RADIUS_PX else max(value, 0.0)
+
+
+def corner_radii(element: ElementSample) -> Corners:
+    """(top-left, top-right, bottom-right, bottom-left) radii in px, the order of the
+    border-radius shorthand; pills/circles (>= 500px or >= 50%) give 9999."""
     box = element.box
     shortest = max(min(box.width, box.height), 0.0)
-    largest = 0.0
-    for corner in element.styles.border_radius:
-        token = corner.strip().split(" ")[0] if corner.strip() else ""
-        if token.endswith("%"):
-            percent = parse_number(token[:-1]) or 0.0
-            if percent >= 50:
-                return FULL_RADIUS_PX
-            value = percent / 100.0 * shortest
-        else:
-            value = parse_px(token) or 0.0
-        largest = max(largest, value)
-    if largest >= PILL_RADIUS_PX:
-        return FULL_RADIUS_PX
-    return largest
+    tl, tr, br, bl = (_corner_px(corner, shortest) for corner in element.styles.border_radius)
+    return tl, tr, br, bl
+
+
+def radius_px(element: ElementSample) -> float:
+    """Largest corner radius in px; pills/circles (>= 500px or >= 50%) give 9999."""
+    return max(corner_radii(element))
+
+
+def uneven_corners(corners: Sequence[float]) -> bool:
+    """The corners differ (a tab "4px 4px 0px 0px", a speech bubble...)."""
+    return max(corners, default=0.0) - min(corners, default=0.0) > CORNER_TOLERANCE_PX
+
+
+def rounded_value(corners: Sequence[float]) -> str | None:
+    """`rounded` property: one length when the corners agree, else the four corners as a
+    border-radius shorthand ("4px 4px 0px 0px" is a tab, not a 4px box); None when square."""
+    largest = max(corners, default=0.0)
+    if largest <= 0:
+        return None
+    if not uneven_corners(corners):
+        return format_px(largest)
+    return format_sides_px(corners)
 
 
 def is_pill(element: ElementSample, radius: float | None = None) -> bool:
-    """Rounded ends: the radius covers at least half of the height (1px tolerance)."""
-    value = radius_px(element) if radius is None else radius
+    """Rounded ends: the radius (by default the smallest corner: a tab rounded on top only
+    is no pill) covers at least half of the height (1px tolerance)."""
+    value = min(corner_radii(element)) if radius is None else radius
     return value > 0 and value >= element.box.height / 2.0 - 1.0
 
 

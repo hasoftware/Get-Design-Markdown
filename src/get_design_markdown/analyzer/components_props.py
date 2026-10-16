@@ -20,14 +20,16 @@ from get_design_markdown.analyzer.components_context import (
     PageContext,
     backdrop,
     canonical_color,
+    corner_radii,
     css_color,
     first_visible_side,
     has_text,
     is_pill,
     padding_px,
-    radius_px,
+    rounded_value,
     shadow_layers,
     text_color,
+    uneven_corners,
     visible_border,
 )
 from get_design_markdown.analyzer.css_values import (
@@ -333,9 +335,9 @@ def box_properties(
         color, widths = border
         properties["borderColor"] = css_color(color)
         properties["borderWidth"] = format_sides_px(widths)
-    radius = radius_px(element)
-    if radius > 0:
-        properties["rounded"] = format_px(radius)
+    rounded = rounded_value(corner_radii(element))
+    if rounded is not None:
+        properties["rounded"] = rounded
     padding = padding_px(padding_from or element)
     if any(side > 0 for side in padding):
         properties["padding"] = format_sides_px(padding)
@@ -385,8 +387,13 @@ def _ref_candidates(tokens: TokenContext, key: str) -> list[ColorToken]:
 def radius_ref(
     element: ElementSample, tokens: TokenContext, radius: float | None = None
 ) -> str | None:
-    """{rounded.<step>} for the element's radius (or `radius` measured elsewhere)."""
-    radius = radius_px(element) if radius is None else radius
+    """{rounded.<step>} for the element's radius (or `radius` measured elsewhere); None when
+    the corners differ, since a step stands for all four."""
+    if radius is None:
+        corners = corner_radii(element)
+        if uneven_corners(corners):
+            return None
+        radius = max(corners)
     if radius <= 0:
         return None
     step = match_scale_step(radius, tokens.radii)
@@ -499,22 +506,33 @@ def hover_changes(member: Member) -> dict[str, str]:
     return ordered(changes)
 
 
-def hover_state(members: Sequence[Member]) -> dict[str, str]:
-    """Most common change set among hovered members (ties: the most prominent one)."""
-    counter: Counter[tuple[tuple[str, str], ...]] = Counter()
-    order: list[tuple[tuple[str, str], ...]] = []
-    for member in members:
-        changes = hover_changes(member)
-        if not changes:
+def _shared_changes(changed: Sequence[Mapping[str, str]]) -> dict[str, str]:
+    """Properties changed by more than half of the change sets, each with its most common
+    value (ties: the first set's, i.e. the most prominent member's)."""
+    values: dict[str, Counter[str]] = {}
+    for changes in changed:
+        for key, value in changes.items():
+            values.setdefault(key, Counter())[value] += 1
+    shared: dict[str, str] = {}
+    for key, counter in values.items():
+        if 2 * counter.total() <= len(changed):
             continue
-        key = tuple(changes.items())
-        if key not in counter:
-            order.append(key)
-        counter[key] += 1
-    if not counter:
+        # Counter keeps insertion order and max() returns the first maximum.
+        shared[key] = max(counter, key=lambda value: counter[value])
+    return ordered(shared)
+
+
+def hover_state(members: Sequence[Member]) -> dict[str, str]:
+    """Hover changes shared by most hovered members (members come most prominent first).
+
+    Only members whose hover visibly changes something vote; a property is kept when more
+    than half of them change it, with its most common value (ties: the most prominent
+    member's). A fade seen on one of two hovered CTAs is that instance's, not the component's.
+    """
+    changed = [changes for changes in (hover_changes(member) for member in members) if changes]
+    if not changed:
         return {}
-    best = max(order, key=lambda key: (counter[key], -order.index(key)))
-    return dict(best)
+    return _shared_changes(changed)
 
 
 def states_and_refs(
@@ -523,11 +541,13 @@ def states_and_refs(
     hover = hover_state(members)
     if not hover:
         return {}, {}
-    source = next((member for member in members if hover_changes(member) == hover), None)
+    changes = [(member, hover_changes(member)) for member in members]
     refs: dict[str, str] = {}
     for key, value in hover.items():
         if key not in _ROLES_BY_KEY:
             continue
+        # The resting color of a member showing this very change gives the hover direction.
+        source = next((member for member, seen in changes if seen.get(key) == value), None)
         ref = (
             color_ref(value, tokens, key=key)
             if source is None
