@@ -281,6 +281,7 @@ def build_steps(values: dict[float, _Value], base: int | None) -> list[ScaleStep
             name=name,
             value_px=entry.value,
             count=entry.count,
+            weight=round(entry.weight, 3),
             used_on=_top_selectors(entry.selectors),
         )
         for name, entry in zip(names, kept, strict=True)

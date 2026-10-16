@@ -201,6 +201,10 @@ class ScaleStep(GdmModel):
     name: TokenName
     value_px: float
     count: int = 0
+    #: Page-weighted usage (analyzer/common.page_weights: 1.0 per element on the main page,
+    #: less on sub-pages). 0 in files written before this field existed; readers then fall
+    #: back to `count`.
+    weight: float = 0.0
     used_on: list[str] = Field(default_factory=list)
 
 

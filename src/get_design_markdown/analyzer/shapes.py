@@ -337,6 +337,7 @@ def analyze_radii(pages: Sequence[PageCapture]) -> list[ScaleStep]:
             name=name,
             value_px=value,
             count=merged[value].count,
+            weight=round(merged[value].weight, 3),
             used_on=merged[value].used_on(),
         )
         for name, value in zip(names, values, strict=True)
@@ -347,6 +348,7 @@ def analyze_radii(pages: Sequence[PageCapture]) -> list[ScaleStep]:
                 name=FULL_RADIUS_NAME,
                 value_px=FULL_RADIUS_PX,
                 count=full.count,
+                weight=round(full.weight, 3),
                 used_on=full.used_on(),
             )
         )

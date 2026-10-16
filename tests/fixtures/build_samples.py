@@ -1679,7 +1679,8 @@ def build_components() -> list[ComponentSpec]:
 
 
 def _step(name: str, value: float, count: int, used_on: list[str]) -> ScaleStep:
-    return ScaleStep(name=name, value_px=value, count=count, used_on=used_on)
+    # A single main page weighs 1.0 per element, so the weighted usage equals the count.
+    return ScaleStep(name=name, value_px=value, count=count, weight=float(count), used_on=used_on)
 
 
 def _change(
