@@ -314,8 +314,9 @@ def test_middle_small_groups_merge_into_named_levels() -> None:
     assert levels[1].count == 6
 
 
-def test_h1_absorbs_one_off_larger_headline() -> None:
-    # linear.app: a closing 72px h2 is larger than the 64px hero h1 (text in spans).
+def test_largest_main_page_heading_keeps_its_own_level() -> None:
+    # linear.app: a closing 72px h2 is larger than the 64px hero h1 (text in spans); it is
+    # the page's biggest headline, so it is not folded into the h1 level.
     elements = [
         _el(0, "h1", own=False, font_size="64px"),
         _el(1, "span", "The product development", parent=0, font_size="64px"),
@@ -325,13 +326,91 @@ def test_h1_absorbs_one_off_larger_headline() -> None:
         *_texts(20, 8, "p", "15px", "Purpose-built for planning and building products."),
     ]
     levels = analyze_typography([_page(elements)]).levels
+    assert [(level.name, level.size_px, level.tags) for level in levels] == [
+        ("display", 72.0, ["h2"]),
+        ("heading", 64.0, ["h1"]),
+        ("title", 48.0, ["h2"]),
+        ("body", 15.0, ["p"]),
+    ]
+    assert levels[1].count == 2 and levels[1].samples[0] == "The product development"
+
+
+def test_stripe_section_headline_above_the_h1_keeps_its_size() -> None:
+    # stripe.com: h2 "The backbone of global commerce" (56px/300) is the largest text of the
+    # home page, above the 48px h1; a 56px/500 pricing h1 shares the size.
+    home = _page(
+        [
+            _el(0, "h1", "Financial infrastructure to grow your revenue.", font_size="48px"),
+            _el(1, "h2", "The backbone of global commerce", font_size="56px", font_weight="300"),
+            *_texts(10, 4, "h2", "32px", "Flexible solutions for every business model."),
+            *_texts(20, 20, "p", "16px", "Running text of the home page " * 2),
+        ]
+    )
+    pricing = _page(
+        [_el(0, "h1", "Pricing built for businesses", font_size="56px", font_weight="500")],
+        "pricing",
+    )
+    levels = analyze_typography([home, pricing]).levels
+    assert [(level.name, level.size_px) for level in levels][:2] == [
+        ("display", 56.0),
+        ("heading", 48.0),
+    ]
+    display = levels[0]
+    assert (display.weight, display.tags) == (300, ["h2", "h1"])
+    # The 56px/500 pricing h1 is not a sample of a 56px/300 level.
+    assert display.samples == ["The backbone of global commerce"]
+
+
+def test_h1_absorbs_one_off_larger_text_that_is_not_the_top_heading() -> None:
+    # A one-off 72px stat in a <p> and a sub-page's 70px headline join the 64px h1 level; the
+    # level keeps the h1's own tags, size and samples.
+    home = _page(
+        [
+            _el(0, "h1", "The product development system", font_size="64px"),
+            _el(1, "p", "99.999%", font_size="72px"),
+            *_texts(10, 4, "h2", "48px", "A new species of tool"),
+            *_texts(20, 8, "p", "15px", "Purpose-built for planning and building products."),
+        ]
+    )
+    sub = _page([_el(0, "h2", "Sub-page headline", font_size="70px")], "pricing")
+    levels = analyze_typography([home, sub]).levels
     assert [(level.name, level.size_px) for level in levels] == [
         ("display", 64.0),
         ("heading", 48.0),
         ("body", 15.0),
     ]
-    assert levels[0].tags == ["h1", "h2"]
-    assert levels[0].count == 3
+    assert (levels[0].tags, levels[0].count) == (["h1"], 3)
+    assert levels[0].samples == ["The product development system"]
+
+
+def test_body_samples_match_the_level_weight_and_line_height() -> None:
+    # stripe.com: 16px/400/16px button labels come first in the document, but the body level
+    # is the 16px/300/22.4px running text, so its samples are paragraphs.
+    elements = [
+        *_texts(0, 6, "a", "16px", "Get started", font_weight="400", line_height="16px"),
+        _el(10, "p", "Short", font_size="16px", font_weight="300", line_height="24px"),
+        *[
+            _el(
+                20 + i,
+                "p",
+                f"Running paragraph number {i} of the home page",
+                font_size="16px",
+                font_weight="300",
+                line_height="22.4px",
+            )
+            for i in range(10)
+        ],
+    ]
+    body = analyze_typography([_page(elements)]).levels[0]
+    assert (body.name, body.weight, body.line_height_px) == ("body", 300, 22.4)
+    assert body.samples == [
+        "Running paragraph number 0 of the home page",
+        "Running paragraph number 1 of the home page",
+        "Running paragraph number 2 of the home page",
+    ]
+    # Without text in the level's weight the samples fall back to the level's size.
+    labels = analyze_typography([_page(elements[:6])]).levels[0]
+    assert labels.samples == ["Get started"]
 
 
 def test_rare_display_text_survives_crowded_small_sizes() -> None:
@@ -423,23 +502,28 @@ def test_well_used_small_sizes_keep_their_own_levels() -> None:
 
 def test_regular_lead_size_is_not_folded_into_a_medium_label_size() -> None:
     # linear.app: 24px/400 lead paragraphs next to 20px/510 card titles and a 72px closing
-    # headline repeated on the page.
+    # headline repeated on the page; two 32px pull quotes fold into the lead level.
     elements = [
         _el(0, "h1", "The product development", font_size="64px", font_weight="510"),
         *_texts(10, 3, "h2", "72px", "Built for the future.", font_weight="510"),
-        *_texts(20, 4, "h2", "48px", "A new species of tool", font_weight="510"),
-        *_texts(30, 2, "p", "32px", "q" * 50),
-        *_texts(40, 3, "p", "24px", "Lead paragraph text here", line_height="31.92px"),
+        *_texts(20, 6, "h2", "48px", "A new species of product tool.", font_weight="510"),
+        *_texts(30, 2, "blockquote", "32px", "q" * 50),
+        *_texts(
+            40, 6, "p", "24px", "Lead paragraph text here, set a bit larger.", line_height="31.92px"
+        ),
         *_texts(50, 10, "a", "20px", "Faster app launch", font_weight="510"),
         *_texts(70, 10, "button", "18px", "+"),
         *_texts(100, 20, "p", "15px", "p" * 50),
     ]
     levels = analyze_typography([_page(elements)]).levels
-    assert [level.size_px for level in levels] == [64.0, 48.0, 32.0, 24.0, 20.0, 15.0]
+    assert [level.size_px for level in levels] == [72.0, 64.0, 48.0, 24.0, 20.0, 15.0]
     lead = levels[3]
-    assert (lead.weight, lead.line_height_px, lead.count) == (400, 31.92, 3)
+    assert (lead.weight, lead.line_height_px, lead.count) == (400, 31.92, 8)
+    # Merged groups add to the count only: the quotes are set at 32px, not at 24px.
+    assert lead.tags == ["p"] and lead.samples == ["Lead paragraph text here, set a bit larger."]
     assert levels[4].weight == 510
-    assert levels[0].name == "display" and levels[0].tags == ["h1", "h2"]
+    assert (levels[0].name, levels[0].tags) == ("display", ["h2"])
+    assert levels[1].tags == ["h1"]
 
 
 def test_weights_used_keep_declared_accent_and_level_weights() -> None:
@@ -465,6 +549,30 @@ def test_weights_used_keep_declared_accent_and_level_weights() -> None:
     )
     elements.append(_el(120, "span", "Note", font_size="16px", font_weight="560"))
     assert analyze_typography([_page(elements)], [sheet]).weights_used == [400, 560, 700]
+
+
+def test_family_weights_agree_with_weights_used() -> None:
+    # linear.app: Inter's 590 semibold (a declared token on a few tier names) was listed in
+    # weights_used but not in the family's weights; stripe.com's 500 carried 1-2% of the text.
+    variables = [
+        CssVariable(name="--font-weight-semibold", declared="590", resolved="590", source="root")
+    ]
+    elements = [
+        _el(0, "h1", "The product development system", font_size="64px", font_weight="510"),
+        *_texts(10, 60, "p", "15px", "w" * 50),
+        *_texts(100, 30, "a", "13px", "x" * 50, font_weight="510"),
+        *_texts(200, 3, "h3", "20px", "Basic", font_weight="590"),
+        *_texts(210, 1, "span", "15px", "y" * 50, font_weight="500"),
+        *_texts(220, 4, "code", "12px", "npm i x", font_family='"Berkeley Mono", monospace'),
+    ]
+    page = _page(elements).model_copy(update={"css_variables": variables})
+    typography = analyze_typography([page])
+    inter, mono = typography.families
+    assert inter.name == "Inter" and inter.weights == [400, 500, 510, 590]
+    assert mono.weights == [400]
+    assert typography.weights_used == [400, 500, 510, 590]
+    listed = {weight for family in typography.families for weight in family.weights}
+    assert listed == set(typography.weights_used)
 
 
 def test_body_is_never_renamed_code() -> None:

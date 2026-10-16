@@ -5,9 +5,10 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
 
 Rules (pure, deterministic; page weights from analyzer/common.py):
 - Every foundation analyzer (typography, spacing, shapes) reads elements through
-  common.iter_design_elements(): common.iter_elements() minus decorative subtrees (DOM-built
-  mockups and graphics: role="img" or a graphic/illustration/mockup/artwork class segment) and
-  off-canvas elements (entirely outside the 1440px viewport).
+  shapes.iter_foundation_elements(): common.iter_elements() minus decorative subtrees (DOM-built
+  mockups and graphics: role="img" or a graphic/illustration/mockup/artwork class segment),
+  animated illustrations (BEM blocks named "*-animation") and off-canvas elements (entirely
+  outside the 1440px viewport).
 - Values: padding sides, positive margins and row/column gaps of rendered, non-overlay
   elements, in px rounded to 0.5; values under 2px are ignored, and so are auto-centering
   margins (left ~ right >= 32px on a horizontally centered element, or a side >= 25% of the
@@ -45,7 +46,6 @@ from get_design_markdown.analyzer.common import (
     element_index,
     has_visible_border,
     is_interactive,
-    iter_design_elements,
     own_background,
     short_selector,
 )
@@ -56,6 +56,7 @@ from get_design_markdown.analyzer.css_values import (
     visible_shadow_layers,
 )
 from get_design_markdown.analyzer.naming import SPACING_STEP_NAMES, name_scale
+from get_design_markdown.analyzer.shapes import iter_foundation_elements
 from get_design_markdown.models.analysis import ScaleStep, SpacingSystem
 from get_design_markdown.models.raw import ElementSample, PageCapture
 
@@ -190,7 +191,7 @@ def collect_values(pages: Sequence[PageCapture]) -> dict[float, _Value]:
     """Spacing values (rounded to 0.5px) with their weighted usage."""
     values: dict[float, _Value] = {}
     indexes = {position: element_index(page) for position, page in enumerate(pages)}
-    for ref in iter_design_elements(pages):
+    for ref in iter_foundation_elements(pages):
         index = indexes[ref.page_index]
         seen: dict[float, tuple[bool, bool]] = {}
         for raw, gap, general in _element_values(ref, index):
@@ -315,7 +316,7 @@ def container_max_width(pages: Sequence[PageCapture]) -> float | None:
     max_widths: dict[float, float] = defaultdict(float)
     centered_widths: dict[float, int] = defaultdict(int)
     indexes = {position: element_index(page) for position, page in enumerate(pages)}
-    for ref in iter_design_elements(pages):
+    for ref in iter_foundation_elements(pages):
         element = ref.element
         if element.box.width < CONTAINER_MIN_WIDTH_PX:
             continue
@@ -352,7 +353,7 @@ def _is_section_container(element: ElementSample, index: dict[int, ElementSample
 def section_gap(pages: Sequence[PageCapture]) -> float | None:
     paddings: dict[float, float] = defaultdict(float)
     indexes = {position: element_index(page) for position, page in enumerate(pages)}
-    for ref in iter_design_elements(pages):
+    for ref in iter_foundation_elements(pages):
         element = ref.element
         index = indexes[ref.page_index]
         if element.landmark in ("header", "footer", "nav") or element.tag in ("header", "footer"):
@@ -377,7 +378,7 @@ def _gap_between_sections(
     for position, page in enumerate(pages):
         index = indexes[position]
         siblings: dict[int | None, list[ElementSample]] = defaultdict(list)
-        for ref in iter_design_elements([page]):
+        for ref in iter_foundation_elements([page]):
             siblings[ref.element.parent_index].append(ref.element)
         weight = 1.0 if position == 0 else 0.5
         for group in siblings.values():
@@ -410,7 +411,7 @@ def _is_card_like(element: ElementSample) -> bool:
 def common_paddings(pages: Sequence[PageCapture]) -> list[str]:
     counts: dict[str, float] = defaultdict(float)
     first_seen: dict[str, int] = {}
-    for ref in iter_design_elements(pages):
+    for ref in iter_foundation_elements(pages):
         element = ref.element
         if not (is_interactive(element) or _is_card_like(element)):
             continue

@@ -5,28 +5,33 @@ PUBLIC ENTRY POINT (frozen signature, called by analyzer/analyze.py):
 
 How it works (pure, deterministic):
 1. Samples: every rendered, non-overlay element that renders its own text (has_own_text),
-   weighted by min(len(text), 50) x page weight. Screen-reader-only boxes, icon/emoji fonts and
-   decorative subtrees (DOM-built mockups and graphics, see common.decorative_indexes()) are
-   skipped. A stack that starts with a system alias (system-ui, -apple-system...) is the
-   "system-ui" family; otherwise the first non-generic, non-icon family of the stack. Inline
-   wrappers take the tag of their heading/link/button/paragraph ancestor (semantic_tag()), so
-   the spans that hold an h1's text count as h1.
+   weighted by min(len(text), 50) x page weight. Screen-reader-only boxes, icon/emoji fonts,
+   decorative subtrees (DOM-built mockups and graphics, see common.decorative_indexes()) and
+   animated illustrations (shapes.animation_indexes()) are skipped. A stack that starts with a
+   system alias (system-ui, -apple-system...) is the "system-ui" family; otherwise the first
+   non-generic, non-icon family of the stack. Inline wrappers take the tag of their
+   heading/link/button/paragraph ancestor (semantic_tag()), so the spans that hold an h1's text
+   count as h1.
 2. Families: canonical display names come from fonts.lookup_font(); roles are primary
    (largest non-monospace share), heading (dominant family of h1-h3 / text >= 28px when it
    differs from primary), display (family of the largest text >= 48px when it differs from both)
    and mono (heaviest monospace family). Proprietary fonts list the free Google fonts of their
-   own stack first among the substitutes.
+   own stack first among the substitutes. A family's weights follow the weights_used rule
+   (family_weights()): >= 2% of its text or >= 1% of all text, its levels' weights and declared
+   font-weight tokens three of its elements use, so the two lists never disagree.
 3. Levels: samples grouped by (size rounded to 0.5px, family); groups of the same family less
    than 1px apart merge into the heavier one; one-off groups are dropped unless they hold an h1/h2,
    are >= 32px or monospace. Whenever groups must merge (at most 10 levels overall, 5 above
    body, body-sm/caption below it), the cheapest merge goes first: usage x log distance to the
    nearest size of the same family, where sub-page text counts half again (the main page leads)
-   and groups holding >= 8% of the text merge last. The body and h1 groups never merge away.
-   Merged groups only add to a level's count and tags: its size, weight, line height, letter
-   spacing and samples come from the text measured at the level's own size.
+   and groups holding >= 8% of the text merge last. The body group, the h1 group and the group
+   of the main page's largest heading never merge away. Merged groups only add to a level's
+   count: its size, weight, line height, letter spacing, tags and samples come from the text
+   measured at the level's own size, and samples prefer text in the level's weight (then line
+   height), so a 16px/400 button label is no sample of a 16px/300 body level.
 4. Names come from naming.TYPE_LEVEL_ORDER. "body" is the heaviest 14-18px running-text group.
-   A rare (<= 2 elements) headline at most 25% larger than the h1 joins the h1 level, so
-   "display" is the hero headline rather than a one-off call-to-action. Larger groups (<= 5)
+   A rare (<= 2 elements) text at most 25% larger than the h1 joins the h1 level (a big stat, a
+   sub-page headline) unless it is the main page's largest heading. Larger groups (<= 5)
    get display / heading / title / subtitle / body-lg through a monotonic assignment (a larger
    level never gets a later name) that minimizes the usage-weighted cost of departing from each
    group's preferred name (h1 -> display, h2 or >= 28px -> heading, h3/h4 or 20-28px semibold ->
@@ -56,7 +61,6 @@ from get_design_markdown.analyzer.common import (
     ElementRef,
     ancestors,
     element_index,
-    iter_design_elements,
 )
 from get_design_markdown.analyzer.css_values import (
     NORMAL_LINE_HEIGHT,
@@ -77,6 +81,7 @@ from get_design_markdown.analyzer.fonts import (
     lookup_font,
 )
 from get_design_markdown.analyzer.naming import TYPE_LEVEL_ORDER
+from get_design_markdown.analyzer.shapes import iter_foundation_elements
 from get_design_markdown.models.analysis import (
     FontCategory,
     FontFamilyInfo,
@@ -279,7 +284,7 @@ def _sample(ref: ElementRef, index: dict[int, ElementSample]) -> _Sample | None:
 def collect_samples(pages: Sequence[PageCapture]) -> list[_Sample]:
     samples = []
     indexes = {position: element_index(page) for position, page in enumerate(pages)}
-    for ref in iter_design_elements(pages):
+    for ref in iter_foundation_elements(pages):
         sample = _sample(ref, indexes[ref.page_index])
         if sample is not None:
             samples.append(sample)
@@ -348,25 +353,45 @@ def _family_info(
             and lookup_font(entry).name != name
         ]
         substitutes = list(dict.fromkeys([*from_stack, *substitutes]))[:3]
-    family_total = sum(sample.value for sample in members) or 1.0
-    weight_totals: dict[int, float] = defaultdict(float)
-    for sample in members:
-        weight_totals[sample.weight] += sample.value
-    weights = sorted(
-        weight
-        for weight, value in weight_totals.items()
-        if value / family_total >= FAMILY_WEIGHT_MIN_SHARE or len(weight_totals) == 1
-    )
     return FontFamilyInfo(
         name=name,
         stack=list(stack),
         role=role,
         category=category,
         share=round(min(max(share, 0.0), 1.0), 2),
-        weights=weights,
+        weights=family_weights(members),
         is_google_font=is_google,
         substitutes=substitutes,
     )
+
+
+def family_weights(
+    members: Sequence[_Sample],
+    *,
+    total: float | None = None,
+    level_weights: Iterable[int] = (),
+    declared: Iterable[int] = (),
+) -> list[int]:
+    """Weights of one family, by the rule of weights_used (see _weights_used()): weights
+    carrying >= 2% of the family's text or >= 1% of all text (`total`), the weights of the
+    family's reported levels, and declared font-weight tokens at least three of its text
+    elements use. Linear's Inter lists its 590 semibold accent like the page summary does."""
+    family_total = sum(sample.value for sample in members) or 1.0
+    values: dict[int, float] = defaultdict(float)
+    counts: dict[int, int] = defaultdict(int)
+    for sample in members:
+        values[sample.weight] += sample.value
+        counts[sample.weight] += 1
+    weights = {
+        weight
+        for weight, value in values.items()
+        if value / family_total >= FAMILY_WEIGHT_MIN_SHARE
+        or (total is not None and total > 0 and value / total >= MIN_WEIGHT_SHARE)
+        or len(values) == 1
+    }
+    weights.update(weight for weight in level_weights if weight in values)
+    weights.update(weight for weight in declared if counts[weight] >= MIN_TOKEN_WEIGHT_ELEMENTS)
+    return sorted(weights)
 
 
 def _dominant(samples: Iterable[_Sample]) -> str | None:
@@ -466,13 +491,15 @@ class _Group:
 
     @property
     def tags(self) -> list[str]:
-        """Tags by usage, the level's own text first and merged groups' tags after."""
-        totals = self.tag_values()
+        """Tags of the text measured at the level's own size, by usage. Merged groups only add
+        to the level's count: their tags are set at another size (a 72px h2 folded into a
+        64px h1 level must not read "h2 is set at 64px")."""
+        core = self.core or self.members
         own: dict[str, float] = defaultdict(float)
-        for sample in self.core:
+        for sample in core:
             own[sample.tag] += sample.value
-        first = {sample.tag: sample.order for sample in reversed(self.members)}
-        return sorted(totals, key=lambda tag: (-own.get(tag, 0.0), -totals[tag], first[tag]))
+        first = {sample.tag: sample.order for sample in reversed(core)}
+        return sorted(own, key=lambda tag: (-own[tag], first[tag]))
 
     def share(self, predicate_attr: str) -> float:
         total = self.value or 1.0
@@ -587,11 +614,36 @@ def _h1_group(groups: Sequence[_Group]) -> _Group | None:
     return None if best is None else best[1]
 
 
+def _top_heading_group(groups: Sequence[_Group]) -> _Group | None:
+    """The group holding the largest heading measured on the main page (pages[0]).
+
+    It is the page's biggest headline (stripe.com's 56px h2 above a 48px h1, linear.app's 72px
+    closing h2 above a 64px h1), so it keeps a level of its own instead of folding into a
+    smaller one."""
+    best: tuple[float, float, _Group] | None = None
+    for group in groups:
+        headings = [s for s in group.core if s.page_index == 0 and s.heading]
+        if not headings:
+            continue
+        key = (max(s.size for s in headings), group.value)
+        if best is None or key > best[:2]:
+            best = (key[0], key[1], group)
+    return None if best is None else best[2]
+
+
+def _protected(*groups: _Group | None) -> list[_Group]:
+    kept: list[_Group] = []
+    for group in groups:
+        if group is not None and not any(group is other for other in kept):
+            kept.append(group)
+    return kept
+
+
 def _limit_groups(
     groups: list[_Group], limit: int, *, body: _Group | None, total: float
 ) -> list[_Group]:
     groups = list(groups)
-    fixed = [group for group in (body, _h1_group(groups)) if group is not None]
+    fixed = _protected(body, _h1_group(groups), _top_heading_group(groups))
     _merge_cheapest(list(groups), limit, groups, total=total, fixed=fixed)
     return groups
 
@@ -656,15 +708,17 @@ def _merge_into_named(
             target.absorb(group)
 
 
-def _absorb_into_h1(above: list[_Group], groups: list[_Group]) -> None:
-    """One-off headlines slightly larger than the page's h1 (a closing call-to-action, a big
-    stat) join the h1 level, so "display" names the hero headline."""
+def _absorb_into_h1(above: list[_Group], groups: list[_Group], *, keep: _Group | None) -> None:
+    """One-off text slightly larger than the page's h1 (a big stat, a sub-page headline)
+    joins the h1 level. `keep` (the main page's largest heading) never does: the biggest
+    headline the page shows keeps its own level."""
     h1 = _h1_group(above)
     if h1 is None:
         return
     for group in [g for g in above if g.size > h1.size]:
         if (
-            group.family == h1.family
+            group is not keep
+            and group.family == h1.family
             and group.count <= 2
             and "h1" not in group.tag_values()
             and group.size <= h1.size * DISPLAY_ABSORB_RATIO
@@ -736,15 +790,15 @@ def _name_groups(
     below = [g for g in rest if g not in above]
 
     above.sort(key=lambda g: -g.size)
-    _absorb_into_h1(above, groups)
-    h1 = _h1_group(above)
+    top_heading = _top_heading_group(above)
+    _absorb_into_h1(above, groups, keep=top_heading)
     _merge_cheapest(
         above,
         len(_ABOVE_NAMES),
         groups,
         total=total,
         targets=[body],
-        fixed=[] if h1 is None else [h1],
+        fixed=_protected(_h1_group(above), top_heading),
     )
     above.sort(key=lambda g: -g.size)
     names.update(_name_above(above))
@@ -769,11 +823,21 @@ def _level(name: str, group: _Group) -> TypeLevel:
         line_height_px = round(mode, 2)
     transform = _weighted_mode((s.transform, s.value) for s in core)
     assert isinstance(transform, str)
+    weight = group.weight
+
+    def off_style(s: _Sample) -> bool:
+        return abs(s.size - size) > 0.01 or s.weight != weight
+
+    # Samples are text set as the level is (size and weight, line height preferred): a
+    # 16px/400 button label is no sample of a 16px/300 body level. Only a level without such
+    # text falls back to the rest of its own size.
+    exact = [s for s in core if not off_style(s)]
     samples: list[str] = []
     for sample in sorted(
-        core,
+        exact or core,
         key=lambda s: (
             abs(s.size - size) > 0.01,
+            s.line_height_px != line_height_px,
             s.page_index,
             0 if len(s.text) >= 4 else 1,
             s.order,
@@ -787,7 +851,7 @@ def _level(name: str, group: _Group) -> TypeLevel:
         name=name,
         size_px=size,
         font_family=group.family,
-        weight=group.weight,
+        weight=weight,
         line_height_px=line_height_px,
         line_height=None if line_height_px is None else round(line_height_px / size, 2),
         letter_spacing_px=group.letter_spacing_px,
@@ -910,6 +974,31 @@ def _weights_used(
     return sorted(used)
 
 
+def _with_used_weights(
+    families: Sequence[FontFamilyInfo],
+    samples: Sequence[_Sample],
+    levels: Sequence[TypeLevel],
+    declared: Iterable[int],
+) -> list[FontFamilyInfo]:
+    """Families whose weight lists follow the weights_used rule (family_weights()), so a
+    family never omits a weight the page summary lists for its text."""
+    total = sum(sample.value for sample in samples)
+    declared = tuple(declared)
+    by_family: dict[str, list[_Sample]] = defaultdict(list)
+    for sample in samples:
+        by_family[sample.family].append(sample)
+    result: list[FontFamilyInfo] = []
+    for family in families:
+        weights = family_weights(
+            by_family.get(family.name, []),
+            total=total,
+            level_weights=(level.weight for level in levels if level.font_family == family.name),
+            declared=declared,
+        )
+        result.append(family.model_copy(update={"weights": weights}) if weights else family)
+    return result
+
+
 def analyze_typography(
     pages: Sequence[PageCapture], stylesheets: Sequence[StylesheetInfo] = ()
 ) -> Typography:
@@ -922,13 +1011,17 @@ def analyze_typography(
     primary = families[0] if families else None
     primary_is_mono = primary is not None and primary.category == "monospace"
     levels = analyze_levels(samples, primary_is_mono=primary_is_mono)
+    declared = token_weights(pages, stylesheets)
+    families = _with_used_weights(families, samples, levels, declared)
+    weights_used = set(_weights_used(samples, levels, declared))
+    weights_used.update(weight for family in families for weight in family.weights)
     body = next((level for level in levels if level.name == "body"), None)
     base = body.size_px if body is not None else DEFAULT_BASE_SIZE_PX
     fit = fit_scale_ratio((level.size_px for level in levels if level.name != "code"), base)
     return Typography(
         families=families,
         levels=levels,
-        weights_used=_weights_used(samples, levels, token_weights(pages, stylesheets)),
+        weights_used=sorted(weights_used),
         base_size_px=base,
         scale_ratio=None if fit is None else fit.ratio,
         scale_ratio_name=None if fit is None else fit.name,
