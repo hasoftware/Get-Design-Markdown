@@ -159,7 +159,7 @@ def test_analyze_capture_drops_a_dark_capture_with_a_light_canvas(
     monkeypatch.setattr(colors, "analyze_colors", fake_colors)
     result = analyze.analyze_capture(load_raw_sample())
     assert result.dark is None
-    assert any("nền sáng (canvas #f8fafc)" in warning for warning in result.warnings)
+    assert any("nền sáng (#f8fafc)" in warning for warning in result.warnings)
 
 
 def test_analyze_capture_drops_a_dark_capture_of_a_dark_only_site(

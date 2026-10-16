@@ -98,16 +98,19 @@ def _no_separate_dark_theme(light: ColorPalette, dark: ColorPalette) -> str | No
     canvas is light.
     """
     if _token_values(dark) == _token_values(light):
-        return "Bản dark mode giống hệt bản sáng — trang không có giao diện tối riêng, đã bỏ qua."
+        return (
+            "Bản tối (dark mode) giống hệt bản sáng — trang không có giao diện tối riêng, "
+            "đã bỏ qua."
+        )
     if dark.scheme != "dark":
         return (
-            f"Bản dark mode vẫn có nền sáng (canvas {_canvas_value(dark)}) — trang không có "
+            f"Bản tối (dark mode) vẫn có nền sáng ({_canvas_value(dark)}) — trang không có "
             "giao diện tối riêng, đã bỏ qua."
         )
     if light.scheme == "dark":
         return (
-            f"Trang vốn dùng nền tối (canvas {_canvas_value(light)}) ở cả hai bản chụp — "
-            "không có giao diện tối riêng, đã bỏ qua bản dark mode."
+            f"Trang vốn dùng nền tối ({_canvas_value(light)}) ở cả hai bản chụp — "
+            "không có giao diện tối riêng, đã bỏ qua bản tối (dark mode)."
         )
     return None
 
@@ -152,19 +155,19 @@ def analyze_capture(
     pages = raw.pages
     progress("Màu sắc")
     palette = colors.analyze_colors(pages, raw.stylesheets, threshold=threshold)
-    progress("Typography")
+    progress("Kiểu chữ")
     type_system = typography.analyze_typography(pages, raw.stylesheets)
-    progress("Spacing")
+    progress("Khoảng cách")
     spacing_system = spacing.analyze_spacing(pages)
     progress("Bo góc")
     radii = shapes.analyze_radii(pages)
     progress("Đổ bóng")
     shadows = shapes.analyze_shadows(pages)
-    progress("Breakpoint")
+    progress("Điểm ngắt màn hình (breakpoint)")
     breakpoint_list = breakpoints.analyze_breakpoints(raw.stylesheets)
-    progress("Layout")
+    progress("Bố cục")
     layout_info = layout.analyze_layout(pages, breakpoint_list)
-    progress("Component")
+    progress("Thành phần giao diện")
     component_list = components.analyze_components(
         pages,
         palette=palette,
@@ -181,7 +184,7 @@ def analyze_capture(
     dark_theme: ThemeAnalysis | None = None
     dark_page = raw.dark
     if dark_page is not None:
-        progress("Màu dark mode")
+        progress("Màu của bản tối")
         dark_palette = colors.analyze_colors([dark_page], raw.stylesheets, threshold=threshold)
         if dark_palette.tokens:
             reason = _no_separate_dark_theme(palette, dark_palette)

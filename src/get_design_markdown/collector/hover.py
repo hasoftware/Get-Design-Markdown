@@ -297,7 +297,7 @@ async def capture_hover_states(
         await page.wait_for_timeout(RETRY_WAIT_MS)
     if failed and warnings is not None:
         warnings.append(
-            f"Không hover được {failed}/{len(candidates)} phần tử (bị che khuất hoặc đã thay "
-            "đổi trên trang) — đã bỏ qua."
+            f"Không đo được trạng thái khi rê chuột (hover) của {failed}/{len(candidates)} "
+            "phần tử (bị che khuất hoặc đã thay đổi trên trang) — đã bỏ qua."
         )
     return states

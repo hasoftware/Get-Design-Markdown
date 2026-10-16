@@ -380,7 +380,7 @@ async def collect_site(
                     notify=_prefixed(notify, "Bản tối: "),
                 )
             except CollectError as error:
-                warnings.append(f"Không thu được bản dark mode: {error.message}")
+                warnings.append(f"Không thu được bản tối (dark mode): {error.message}")
             finally:
                 with suppress(PlaywrightError):
                     await dark_context.close()
