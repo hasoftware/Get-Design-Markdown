@@ -86,13 +86,13 @@ def pipeline_like(names: tuple[str, ...] = ("DESIGN.md", "tokens.json", "raw.jso
     pipeline.run_get: it works only if the job thread entered use_sink itself."""
 
     def runner(request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
-        print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+        print_step(1, 4, "Thu thập dữ liệu trang")
         with progress_status("Đang thu thập") as progress:
             progress("Mở trình duyệt…")
         print_success("robots.txt cho phép truy cập /.")
-        print_step(2, 4, "Phân tích thiết kế (Tầng 2)")
+        print_step(2, 4, "Phân tích thiết kế")
         print_warning("[home] Phát hiện banner cookie.")
-        print_step(3, 4, "Dựng DESIGN.md (Tầng 3)")
+        print_step(3, 4, "Dựng DESIGN.md")
         print_info(f"Luồng: {threading.current_thread().name}")
         print_step(4, 4, "Xuất tokens.json và preview.html")
         return _write_results(settings, request.url, names)
@@ -111,7 +111,7 @@ class Looping:
 
     def __call__(self, request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
         try:
-            print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+            print_step(1, 4, "Thu thập dữ liệu trang")
             self.started.set()
             deadline = time.monotonic() + self.seconds
             index = 0
@@ -217,7 +217,7 @@ def test_gdm_error_fails_the_job_with_its_vietnamese_message(
     make: Callable[..., JobManager], settings: UiSettings, caplog: pytest.LogCaptureFixture
 ) -> None:
     def runner(request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
-        print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+        print_step(1, 4, "Thu thập dữ liệu trang")
         raise BotBlockedError("Trang chặn trình duyệt tự động.", hint="Thử lại sau.")
 
     manager = make(runner)
@@ -655,9 +655,9 @@ class Hanging:
             self.cleaned_up.set()
 
     def __call__(self, request: JobRequest, settings: UiSettings, sink: MessageSink) -> Path:
-        print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+        print_step(1, 4, "Thu thập dữ liệu trang")
         asyncio.run(self._stage())
-        print_step(2, 4, "Phân tích thiết kế (Tầng 2)")  # never reached after a cancel
+        print_step(2, 4, "Phân tích thiết kế")  # never reached after a cancel
         return settings.output_dir
 
 

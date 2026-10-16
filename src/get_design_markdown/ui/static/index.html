@@ -153,7 +153,7 @@
             <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>
             <div class="callout-body">
               <h2 class="callout-title">Chưa có trình duyệt để mở trang</h2>
-              <p>Công cụ cần Microsoft Edge, Google Chrome hoặc Chromium. Cài Edge hoặc Chrome (công cụ tự nhận ra), hoặc tải Chromium ngay tại đây (khoảng 150 MB).</p>
+              <p>Công cụ cần Microsoft Edge, Google Chrome hoặc Chromium. Cài Edge hoặc Chrome (công cụ tự nhận ra), hoặc tải Chromium ngay tại đây (tải về khoảng 125 MB, chiếm khoảng 300 MB trên ổ đĩa).</p>
               <div class="install-slot" data-install-slot></div>
             </div>
           </div>
@@ -396,6 +396,17 @@
           </header>
 
           <ul class="stats" id="results-stats" aria-label="Những gì đã đo được"></ul>
+
+          <div class="callout callout-warn callout-strong" id="results-mixed" role="status" hidden>
+            <svg class="icon callout-icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg>
+            <div class="callout-body">
+              <h2 class="callout-title">Các tệp kết quả đến từ hai lượt chạy khác nhau</h2>
+              <p id="results-mixed-text"></p>
+              <div class="outcome-actions">
+                <button type="button" class="btn btn-secondary" id="results-mixed-rerun">Phân tích lại trang này</button>
+              </div>
+            </div>
+          </div>
 
           <details class="notes" id="results-warnings" hidden>
             <summary>

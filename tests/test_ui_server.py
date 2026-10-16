@@ -107,7 +107,7 @@ class ScriptedRunner:
         self.started.set()
         url = request.url.lower()
         folder = settings.output_dir / domain_of(request.url)
-        print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+        print_step(1, 4, "Thu thập dữ liệu trang")
         if "hold" in url:
             self.release.wait(WAIT_S * 3)
             return folder
@@ -132,8 +132,8 @@ class ScriptedRunner:
             )
         if "crash" in url:
             raise RuntimeError("boom")
-        print_step(2, 4, "Phân tích thiết kế (Tầng 2)")
-        print_step(3, 4, "Dựng DESIGN.md (Tầng 3)")
+        print_step(2, 4, "Phân tích thiết kế")
+        print_step(3, 4, "Dựng DESIGN.md")
         print_step(4, 4, "Xuất tokens.json và preview.html")
         if not folder.exists():
             shutil.copytree(self.template, folder)

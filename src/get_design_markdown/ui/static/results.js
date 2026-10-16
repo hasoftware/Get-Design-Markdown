@@ -38,6 +38,8 @@ const FILE_PURPOSES = {
   other: "Tệp khác",
 };
 const FILE_ICONS = { design: "doc", preview: "eye", image: "image" };
+// First warning of a folder whose files come from two runs (server.mixed_runs_note).
+const MIXED_RUNS_PREFIX = "Lượt chạy gần nhất của trang này chưa đi hết các bước";
 
 function deviceOf(width) {
   if (width >= 1200) return { size: "desktop", label: "Máy tính" };
@@ -47,7 +49,7 @@ function deviceOf(width) {
 
 export class ResultsView {
   /** app: { showView(name, opts), showStart(opts), refreshHistory(), setActiveSite(site),
-   *          openFolder(site), openAdvanced(focusId) } */
+   *          openFolder(site), openAdvanced(focusId), startJob(url) } */
   constructor(app) {
     this.app = app;
     this.results = null;
@@ -179,7 +181,12 @@ export class ResultsView {
     const box = byId("results-warnings");
     const list = byId("results-warnings-list");
     clear(list);
-    const warnings = results.warnings || [];
+    let warnings = results.warnings || [];
+    // Results older than the screenshots / data next to them: said up front, not in the notes.
+    const mixed = warnings.length > 0 && warnings[0].startsWith(MIXED_RUNS_PREFIX) ? warnings[0] : null;
+    byId("results-mixed-text").textContent = mixed || "";
+    byId("results-mixed").hidden = mixed === null;
+    if (mixed !== null) warnings = warnings.slice(1);
     for (const warning of warnings) list.appendChild(h("li", { text: warning }));
     byId("results-warnings-title").textContent =
       `Ghi chú khi phân tích (${warnings.length})`;
@@ -492,6 +499,12 @@ export class ResultsView {
     const copySample = byId("copy-sample");
     copySample.addEventListener("click", async () => {
       await copyWithFeedback(copySample, byId("sample-text").textContent.trim(), "Đã sao chép lời nhắc mẫu.");
+    });
+    byId("results-mixed-rerun").addEventListener("click", () => {
+      if (!this.results) return;
+      const url = this.results.entry.url;
+      if (url) this.app.startJob(url);
+      else this.app.showStart({ url: this.results.site, focusUrl: true });
     });
     const copyFolder = byId("copy-folder");
     copyFolder.addEventListener("click", async () => {

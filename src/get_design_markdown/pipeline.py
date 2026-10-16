@@ -52,7 +52,8 @@ def report_robots(result: RobotsCheck) -> None:
             "hãy tôn trọng điều khoản sử dụng của trang."
         )
     else:
-        print_warning(result.note)
+        # robots.txt could not be read: nothing is known either way, not a warning.
+        print_info(result.note)
 
 
 def summarize_capture(raw: RawCapture) -> None:
@@ -64,12 +65,13 @@ def summarize_capture(raw: RawCapture) -> None:
         )
         print_info(
             f"Trang '{page.name}': {len(page.elements)} phần tử{truncated}, "
-            f"{len(page.css_variables)} biến CSS, {len(page.hover_states)} trạng thái hover, "
+            f"{len(page.css_variables)} biến CSS, {len(page.hover_states)} trạng thái khi rê "
+            "chuột (hover), "
             f"{len(page.screenshots)} ảnh chụp."
         )
     if raw.dark is not None:
-        print_info(f"Dark mode: {len(raw.dark.elements)} phần tử.")
-    print_info(f"Stylesheet: {len(raw.stylesheets)} file.")
+        print_info(f"Bản giao diện tối (dark mode): {len(raw.dark.elements)} phần tử.")
+    print_info(f"Tệp CSS (stylesheet): {len(raw.stylesheets)} tệp.")
     for warning in raw.warnings:
         print_warning(warning)
     for page in raw.pages:
@@ -126,11 +128,11 @@ def run_get(
     threshold: float = DEFAULT_DELTA_E,
 ) -> GetResult:
     """The whole pipeline: collect, analyze, synthesize, export; any stage error stops it."""
-    print_step(1, 4, "Thu thập dữ liệu trang (Tầng 1)")
+    print_step(1, 4, "Thu thập dữ liệu trang")
     folder = run_collect(url, out_root=out_root, options=options)
-    print_step(2, 4, "Phân tích thiết kế (Tầng 2)")
+    print_step(2, 4, "Phân tích thiết kế")
     run_analyze(folder, threshold=threshold)
-    print_step(3, 4, "Dựng DESIGN.md (Tầng 3)")
+    print_step(3, 4, "Dựng DESIGN.md")
     run_synthesize(folder, lang=lang, prompt_only=prompt_only, examples=examples)
     print_step(4, 4, "Xuất tokens.json và preview.html")
     run_export(folder)

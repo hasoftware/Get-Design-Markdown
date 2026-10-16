@@ -196,7 +196,7 @@ def test_cookie_banner_is_an_overlay(home: PageCapture) -> None:
     inside = [e for e in home.elements if e.parent_index == banner.index]
     assert inside and all(element.in_overlay for element in inside)
     assert sum(element.in_overlay for element in home.elements) == 1 + len(inside)
-    assert any("in_overlay" in warning for warning in home.warnings)
+    assert any("lớp phủ" in warning and "đã ẩn" in warning for warning in home.warnings)
     overlay_indexes = {element.index for element in home.elements if element.in_overlay}
     assert not overlay_indexes & {state.element_index for state in home.hover_states}
 

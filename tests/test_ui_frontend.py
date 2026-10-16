@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import shutil
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -446,8 +447,8 @@ def test_guide_and_theme_are_kept_when_the_server_port_changes(ui: OpenUi) -> No
 
 
 def test_guide_stays_closed_once_sites_were_analysed(ui: OpenUi) -> None:
-    """The exe's window keeps no browser data between launches; a history with analysed sites
-    already says this is not the first run. The help button still opens the guide."""
+    """Browser data can be cleared, blocked or belong to another browser; a history with
+    analysed sites already says this is not the first run. The help button still opens it."""
     session = ui().open()
     page = session.page
     expect(page.locator(".history-item")).to_have_count(2)
@@ -611,6 +612,12 @@ def test_successful_job_shows_steps_log_and_results(ui: OpenUi) -> None:
     expect(log.locator(".log-line")).to_have_count(14)
     expect(log).to_contain_text("Bước 4/4")
     expect(log).to_contain_text("Hoàn tất: đã tạo DESIGN.md")
+    # "Đã ghi <absolute path>" lines show the file name; the full path is the tooltip.
+    wrote = log.locator(".log-text", has_text="Đã ghi DESIGN.md")
+    expect(wrote).to_have_count(1)
+    folder = session.api.output_root / "demo.example"
+    expect(wrote).to_have_attribute("title", str(folder / "DESIGN.md"))
+    assert str(folder) not in log.inner_text()
     assert page.evaluate("sessionStorage.getItem('gdm.ackJob')") == job.snapshot.id
 
     # Results of the new site, also selected in the history.
@@ -740,7 +747,7 @@ def _scripted_job(api: FakeApi, events: list[ConsoleEvent], error: JobError) -> 
         finished_at=now,
         step=1,
         total=4,
-        step_message="Thu thập dữ liệu trang (Tầng 1)",
+        step_message="Thu thập dữ liệu trang",
         events=[JobEvent.from_console(event, seq=i, at=now) for i, event in enumerate(events, 1)],
         last_seq=len(events),
         settings=api.state.settings,
@@ -785,7 +792,7 @@ def test_robots_callout_only_for_a_real_refusal(ui: OpenUi, case: str, verdict: 
         hint="Kiểm tra lại địa chỉ và kết nối mạng.",
     )
     events = [
-        ConsoleEvent(kind="step", message="Thu thập dữ liệu trang (Tầng 1)", step=1, total=4),
+        ConsoleEvent(kind="step", message="Thu thập dữ liệu trang", step=1, total=4),
         robots,
         ConsoleEvent(kind="error", message=error.message, hint=error.hint),
     ]
@@ -805,7 +812,7 @@ def test_robots_callout_only_for_a_real_refusal(ui: OpenUi, case: str, verdict: 
     expect(callout).to_be_hidden()
     expect(log.locator(".log-line[data-kind='warning']")).to_have_count(0)
     if verdict == "unchecked":
-        assert robots.kind == "warning"
+        assert robots.kind == "info"  # nothing is known either way: not a warning
         line = log.locator(".log-line[data-kind='info']")
         expect(line).to_have_count(1)
         reason = "tải tệp này quá lâu" if case == "timeout" else "không tải được tệp này"
@@ -1036,7 +1043,7 @@ def _failed_snapshot(api: FakeApi, code: str, message: str, hint: str | None) ->
         finished_at=now,
         step=1,
         total=4,
-        step_message="Thu thập dữ liệu trang (Tầng 1)",
+        step_message="Thu thập dữ liệu trang",
         last_seq=0,
         settings=api.state.settings,
         site="scripted.example",
@@ -1053,6 +1060,7 @@ def _failed_snapshot(api: FakeApi, code: str, message: str, hint: str | None) ->
         ("navigation", "máy có kết nối Internet không"),
         ("invalid_url", "bắt đầu bằng https://"),
         ("unexpected", "ui.log"),
+        ("config", "Mở Tùy chọn nâng cao"),
         ("analysis", None),
     ],
 )
@@ -1083,6 +1091,12 @@ def test_error_help_depends_on_the_error_code(ui: OpenUi, code: str, expected: s
     if code == "timeout":
         outcome.get_by_role("button", name=re.compile("Tăng thời gian chờ")).click()
         wait_until(page, lambda: session.api.state.settings.timeout_s == 90)
+    if code == "config":
+        # An unusable results folder: the button leads to the field that fixes it.
+        outcome.get_by_role("button", name="Mở Tùy chọn nâng cao").click()
+        expect(page.locator("#view-start")).to_be_visible()
+        assert page.evaluate("document.getElementById('advanced').open") is True
+        assert active_id(page) == "opt-output"
 
 
 # ─── History and results ─────────────────────────────────────────────────────
@@ -1130,6 +1144,31 @@ def test_history_lists_sites_and_opens_results(ui: OpenUi) -> None:
     session.wait_results()
     expect(page.locator("#results-title")).to_have_text("Beta Studio")
     expect(page.locator("#tab-shots")).to_have_attribute("aria-selected", "true")
+
+
+def test_results_from_two_runs_are_flagged_up_front(ui: OpenUi, ui_fake_api: FakeApi) -> None:
+    """Screenshots newer than DESIGN.md (a re-run that stopped half-way): a callout above the
+    tabs says so and offers a new analysis; the note is not repeated in the folded notes."""
+    folder = ui_fake_api.output_root / "mixed.example"
+    shutil.copytree(ui_fake_api.output_root / ACME_SITE, folder)
+    later = time.time() + 30
+    for shot in (folder / "screenshots").glob("*.png"):
+        os.utime(shot, (later, later))
+    session = ui().open()
+    page = session.page
+    page.click(f".history-item[data-site='{ACME_SITE}']")
+    session.wait_results()
+    expect(page.locator("#results-mixed")).to_be_hidden()
+
+    page.click(".history-item[data-site='mixed.example']")
+    session.wait_results()
+    callout = page.locator("#results-mixed")
+    expect(callout).to_be_visible()
+    expect(callout).to_contain_text("ảnh chụp mới hơn DESIGN.md")
+    notes = page.locator("#results-warnings-list li").all_text_contents()
+    assert not any(note.startswith("Lượt chạy gần nhất") for note in notes)
+    page.click("#results-mixed-rerun")
+    expect(page.locator("#job-url")).to_contain_text("acme.example")
 
 
 def test_empty_history_invites_a_first_analysis(ui: OpenUi) -> None:
@@ -1330,7 +1369,7 @@ def test_progress_of_a_long_step_is_announced_politely(ui: OpenUi) -> None:
     expect(page.locator("#job-progress")).to_have_text(re.compile(r"chờ trang… ([5-9]|[1-3]\d)s$"))
     expect(live).to_have_text("Đang thu thập — chờ trang… 0s")
     page.click("#cancel-button")
-    expect(live).to_have_text(re.compile(r"^Đang hủy… Công cụ dừng ở bước kế tiếp"))
+    expect(live).to_have_text(re.compile(r"^Đang hủy… Thường chỉ mất vài giây"))
     expect(page.locator("#job-outcome [data-outcome='info']")).to_be_visible()
     expect(live).to_have_text("")
 

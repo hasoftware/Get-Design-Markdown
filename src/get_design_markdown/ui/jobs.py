@@ -319,11 +319,27 @@ def error_code(error: BaseException) -> ErrorCode:
     return "unexpected"
 
 
+#: Hints of the interface for error codes whose command-line hint names commands, options or
+#: environment variables (`playwright install`, --browser, GDM_TIMEOUT): in the UI the same
+#: choices are buttons and fields, so the job's error and its final event say that instead.
+UI_HINTS: dict[ErrorCode, str] = {
+    "browser_missing": (
+        "Chọn “Tự động” trong Tùy chọn nâng cao để công cụ dùng Microsoft Edge hoặc Google "
+        "Chrome có sẵn trên máy, hoặc bấm “Tải Chromium” ngay trong giao diện, rồi thử lại."
+    ),
+    "timeout": (
+        "Tăng “Thời gian chờ” trong Tùy chọn nâng cao hoặc kiểm tra kết nối mạng, rồi thử lại."
+    ),
+}
+
+
 def job_error(error: BaseException) -> JobError:
-    """JobError for an exception: GdmError keeps its Vietnamese message and hint; anything
-    else becomes "Lỗi không mong muốn: <Type>: <first line>" with UNEXPECTED_HINT."""
+    """JobError for an exception: GdmError keeps its Vietnamese message and its hint (UI_HINTS
+    for the codes listed there); anything else becomes "Lỗi không mong muốn: <Type>: <first
+    line>" with UNEXPECTED_HINT."""
     if isinstance(error, GdmError):
-        return JobError(code=error_code(error), message=error.message, hint=error.hint)
+        code = error_code(error)
+        return JobError(code=code, message=error.message, hint=UI_HINTS.get(code, error.hint))
     text = str(error).strip()
     detail = f"{type(error).__name__}: {text.splitlines()[0]}" if text else type(error).__name__
     return JobError(

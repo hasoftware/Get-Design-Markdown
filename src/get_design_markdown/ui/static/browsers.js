@@ -224,7 +224,7 @@ export function mountInstallWidget(container, service, { quiet = false } = {}) {
       root.append(
         h("p", {
           class: "help",
-          text: "Chromium là trình duyệt riêng cho công cụ (khoảng 150 MB), cho kết quả ổn định nhất.",
+          text: "Chromium là trình duyệt riêng cho công cụ (tải về khoảng 125 MB, chiếm khoảng 300 MB trên ổ đĩa), cho kết quả ổn định nhất.",
         }),
       );
     }

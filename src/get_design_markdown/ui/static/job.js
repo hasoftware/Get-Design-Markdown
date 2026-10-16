@@ -36,7 +36,9 @@ const ROBOTS_TIMEOUT_RE = /hết thời gian/i;
 /** Screen readers hear the progress of a long step at most this often (the log says more). */
 const PROGRESS_ANNOUNCE_MS = 10000;
 const CANCELLING_TEXT =
-  "Đang hủy… Công cụ dừng ở bước kế tiếp, có thể mất vài giây nếu trang đang tải.";
+  "Đang hủy… Thường chỉ mất vài giây; nếu đang kiểm tra robots.txt, có thể mất tới khoảng 15 giây.";
+// "Đã ghi C:\…\stripe.com\DESIGN.md": the log shows the file name, the full path in a tooltip.
+const WROTE_RE = /^(Đã ghi )(.*[\\/])([^\\/]+)$/;
 
 /**
  * What a warning says about robots.txt: "disallow" (the site refuses automated access),
@@ -224,9 +226,10 @@ export class JobController {
       if (!(this.job && this.job.cancel_requested)) this.announcer.say(event.message);
     }
     let line = event;
-    if (event.kind === "warning") {
+    // A robots.txt that could not be read is an "info" event (a "warning" from older versions).
+    if (event.kind === "warning" || event.kind === "info") {
       const robots = robotsVerdict(event.message);
-      if (robots === "disallow") {
+      if (robots === "disallow" && event.kind === "warning") {
         this.robotsText.textContent = event.message;
         this.robots.hidden = false;
       } else if (robots === "unchecked") {
@@ -238,10 +241,16 @@ export class JobController {
 
   addLogLine(event) {
     const nearBottom = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 48;
-    const text =
+    let text =
       event.kind === "step" && event.step
         ? `Bước ${event.step}/${event.total || STEP_COUNT}: ${event.message}`
         : event.message;
+    let title = null;
+    const wrote = WROTE_RE.exec(text);
+    if (wrote) {
+      title = wrote[2] + wrote[3];
+      text = wrote[1] + wrote[3];
+    }
     const line = h(
       "li",
       { class: "log-line", dataset: { kind: event.kind, seq: event.seq } },
@@ -249,7 +258,7 @@ export class JobController {
       h("time", { class: "log-time", text: formatClock(event.at), attrs: { datetime: event.at } }),
       h(
         "span",
-        { class: "log-text" },
+        { class: "log-text", attrs: title ? { title } : {} },
         text,
         event.hint ? h("span", { class: "log-hint", text: event.hint }) : null,
       ),
@@ -553,7 +562,7 @@ export class JobController {
             h(
               "ul",
               {},
-              h("li", { text: "Tải Chromium ngay tại đây (khoảng 150 MB, vài phút), rồi bấm Thử lại." }),
+              h("li", { text: "Tải Chromium ngay tại đây (tải về khoảng 125 MB, chiếm khoảng 300 MB trên ổ đĩa, vài phút), rồi bấm Thử lại." }),
               h("li", {
                 text: "Hoặc cài Microsoft Edge hoặc Google Chrome, rồi chọn “Tự động” trong Tùy chọn nâng cao.",
               }),
@@ -582,7 +591,7 @@ export class JobController {
             h("li", {
               text: "Cài Microsoft Edge hoặc Google Chrome. Công cụ tự nhận ra, không cần chỉnh gì thêm.",
             }),
-            h("li", { text: "Hoặc tải Chromium ngay tại đây (khoảng 150 MB, vài phút), rồi bấm Thử lại." }),
+            h("li", { text: "Hoặc tải Chromium ngay tại đây (tải về khoảng 125 MB, chiếm khoảng 300 MB trên ổ đĩa, vài phút), rồi bấm Thử lại." }),
           ),
           slot(false),
         );
@@ -667,6 +676,22 @@ export class JobController {
         }
         return extra(...children);
       }
+      case "config":
+        return extra(
+          h(
+            "div",
+            { class: "outcome-actions" },
+            h(
+              "button",
+              {
+                class: "btn btn-secondary",
+                attrs: { type: "button" },
+                on: { click: () => this.app.openAdvanced("opt-output") },
+              },
+              "Mở Tùy chọn nâng cao",
+            ),
+          ),
+        );
       case "invalid_url":
         return extra(
           h("p", {

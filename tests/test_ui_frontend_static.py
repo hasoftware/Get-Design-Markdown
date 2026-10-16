@@ -286,3 +286,35 @@ def test_vietnamese_copy_has_diacritics() -> None:
     text = re.sub(r"<[^>]+>", " ", html)
     for unaccented in (" Phan tich ", " Tuy chon ", " trang web cua ", " Huong dan "):
         assert unaccented not in text, unaccented
+
+
+def test_chromium_size_matches_what_the_download_installs() -> None:
+    """The UI quotes the measured size of "Tải Chromium" (headless shell only): one figure."""
+    from get_design_markdown.ui.browser_install import CHROMIUM_DISK_SIZE, CHROMIUM_DOWNLOAD_SIZE
+
+    quoted = 0
+    for name in ("index.html", "job.js", "browsers.js"):
+        text = _read(name)
+        assert "150 MB" not in text, name
+        if re.search(r"\d+ MB", text):
+            quoted += 1
+            assert f"tải về {CHROMIUM_DOWNLOAD_SIZE}" in text, name
+            assert f"chiếm {CHROMIUM_DISK_SIZE} trên ổ đĩa" in text, name
+    assert quoted == 3
+
+
+def test_mixed_runs_prefix_matches_the_server_note(tmp_path: Path) -> None:
+    """results.js recognises the note server.mixed_runs_note() puts first in the warnings."""
+    import os
+    import time
+
+    from get_design_markdown.ui.server import mixed_runs_note
+
+    match = re.search(r'const MIXED_RUNS_PREFIX = "([^"]+)";', _read("results.js"))
+    assert match is not None
+    (tmp_path / "DESIGN.md").write_text("# x\n", encoding="utf-8")
+    (tmp_path / "analysis.json").write_text("{}", encoding="utf-8")
+    later = time.time() + 30
+    os.utime(tmp_path / "analysis.json", (later, later))
+    note = mixed_runs_note(tmp_path)
+    assert note is not None and note.startswith(match.group(1))

@@ -65,4 +65,15 @@ def test_network_error_gives_unknown_result() -> None:
 
     result = _check("https://example.com", handler)
     assert result.allowed is None
-    assert "ConnectError" in result.note
+    # Plain Vietnamese for the user: no exception class names.
+    assert "không kiểm tra được" in result.note
+    assert "ConnectError" not in result.note
+
+
+def test_timeout_gives_unknown_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    result = _check("https://example.com", handler)
+    assert result.allowed is None
+    assert "Hết thời gian chờ" in result.note and "ReadTimeout" not in result.note

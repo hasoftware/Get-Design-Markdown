@@ -117,6 +117,7 @@ from get_design_markdown.ui.server import (
     ShutdownRequest,
     ShutdownResponse,
     UiMode,
+    mixed_runs_note,
 )
 from get_design_markdown.ui.settings import (
     MAX_DELTA_E,
@@ -356,6 +357,10 @@ def results_for(folder: Path) -> ResultsResponse | None:
             (folder / SYNTHESIS_FILE).read_text(encoding="utf-8")
         )
         token_counts = dict(synthesis.token_counts)
+    warnings = list(analysis.warnings) if analysis else []
+    mixed = mixed_runs_note(folder)  # same rule as the real server
+    if mixed is not None:
+        warnings.insert(0, mixed)
     return ResultsResponse(
         site=site,
         entry=entry,
@@ -367,7 +372,7 @@ def results_for(folder: Path) -> ResultsResponse | None:
         screenshots=screenshots,
         prompt_images=prompt_images,
         token_counts=token_counts,
-        warnings=list(analysis.warnings) if analysis else [],
+        warnings=warnings,
     )
 
 
@@ -378,7 +383,7 @@ Step = tuple[EventKind, str, str | None, int | None]  # kind, message, hint, ste
 
 def _success_script(root: Path, site: str, robots_warning: bool) -> list[Step]:
     folder = root / site
-    steps: list[Step] = [("step", "Thu thập dữ liệu trang (Tầng 1)", None, 1)]
+    steps: list[Step] = [("step", "Thu thập dữ liệu trang", None, 1)]
     if robots_warning:
         steps.append(
             (
@@ -397,16 +402,16 @@ def _success_script(root: Path, site: str, robots_warning: bool) -> list[Step]:
         ("progress", "Đang thu thập — Trang 'home': tải trang…", None, None),
         (
             "info",
-            "Trang 'home': 86 phần tử, 24 biến CSS, 6 trạng thái hover, 3 ảnh chụp.",
+            "Trang 'home': 86 phần tử, 24 biến CSS, 6 trạng thái khi rê chuột (hover), 3 ảnh chụp.",
             None,
             None,
         ),
         ("warning", "[home] Phát hiện banner cookie — đã ẩn trước khi chụp.", None, None),
         ("success", f"Đã ghi {folder / RAW_FILE}", None, None),
-        ("step", "Phân tích thiết kế (Tầng 2)", None, 2),
+        ("step", "Phân tích thiết kế", None, 2),
         ("progress", "Đang phân tích — Màu sắc…", None, None),
         ("success", f"Đã ghi {folder / ANALYSIS_FILE}", None, None),
-        ("step", "Dựng DESIGN.md (Tầng 3)", None, 3),
+        ("step", "Dựng DESIGN.md", None, 3),
         ("info", "Dựng DESIGN.md cho Acme Cloud (ngôn ngữ: en).", None, None),
         ("success", f"Đã ghi {folder / DESIGN_FILE}", None, None),
         ("step", "Xuất tokens.json và preview.html", None, 4),
@@ -597,13 +602,13 @@ class FakeApi:
         url = job.request.url.lower()
         site = job.snapshot.site
         if "slow" in url:
-            slow: list[Step] = [("step", "Thu thập dữ liệu trang (Tầng 1)", None, 1)]
+            slow: list[Step] = [("step", "Thu thập dữ liệu trang", None, 1)]
             slow += [
                 ("progress", f"Đang thu thập — chờ trang… {i}s", None, None) for i in range(300)
             ]
             return slow, None
         first: list[Step] = [
-            ("step", "Thu thập dữ liệu trang (Tầng 1)", None, 1),
+            ("step", "Thu thập dữ liệu trang", None, 1),
             ("success", "robots.txt cho phép truy cập /.", None, None),
             ("progress", "Đang thu thập — Mở trình duyệt…", None, None),
         ]
@@ -631,8 +636,9 @@ class FakeApi:
                 return
             self._emit(job, kind, message, hint, step)
         if failure is not None:
-            self._emit(job, "error", failure.message, failure.hint, None)
-            self._finish(job, "failed", job_error(failure), [])
+            error = job_error(failure)
+            self._emit(job, "error", error.message, error.hint, None)
+            self._finish(job, "failed", error, [])
             return
         folder = self.output_root / job.snapshot.site
         if not folder.exists():

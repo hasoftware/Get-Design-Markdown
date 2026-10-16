@@ -251,6 +251,22 @@ def test_job_error_keeps_vietnamese_messages() -> None:
     assert JobNotFoundError("x").message
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        BrowserNotInstalledError(),
+        PageTimeoutError("Trang https://example.com/ không tải xong trong 45 giây."),
+    ],
+)
+def test_job_error_hints_speak_of_the_interface(error: GdmError) -> None:
+    """Command-line hints (playwright install, --browser, GDM_TIMEOUT) become UI wording."""
+    failure = job_error(error)
+    assert failure.message == error.message
+    assert failure.hint and "Tùy chọn nâng cao" in failure.hint
+    for jargon in ("playwright", "--browser", "GDM_", "uv run"):
+        assert jargon not in failure.hint
+
+
 def test_job_event_from_console_event() -> None:
     event = JobEvent.from_console(
         ConsoleEvent("step", "Phân tích", step=2, total=4), seq=7, at=FIXED_TIME

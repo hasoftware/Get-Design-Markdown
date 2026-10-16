@@ -83,8 +83,8 @@ def _overlay_warning(overlays: Sequence[dict[str, Any]]) -> str | None:
         if label not in kinds:
             kinds.append(label)
     return (
-        f"Phát hiện {len(overlays)} lớp phủ ({', '.join(kinds)}) — các phần tử của nó được "
-        "đánh dấu in_overlay và được ẩn trước khi thu hover/chụp ảnh."
+        f"Phát hiện {len(overlays)} lớp phủ ({', '.join(kinds)}) — đã ẩn chúng trước khi đo "
+        "trạng thái khi rê chuột và chụp ảnh (vẫn ghi lại kiểu dáng của chúng)."
     )
 
 
@@ -145,15 +145,15 @@ async def capture_page(
         warnings.extend(load.warnings)
         await ensure_accessible(page, load, requested_url=plan.url)
 
-        notify("Cuộn để tải nội dung lazy-load…")
+        notify("Cuộn hết trang để tải đủ nội dung…")
         await scroll_through(page)
         # Measure controls at rest: an autofocused field would report its focus ring.
         await release_focus(page)
 
         overlays = await _detect_overlays(page)
-        notify("Trích xuất style…")
+        notify("Đo kiểu dáng các phần tử…")
         extraction = await extract_dom(page, max_elements=options.max_elements)
-        notify(f"Trích xuất style ({len(extraction.elements)} phần tử)…")
+        notify(f"Đo kiểu dáng {len(extraction.elements)} phần tử…")
         for note in (
             _truncation_warning(extraction.elements_total, len(extraction.elements)),
             _overlay_warning(overlays),
@@ -164,7 +164,7 @@ async def capture_page(
 
         hover_states: list[HoverState] = []
         if plan.hover and (options.hover_buttons > 0 or options.hover_links > 0):
-            notify("Thu trạng thái hover…")
+            notify("Đo trạng thái khi rê chuột (hover)…")
             hover_states = await capture_hover_states(
                 page,
                 extraction.elements,
@@ -176,7 +176,7 @@ async def capture_page(
         layouts: list[LayoutSnapshot] = []
         screenshots: list[Screenshot] = []
         if plan.widths:
-            notify(f"Chụp ảnh {_widths_label(plan.widths)}…")
+            notify(f"Chụp ảnh ở bề rộng {_widths_label(plan.widths)} px…")
             await release_focus(page)  # a script may have focused a field since extraction
             layouts, screenshots = await capture_viewports(
                 page,
@@ -360,7 +360,7 @@ async def collect_site(
 
         dark: PageCapture | None = None
         if options.dark:
-            notify("Thu bản dark mode…")
+            notify("Thu bản giao diện tối (dark mode)…")
             dark_context = await new_context(session, options, color_scheme="dark")
             try:
                 dark = await capture_page(
@@ -377,7 +377,7 @@ async def collect_site(
                     out_dir=out_dir,
                     options=options,
                     registry=None,
-                    notify=_prefixed(notify, "Dark mode: "),
+                    notify=_prefixed(notify, "Bản tối: "),
                 )
             except CollectError as error:
                 warnings.append(f"Không thu được bản dark mode: {error.message}")

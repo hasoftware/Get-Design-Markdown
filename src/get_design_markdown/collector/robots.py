@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
@@ -10,6 +11,8 @@ import httpx
 from get_design_markdown.config import ROBOTS_AGENT, USER_AGENT
 from get_design_markdown.models.raw import RobotsCheck
 from get_design_markdown.storage import normalize_url
+
+logger = logging.getLogger(__name__)
 
 
 def robots_url_for(page_url: str) -> str:
@@ -72,13 +75,18 @@ async def check_robots(
         return RobotsCheck(
             robots_url=robots_url,
             allowed=None,
-            note=f"Hết thời gian chờ khi tải robots.txt (>{timeout_s:g}s) — không kiểm tra được.",
+            note=(
+                f"Hết thời gian chờ khi tải robots.txt (quá {timeout_s:g} giây) nên không kiểm "
+                "tra được (bỏ qua bước này)."
+            ),
         )
     except httpx.HTTPError as exc:
+        # The exception class (ConnectError...) is for the debug log, not for the user.
+        logger.debug("robots.txt %s could not be fetched: %r", robots_url, exc)
         return RobotsCheck(
             robots_url=robots_url,
             allowed=None,
-            note=f"Không tải được robots.txt ({type(exc).__name__}) — không kiểm tra được.",
+            note="Không tải được robots.txt nên không kiểm tra được (bỏ qua bước này).",
         )
     finally:
         if client is None:
