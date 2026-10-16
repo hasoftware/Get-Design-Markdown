@@ -8,7 +8,6 @@ file, symlinks...) is tested in test_ui_server.py.
 from __future__ import annotations
 
 import http.client
-import sys
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -34,6 +33,7 @@ from tests.test_ui_server import (  # noqa: F401 - fixtures used by `target`
     Harness,
     harness,
     output_root,
+    raw_request,
     ui_output_template,
 )
 from tests.ui_fake_api import ACME_SITE, BETA_SITE, FakeApi
@@ -249,6 +249,28 @@ def test_body_rules(client: httpx.Client) -> None:
     assert response.status_code == 413 and _error(response).error.code == "too_large"
 
 
+def test_head_bad_since_and_bad_content_length(client: httpx.Client, target: Target) -> None:
+    head = client.head("/api/health")
+    assert head.status_code == 405
+    bad_since = client.get("/api/jobs/current", params={"since": "abc"})
+    assert bad_since.status_code == 422
+    assert _error(bad_since).error.code == "invalid"
+    assert _error(bad_since).error.details == {"field": "since"}
+    response = raw_request(
+        target.port,
+        "POST",
+        "/api/jobs",
+        [
+            (TOKEN_HEADER, target.token),
+            ("Content-Type", "application/json"),
+            ("Content-Length", "abc"),
+        ],
+        b"{}",
+    )
+    assert response.status == 400
+    assert ErrorResponse.model_validate_json(response.body).error.code == "bad_json"
+
+
 def test_unknown_api_paths(client: httpx.Client) -> None:
     response = client.get("/api/nothing-here")
     assert response.status_code == 404 and _error(response).error.code == "not_found"
@@ -367,9 +389,7 @@ def test_history_and_results(client: httpx.Client, target: Target) -> None:
     assert results.site == ACME_SITE and results.entry == acme
     assert results.folder == str(target.output_root / ACME_SITE)
     paths = [file.path for file in results.files]
-    assert sorted(paths) == sorted(ACME_FILES)
-    if target.kind == "real" or sys.platform == "win32":  # the fake sorts Path objects
-        assert paths == ACME_FILES
+    assert paths == ACME_FILES
     kinds = {file.path: file.kind for file in results.files}
     assert kinds["DESIGN.md"] == "design" and kinds["screenshots/home-1440.png"] == "image"
     assert results.design is not None and results.design.front_matter is not None

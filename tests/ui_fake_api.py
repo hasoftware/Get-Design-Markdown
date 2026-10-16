@@ -23,6 +23,7 @@ Scripted jobs (POST /api/jobs), chosen by the URL:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import shutil
@@ -304,7 +305,14 @@ def results_for(folder: Path) -> ResultsResponse | None:
         return None
     site = folder.name
     files: list[ResultFile] = []
-    for path in sorted(folder.rglob("*")):
+    # Case-insensitive order on every OS, like the real server (Path order differs by OS).
+    for path in sorted(
+        folder.rglob("*"),
+        key=lambda found: (
+            found.relative_to(folder).as_posix().casefold(),
+            found.relative_to(folder).as_posix(),
+        ),
+    ):
         if not path.is_file() or path.name.startswith("."):
             continue
         relative = path.relative_to(folder).as_posix()
@@ -835,7 +843,22 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
+        def _drain_unread_body(self) -> None:
+            """Read a body the handler did not consume (bounded), so closing the connection
+            does not reset it before the client has read the error (Windows sends RST)."""
+            if getattr(self, "_body_consumed", True):
+                return
+            self._body_consumed = True
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return
+            if 0 < length <= MAX_DRAIN_BYTES:
+                with contextlib.suppress(OSError):
+                    self.rfile.read(length)
+
         def _send_error(self, error: _HttpError) -> None:
+            self._drain_unread_body()
             self._send_json(error.status, ErrorResponse(error=error.error))
 
         def _send_file(self, path: Path, *, csp: str | None, download: bool) -> None:
@@ -875,7 +898,15 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
                 )
 
         def _body(self) -> dict[str, Any]:
-            length = int(self.headers.get("Content-Length") or 0)
+            self._body_consumed = True
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                self.close_connection = True
+                raise _HttpError(400, "bad_json", "Content-Length không hợp lệ.") from None
+            if length < 0:
+                self.close_connection = True
+                raise _HttpError(400, "bad_json", "Content-Length không hợp lệ.")
             if length > MAX_BODY_BYTES:
                 # Drain (bounded) so the client reads the 413 instead of a connection reset.
                 self.rfile.read(min(length, MAX_DRAIN_BYTES))
@@ -898,6 +929,7 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
         def _route(self, handler: Callable[[], None]) -> None:
             with api.lock:
                 api.state.requests.append((self.command, self.path))
+            self._body_consumed = self.command not in ("POST", "PUT")
             try:
                 self._check_host()
                 handler()
@@ -928,7 +960,7 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
             self._route(self._get)
 
         def do_HEAD(self) -> None:
-            self._route(self._get)
+            self._route(self._head)
 
         def do_POST(self) -> None:
             self._route(self._post)
@@ -941,6 +973,13 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
 
         def _method_not_allowed(self) -> None:
             raise _HttpError(405, "method_not_allowed", "Phương thức không được hỗ trợ.")
+
+        def _head(self) -> None:
+            # HEAD serves pages and files only; the JSON API answers GET.
+            if urlsplit(self.path).path.startswith("/api/"):
+                self._check_token()
+                self._method_not_allowed()
+            self._get()
 
         # GET --------------------------------------------------------------------
 
@@ -973,7 +1012,16 @@ def _handler_class(api: FakeApi) -> type[BaseHTTPRequestHandler]:
             if not path.startswith("/api/"):
                 raise _not_found()
             self._check_token()
-            since = int((query.get("since") or ["0"])[0] or 0)
+            raw_since = (query.get("since") or [""])[-1].strip()
+            try:
+                since = max(int(raw_since or 0), 0)
+            except ValueError:
+                raise _HttpError(
+                    422,
+                    "invalid",
+                    "Giá trị không hợp lệ ở 'since': cần một số nguyên.",
+                    details={"field": "since"},
+                ) from None
             if path == "/api/health":
                 busy = api.busy_job()
                 self._send_json(
