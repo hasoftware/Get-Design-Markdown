@@ -167,7 +167,10 @@ def test_component_contrast_is_recomputed_on_the_printed_token_values() -> None:
 
 
 def test_dos_quote_token_ratios_and_caveat_primary_text() -> None:
-    text = render_design_md(_light_site())
+    analysis = _light_site()
+    # Running text is measured mostly on the canvas here (#f8fafd, a canvas-cluster member).
+    analysis.colors.contrast_pairs[1] = _pair("#061b31", "#f8fafd", "ink", "canvas", 120)
+    text = render_design_md(analysis)
     dos = _section(text, "Do's and Don'ts")
     # ink/canvas was measured 16.61:1 on #f8fafd; the token values give 16.44:1.
     assert "Do set running text in `{colors.ink}` — #061b31 on `{colors.canvas}` — #f6f9fc " in dos
@@ -189,6 +192,25 @@ def test_best_text_pair_skips_pairs_that_fail_on_token_values() -> None:
     assert pair is not None
     assert (pair.foreground_token, pair.background_token) == ("primary", "surface")
     assert round(pair.ratio, 2) == 4.7
+
+
+def test_running_text_pair_follows_measured_body_text_not_the_role() -> None:
+    # linear.app: ink is only measured as large text (headings); running text is faint/muted.
+    analysis = _light_site()
+    analysis.colors.tokens.append(
+        ColorToken(name="faint", value="#5c6b82", role=ColorRole.TEXT_MUTED)
+    )
+    analysis.colors.contrast_pairs = [
+        _pair("#061b31", "#f6f9fc", "ink", "canvas", 70, "body text (large)"),
+        _pair("#5c6b82", "#f6f9fc", "faint", "canvas", 257),
+        _pair("#50617a", "#f6f9fc", "muted", "canvas", 93),
+        _pair("#ffffff", "#635bff", "on-primary", "primary", 300),
+    ]
+    pair = DesignFacts(analysis).best_text_pair()
+    assert pair is not None
+    assert (pair.foreground_token, pair.background_token) == ("faint", "canvas")
+    dos = _section(render_design_md(analysis), "Do's and Don'ts")
+    assert "Do set running text in `{colors.faint}` — #5c6b82 on `{colors.canvas}`" in dos
 
 
 def test_validator_flags_a_ratio_that_does_not_match_the_tokens() -> None:

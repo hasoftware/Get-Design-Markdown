@@ -630,12 +630,15 @@ class DesignFacts:
         return [lead.freeze(tuple(shade.freeze() for shade in shades)) for lead, shades in groups]
 
     def most_common_radius(self) -> ScaleStep | None:
+        """The radius with the most page-weighted usage, so sub-pages (a long pricing table
+        of pill buttons) cannot set the shape language of the page the user asked for.
+        Older analysis files carry no weight (0) and are ranked by raw count."""
         steps = [step for step in self.radii.values() if step.count > 0] or list(
             self.radii.values()
         )
         if not steps:
             return None
-        return max(steps, key=lambda step: step.count)
+        return max(steps, key=lambda step: (step.weight, step.count))
 
     def shadow_profile(self) -> ShadowProfile:
         drop: list[float] = []
@@ -1029,22 +1032,32 @@ class DesignFacts:
 
     def best_text_pair(self) -> PairCheck | None:
         """The main running-text pair: a measured pair of light-theme tokens that passes AA
-        on the token values, preferring a primary text token (role TEXT, not on-*) on the
-        canvas, then the most frequent. The ratio is recomputed from the token values."""
+        on the token values. Ranked by measurement, not by role: a text token on the canvas
+        or a surface first, then the most normal-size body-text occurrences (a " (large)"
+        context is headline text, not running text), then a primary text token (role TEXT,
+        not on-*) on the canvas, then the total count. The ratio is recomputed from the token
+        values."""
         occurrences: dict[tuple[str, str], int] = {}
+        running: dict[tuple[str, str], int] = {}
         for pair in self.analysis.colors.contrast_pairs:
             if pair.foreground_token in self.colors and pair.background_token in self.colors:
                 key = (pair.foreground_token or "", pair.background_token or "")
                 occurrences[key] = occurrences.get(key, 0) + pair.occurrences
-        ranked: list[tuple[tuple[bool, bool, int], PairCheck]] = []
+                if pair.context == BODY_TEXT_CONTEXT:
+                    running[key] = running.get(key, 0) + pair.occurrences
+        ranked: list[tuple[tuple[bool, int, bool, bool, int], PairCheck]] = []
         for (fg, bg), count in occurrences.items():
             check = self.check_tokens(fg, bg)
             if check is None or not check.passes:
                 continue
             foreground = self.colors[fg]
+            background = self.colors[bg].role
             rank = (
+                not fg.startswith("on-")
+                and background in (ColorRole.BACKGROUND, ColorRole.SURFACE),
+                running.get((fg, bg), 0),
                 foreground.role == ColorRole.TEXT and not fg.startswith("on-"),
-                self.colors[bg].role == ColorRole.BACKGROUND,
+                background == ColorRole.BACKGROUND,
                 count,
             )
             ranked.append((rank, check))

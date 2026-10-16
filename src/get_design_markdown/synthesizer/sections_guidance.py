@@ -419,7 +419,9 @@ def _dos(ctx: Context) -> list[str]:
         dos.append(ctx.p("dos.body_type", body=ctx.level_ref(body.name)))
     base = facts.analysis.spacing.base_unit_px
     if base and facts.spacing:
-        common = sorted(facts.spacing.items(), key=lambda item: -item[1].count)[:4]
+        common = sorted(facts.spacing.items(), key=lambda item: (-item[1].weight, -item[1].count))[
+            :4
+        ]
         refs = [facts.ref(SPACING, name) for name, _ in sorted(common, key=lambda i: i[1].value_px)]
         dos.append(ctx.p("dos.spacing", base=base, steps=ctx.phrases.join(refs)))
     radii = radius_usage(ctx)

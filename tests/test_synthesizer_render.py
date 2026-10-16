@@ -232,7 +232,25 @@ def test_rule_radius_softness(counts: dict[str, int], expected: str) -> None:
     analysis = load_analysis_sample()
     for step in analysis.radii:
         step.count = counts.get(step.name, 1)
+        step.weight = float(step.count)
     assert expected in render_design_md(analysis)
+
+
+def test_radius_softness_follows_page_weight_not_raw_count() -> None:
+    # stripe.com: 73 pills, all on sub-pages (weight 12.2), against 49 home-page 4px corners.
+    analysis = load_analysis_sample()
+    analysis.radii = [
+        ScaleStep(name="md", value_px=4, count=49, weight=41.92),
+        ScaleStep(name="xl", value_px=6, count=21, weight=20.5),
+        ScaleStep(name="full", value_px=9999, count=73, weight=12.2),
+    ]
+    text = render_design_md(analysis)
+    assert "pill-shaped" not in text
+    assert "Corners are sharp and precise" in text
+    # Files written before ScaleStep.weight existed fall back to the raw count.
+    for step in analysis.radii:
+        step.weight = 0.0
+    assert "pill-shaped controls" in render_design_md(analysis)
 
 
 def test_rule_sharp_corners() -> None:
