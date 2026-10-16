@@ -21,17 +21,21 @@ Playwright driver: it only looks for executables on disk.
   revision folder, the Windows file version...), else None.
 
 Headless launches (`chromium.launch(headless=True)`, what the collector does) run Playwright's
-"chromium-headless-shell" build, so that is the executable looked for; `playwright install
-chromium` downloads it together with the full Chromium.
+"chromium-headless-shell" build, so that is the executable looked for, and the only Chromium build
+installed: `playwright install --only-shell chromium` (the headless shell plus the small FFmpeg
+and winldd helpers; about 125 MB downloaded, about 300 MB on disk) instead of also fetching the
+full Chromium that the collector never starts.
 
 Installing Chromium (POST /api/browser/install, polled with GET /api/browser/install)
 ------------------------------------------------------------------------------------
 - install_command(): the command that installs Playwright's Chromium:
-    from source / a wheel: [sys.executable, "-m", "playwright", "install", "chromium"]
+    from source / a wheel: [sys.executable, "-m", "playwright", "install", "--only-shell",
+                            "chromium"]
     frozen exe:            [sys.executable, "install-browser"]   (hidden sub-command of
                            ui/app.py main(), which runs run_install_cli())
 - run_install_cli(): body of the exe's `install-browser` sub-command: runs the bundled Playwright
-  driver with `install chromium`, streams its output to stdout and returns its exit code.
+  driver with `install --only-shell chromium`, streams its output to stdout and returns its exit
+  code.
 - BrowserInstaller runs install_command() in a subprocess (no console window on Windows:
   CREATE_NO_WINDOW), reads its output line by line, keeps the last LOG_TAIL_LINES lines and turns
   Playwright's progress lines ("|■■■■    |  40% of 150.2 MiB") into `percent`. One install at a
@@ -122,6 +126,13 @@ class InstallStatus(GdmModel):
 BROWSERS_PATH_ENV = "PLAYWRIGHT_BROWSERS_PATH"
 #: browsers.json entry of the build a headless launch runs.
 HEADLESS_SHELL = "chromium-headless-shell"
+#: `playwright install` option that installs only HEADLESS_SHELL for "chromium".
+ONLY_SHELL_OPTION = "--only-shell"
+#: Size of what "Tải Chromium" installs (headless shell + FFmpeg + winldd), measured with
+#: Playwright 1.64 on Windows x64: 125.6 MB downloaded, 297 MB on disk. The UI, README.md and the
+#: exe's README.txt quote these figures.
+CHROMIUM_DOWNLOAD_SIZE = "khoảng 125 MB"
+CHROMIUM_DISK_SIZE = "khoảng 300 MB"
 
 CHROMIUM_MISSING = "Chưa tải Chromium cho Playwright."
 CHROMIUM_UNKNOWN = "Không đọc được phiên bản Chromium mà Playwright cần."
@@ -396,7 +407,7 @@ def install_command() -> list[str]:
         from get_design_markdown.ui.app import INSTALL_BROWSER_COMMAND
 
         return [sys.executable, INSTALL_BROWSER_COMMAND]
-    return [sys.executable, "-m", "playwright", "install", "chromium"]
+    return [sys.executable, "-m", "playwright", "install", ONLY_SHELL_OPTION, "chromium"]
 
 
 def _creation_flags() -> int:
@@ -417,9 +428,9 @@ def _write_line(stream: IO[str] | None, text: str) -> None:
 def run_install_cli(argv: Sequence[str] = ()) -> int:
     """The exe's hidden `install-browser` sub-command; returns the installer's exit code.
 
-    Runs `<driver node> <driver cli.js> install [argv...] chromium` with the driver's
-    environment. The driver writes straight to this process's standard output (the pipe of
-    BrowserInstaller, or the console), so its progress lines reach the caller unchanged.
+    Runs `<driver node> <driver cli.js> install --only-shell [argv...] chromium` with the
+    driver's environment. The driver writes straight to this process's standard output (the pipe
+    of BrowserInstaller, or the console), so its progress lines reach the caller unchanged.
     """
     ensure_user_browsers_path()
     try:
@@ -436,7 +447,7 @@ def run_install_cli(argv: Sequence[str] = ()) -> int:
         )
         return 1
     _write_line(sys.stdout, f"Đang tải Chromium cho Playwright vào {playwright_browsers_dir()}…")
-    command = [str(node), str(cli), "install", *argv, "chromium"]
+    command = [str(node), str(cli), "install", ONLY_SHELL_OPTION, *argv, "chromium"]
     try:
         completed = subprocess.run(
             command,
@@ -501,8 +512,8 @@ def failure_hint(lines: Iterable[str]) -> str:
     text = "\n".join(lines)
     if _DISK_RE.search(text):
         return (
-            "Ổ đĩa không đủ chỗ trống (Chromium cần khoảng 300 MB). Giải phóng dung lượng rồi "
-            "thử lại. " + INSTALL_RETRY_HINT
+            f"Ổ đĩa không đủ chỗ trống (Chromium cần {CHROMIUM_DISK_SIZE} trên ổ đĩa). "
+            "Giải phóng dung lượng rồi thử lại. " + INSTALL_RETRY_HINT
         )
     if _PERMISSION_RE.search(text):
         return (

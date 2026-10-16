@@ -13,7 +13,10 @@
 # - pywebview + pythonnet + clr_loader come with their hooks (native window over WebView2).
 # - The icon is drawn at build time by packaging/make_icon.py; the version resource comes from
 #   get_design_markdown.__version__.
+# - The source of every bundled file is listed in <workpath>/bundled-sources.json, from which
+#   scripts/build_exe.py writes THIRD-PARTY-NOTICES.txt (licenses of what the exe ships).
 
+import json
 import sys
 from pathlib import Path
 
@@ -105,6 +108,21 @@ a.datas = [
     for entry in a.datas
     if ".local-browsers" not in Path(entry[0]).parts and "ms-playwright" not in Path(entry[0]).parts
 ]
+
+# Every source file that goes into the bundle: scripts/build_exe.py maps them to their
+# distributions and writes THIRD-PARTY-NOTICES.txt next to the exe.
+bundled_sources = sorted(
+    {
+        str(Path(entry[1]).absolute())
+        for toc in (a.scripts, a.pure, a.binaries, a.datas)
+        for entry in toc
+        if isinstance(entry[1], str) and entry[1] and Path(entry[1]).is_absolute()
+    }
+)
+WORK_DIR.mkdir(parents=True, exist_ok=True)
+(WORK_DIR / "bundled-sources.json").write_text(
+    json.dumps(bundled_sources, indent=0), encoding="utf-8"
+)
 
 pyz = PYZ(a.pure)
 

@@ -19,12 +19,15 @@ from get_design_markdown.ui import browser_install
 from get_design_markdown.ui.browser_install import (
     AUTO_ORDER,
     BROWSER_LABELS,
+    CHROMIUM_DISK_SIZE,
+    CHROMIUM_DOWNLOAD_SIZE,
     CHROMIUM_MISSING,
     CHROMIUM_UNKNOWN,
     INSTALL_RETRY_HINT,
     INSTALL_STARTING,
     INSTALL_SUCCEEDED,
     LOG_TAIL_LINES,
+    ONLY_SHELL_OPTION,
     BrowserInstaller,
     BrowserStatus,
     InstallStatus,
@@ -37,6 +40,7 @@ from get_design_markdown.ui.browser_install import (
     run_install_cli,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
 REVISION = "1248"
 CHROMIUM_VERSION = "156.0.8078.4"
 WIN_SHELL = ("chrome-headless-shell-win64", "chrome-headless-shell.exe")
@@ -312,7 +316,17 @@ def test_real_driver_files_exist() -> None:
 
 def test_install_command(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(browser_install, "is_frozen", lambda: False)
-    assert install_command() == [sys.executable, "-m", "playwright", "install", "chromium"]
+    # Only the headless shell: the collector never starts the full Chromium (about 125 MB to
+    # download instead of about 330 MB).
+    assert install_command() == [
+        sys.executable,
+        "-m",
+        "playwright",
+        "install",
+        "--only-shell",
+        "chromium",
+    ]
+    assert ONLY_SHELL_OPTION == "--only-shell"
     monkeypatch.setattr(browser_install, "is_frozen", lambda: True)
     assert install_command() == [sys.executable, ui_app.INSTALL_BROWSER_COMMAND]
     assert ui_app.INSTALL_BROWSER_COMMAND == "install-browser"
@@ -343,7 +357,7 @@ def test_run_install_cli_runs_the_driver(
     assert run_install_cli(["--dry-run"]) == 0
     out = capfd.readouterr().out
     assert "Đang tải Chromium cho Playwright" in out
-    assert "ARGS ['install', '--dry-run', 'chromium']" in out
+    assert "ARGS ['install', '--only-shell', '--dry-run', 'chromium']" in out
     assert "PW python" in out  # the driver environment of playwright
     monkeypatch.setenv("FAKE_CODE", "7")
     assert run_install_cli() == 7
@@ -364,6 +378,29 @@ def test_real_install_cli_dry_run(capfd: pytest.CaptureFixture[str]) -> None:
     assert run_install_cli(["--dry-run"]) == 0
     out = capfd.readouterr().out
     assert "chromium" in out.lower() and REVISION in out
+    # The headless shell (what chromium_info() looks for) and not the full Chromium build.
+    assert f"(playwright chromium-headless-shell v{REVISION})" in out
+    assert "(playwright chromium v" not in out
+    assert f"chromium-{REVISION}" not in out.replace("chromium-headless-shell", "")
+
+
+def test_the_headless_shell_folder_is_what_status_looks_for() -> None:
+    """`--only-shell` installs chromium_headless_shell-<revision>, the folder chromium_info()
+    checks: nothing else is needed for chromium to count as available."""
+    data = json.loads(browser_install.browsers_json_path().read_text(encoding="utf-8"))
+    names = {entry["name"] for entry in data["browsers"]}
+    assert browser_install.HEADLESS_SHELL in names
+
+
+def test_chromium_size_is_the_same_everywhere_it_is_quoted() -> None:
+    """One measured figure: about 125 MB downloaded, about 300 MB on disk."""
+    assert CHROMIUM_DOWNLOAD_SIZE == "khoảng 125 MB"
+    assert CHROMIUM_DISK_SIZE == "khoảng 300 MB"
+    assert CHROMIUM_DISK_SIZE in failure_hint(["Error: ENOSPC: no space left on device"])
+    readme = (ROOT / "packaging" / "README-windows.txt").read_text(encoding="utf-8")
+    assert f"tải về {CHROMIUM_DOWNLOAD_SIZE}" in readme
+    assert f"{CHROMIUM_DISK_SIZE} trên ổ đĩa" in readme
+    assert "150 MB" not in readme
 
 
 # ─── Progress parsing ────────────────────────────────────────────────────────
