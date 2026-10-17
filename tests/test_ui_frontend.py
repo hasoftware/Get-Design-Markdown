@@ -1532,7 +1532,7 @@ def test_dark_theme_follows_the_system_and_the_toggle(ui: OpenUi) -> None:
     session = ui(color_scheme="dark").open()
     page = session.page
     background = "getComputedStyle(document.body).backgroundColor"
-    assert page.evaluate(background) == "rgb(15, 18, 22)"
+    assert page.evaluate(background) == "rgb(10, 10, 10)"
     page.click(f".history-item[data-site='{BETA_SITE}']")
     session.wait_results()
     page.click("#tab-design")
@@ -1540,15 +1540,15 @@ def test_dark_theme_follows_the_system_and_the_toggle(ui: OpenUi) -> None:
     assert "color-scheme: dark" in (frame.get_attribute("srcdoc") or "")
 
     page.locator(".theme-option", has=page.locator("input[value='light']")).click()
-    assert page.evaluate(background) == "rgb(243, 245, 247)"
+    assert page.evaluate(background) == "rgb(255, 255, 255)"
     assert "color-scheme: light" in (frame.get_attribute("srcdoc") or "")
     assert "gdm.theme=light" in page.evaluate("document.cookie")
     page.reload()
     session.wait_ready()
-    assert page.evaluate(background) == "rgb(243, 245, 247)"
+    assert page.evaluate(background) == "rgb(255, 255, 255)"
     assert page.is_checked("input[name='theme'][value='light']")
     page.locator(".theme-option", has=page.locator("input[value='auto']")).click()
-    assert page.evaluate(background) == "rgb(15, 18, 22)"
+    assert page.evaluate(background) == "rgb(10, 10, 10)"
     assert page.evaluate("localStorage.getItem('gdm.theme')") is None
     assert "gdm.theme" not in page.evaluate("document.cookie")
 

@@ -1,8 +1,8 @@
 """The application logo, drawn from simple shapes (no third-party artwork).
 
-The mark: a teal rounded square holding a camera-style capture frame (four corner brackets)
-around three lines of text, each line a different colour. It reads as "capture the design of
-a web page and write it down as a document with its colours".
+The mark: a black rounded square holding a white camera-style capture frame (four corner
+brackets) around three lines of text in the app's colours (lilac, lime, magenta). It reads as
+"capture the design of a web page and write it down as a document with its colours".
 
 One geometry, two outputs that must stay identical:
 
@@ -21,7 +21,7 @@ import math
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageDraw
 
 #: The artwork is designed on a 64-unit square. Every straight stroke edge lies on a multiple of
 #: 4 units, so the 16, 32 and 48 px icons stay sharp (one 16 px pixel = 4 units); for that the
@@ -33,8 +33,8 @@ ICO_SIZES: tuple[int, ...] = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
 SUPERSAMPLE_PX = 1024
 
 BACKGROUND_RADIUS = 14
-#: Diagonal gradient of the background: top-left colour, bottom-right colour.
-GRADIENT = ("#12857c", "#0a6260")
+#: Flat, like the rest of the app: depth comes from colour, never from gradients.
+BACKGROUND = "#000000"
 
 FRAME_COLOR = "#ffffff"
 FRAME_STROKE = 4
@@ -48,9 +48,9 @@ LINE_STROKE = 4
 LINE_X = 22
 #: (y, length, colour) of the three text lines, top to bottom.
 LINES: tuple[tuple[float, float, str], ...] = (
-    (22, 20, "#ffffff"),
-    (30, 12, "#ffc247"),
-    (38, 16, "#ff7a66"),
+    (22, 20, "#c5b0f4"),
+    (30, 12, "#dceeb1"),
+    (38, 16, "#ff3d8b"),
 )
 
 
@@ -86,13 +86,9 @@ def svg_markup() -> str:
         f'<path d="M{_fmt(LINE_X)} {_fmt(y)}h{_fmt(length)}" stroke="{color}"/>'
         for y, length, color in LINES
     )
-    start, end = GRADIENT
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {GRID} {GRID}">'
-        f'<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">'
-        f'<stop offset="0" stop-color="{start}"/><stop offset="1" stop-color="{end}"/>'
-        f"</linearGradient></defs>"
-        f'<rect width="{GRID}" height="{GRID}" rx="{BACKGROUND_RADIUS}" fill="url(#bg)"/>'
+        f'<rect width="{GRID}" height="{GRID}" rx="{BACKGROUND_RADIUS}" fill="{BACKGROUND}"/>'
         f'<path d="{"".join(bracket_paths)}" fill="none" stroke="{FRAME_COLOR}" '
         f'stroke-width="{_fmt(FRAME_STROKE)}" stroke-linecap="round" stroke-linejoin="round"/>'
         f'<g fill="none" stroke-width="{_fmt(LINE_STROKE)}" stroke-linecap="round">{lines}</g>'
@@ -103,16 +99,6 @@ def svg_markup() -> str:
 # ─── Bitmap ──────────────────────────────────────────────────────────────────
 
 
-def _gradient(size: int) -> Image.Image:
-    """RGB square shaded from GRADIENT[0] (top-left) to GRADIENT[1] (bottom-right)."""
-    vertical = Image.linear_gradient("L").resize((size, size))
-    horizontal = vertical.transpose(Image.Transpose.TRANSPOSE)
-    mix = ImageChops.add(vertical, horizontal, scale=2.0)
-    start = Image.new("RGB", (size, size), _rgb(GRADIENT[0]))
-    end = Image.new("RGB", (size, size), _rgb(GRADIENT[1]))
-    return Image.composite(end, start, mix)
-
-
 def _draw_at(canvas: int) -> Image.Image:
     """The artwork drawn on a `canvas`-pixel square, without antialiasing."""
     unit = canvas / GRID
@@ -121,12 +107,10 @@ def _draw_at(canvas: int) -> Image.Image:
         return round(value * unit)
 
     image = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    mask = Image.new("L", (canvas, canvas), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, canvas - 1, canvas - 1), radius=px(BACKGROUND_RADIUS), fill=255
-    )
-    image.paste(_gradient(canvas), (0, 0), mask)
     draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle(
+        (0, 0, canvas - 1, canvas - 1), radius=px(BACKGROUND_RADIUS), fill=BACKGROUND
+    )
 
     def capsule(x0: float, y0: float, x1: float, y1: float, stroke: float, color: str) -> None:
         """A stroke with round caps along an axis-aligned segment."""
