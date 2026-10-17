@@ -52,7 +52,25 @@ def test_icon_artwork_is_opaque_inside_and_transparent_at_the_corners() -> None:
     assert master.getpixel((0, 0))[3] == 0  # rounded corner
     assert master.getpixel((128, 128))[3] == 255
     colors = master.getcolors(maxcolors=1 << 20)
-    assert colors is not None and len(colors) > 4  # background, page, lines, swatches
+    assert colors is not None and len(colors) > 4  # background, frame, lines
+
+
+def test_icon_is_drawn_for_each_size_with_its_three_coloured_lines() -> None:
+    make_icon = _load(PACKAGING / "make_icon.py")
+    for size in (16, 32, 48, 256):
+        image = make_icon.draw_master(size).convert("RGB")
+        unit = size / make_icon.GRID
+        for y, length, color in make_icon.LINES:
+            middle = (round((make_icon.LINE_X + length / 2) * unit), int(y * unit))
+            assert image.getpixel(middle) == make_icon._rgb(color), (size, color)
+
+
+def test_favicon_is_the_same_artwork_as_the_exe_icon() -> None:
+    make_icon = _load(PACKAGING / "make_icon.py")
+    favicon = ROOT / "src" / "get_design_markdown" / "ui" / "static" / "favicon.svg"
+    assert favicon.read_bytes() == make_icon.svg_markup().encode("utf-8"), (
+        "chạy lại: python packaging/make_icon.py src/get_design_markdown/ui/static/favicon.svg"
+    )
 
 
 def test_icon_script_usage(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -61,6 +79,8 @@ def test_icon_script_usage(capsys: pytest.CaptureFixture[str], tmp_path: Path) -
     assert "Cách dùng" in capsys.readouterr().err
     assert make_icon.main([str(tmp_path / "x.ico")]) == 0
     assert (tmp_path / "x.ico").is_file()
+    assert make_icon.main([str(tmp_path / "logo.svg")]) == 0
+    assert (tmp_path / "logo.svg").read_text(encoding="utf-8") == make_icon.svg_markup()
 
 
 # ─── Spec and launcher ───────────────────────────────────────────────────────

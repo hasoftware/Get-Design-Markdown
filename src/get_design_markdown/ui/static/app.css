@@ -453,10 +453,9 @@ textarea {
 
 .brand-mark {
   flex: none;
+  display: block;
   width: 26px;
   height: 26px;
-  color: var(--accent);
-  stroke-width: 1.6;
 }
 
 .topbar-tools {
@@ -2523,10 +2522,9 @@ details[open] > summary .chevron {
 }
 
 .fullpage-icon {
-  width: 36px;
-  height: 36px;
-  color: var(--accent);
-  stroke-width: 1.5;
+  display: block;
+  width: 40px;
+  height: 40px;
 }
 
 .lightbox {

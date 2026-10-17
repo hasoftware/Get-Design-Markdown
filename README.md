@@ -1,3 +1,5 @@
+<p align="center"><img src="src/get_design_markdown/ui/static/favicon.svg" width="96" height="96" alt="Logo Get-Design-Markdown"></p>
+
 # Get-Design-Markdown
 
 Công cụ nhận vào URL một trang web, phân tích ngôn ngữ thiết kế của trang (màu sắc, typography,
